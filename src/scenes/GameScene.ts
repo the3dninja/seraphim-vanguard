@@ -52,7 +52,7 @@ export class GameScene extends Phaser.Scene {
   private shieldUntil = 0;
   private overdriveUntil = 0;
 
-  private dragFrom: { px: number; py: number; sx: number; sy: number } | null = null;
+  private dragFrom: { px: number; py: number; sx: number; sy: number; tx: number; ty: number } | null = null;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd', Phaser.Input.Keyboard.Key>;
 
   private hearts: Phaser.GameObjects.Image[] = [];
@@ -124,16 +124,18 @@ export class GameScene extends Phaser.Scene {
   // --- Input -------------------------------------------------------------
 
   private setupInput() {
-    // Relative drag: the ship moves by however far the finger moves, so the
-    // finger can be anywhere on screen and never covers the ship.
+    // Relative drag: the finger moves a target by however far it moves, so the
+    // finger can be anywhere on screen and never covers the ship. The ship then
+    // flies toward that target at keyboard speed (see touchMove).
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length > 0) return; // tapped a button
-      this.dragFrom = { px: p.x, py: p.y, sx: this.player.x, sy: this.player.y };
+      const { x, y } = this.player;
+      this.dragFrom = { px: p.x, py: p.y, sx: x, sy: y, tx: x, ty: y };
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!this.dragFrom || !p.isDown || this.phase !== 'action') return;
-      this.player.x = Phaser.Math.Clamp(this.dragFrom.sx + (p.x - this.dragFrom.px), 6, W - 6);
-      this.player.y = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, H - 30);
+      this.dragFrom.tx = Phaser.Math.Clamp(this.dragFrom.sx + (p.x - this.dragFrom.px), 6, W - 6);
+      this.dragFrom.ty = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, H - 30);
     });
     const release = () => { this.dragFrom = null; };
     this.input.on('pointerup', release);
@@ -154,6 +156,22 @@ export class GameScene extends Phaser.Scene {
     this.dragFrom = null;
     this.player.x = Phaser.Math.Clamp(this.player.x + dx * SHIP_SPEED_KEYS * dt, 6, W - 6);
     this.player.y = Phaser.Math.Clamp(this.player.y + dy * SHIP_SPEED_KEYS * dt, 24, H - 30);
+  }
+
+  // Fly toward the drag target at keyboard speed, landing exactly on it once
+  // it's within one frame's step so the ship doesn't jitter around it.
+  private touchMove(dt: number) {
+    if (!this.dragFrom) return;
+    const dx = this.dragFrom.tx - this.player.x;
+    const dy = this.dragFrom.ty - this.player.y;
+    const dist = Math.hypot(dx, dy);
+    const step = SHIP_SPEED_KEYS * dt;
+    if (dist <= step) {
+      this.player.setPosition(this.dragFrom.tx, this.dragFrom.ty);
+    } else {
+      this.player.x += (dx / dist) * step;
+      this.player.y += (dy / dist) * step;
+    }
   }
 
   // --- HUD ---------------------------------------------------------------
@@ -466,6 +484,7 @@ export class GameScene extends Phaser.Scene {
 
     if (this.phase === 'action') {
       this.keyboardMove(dt);
+      this.touchMove(dt);
       this.autoFire(dt);
       this.runWaves(dt);
     }
