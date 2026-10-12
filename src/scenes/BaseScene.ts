@@ -40,7 +40,13 @@ export class BaseScene extends Phaser.Scene {
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 142, bw, bh, 'SHIP', () => toast(this, 'SHIP SCREEN\nCOMING SOON', 260));
+    button(this, bx, 142, bw, bh, 'SHIP', () => {
+      this.scene.pause();
+      this.scene.launch('Ship', {
+        state: this.state,
+        onLeave: () => { writeSave(this.state); this.refresh(); },
+      });
+    });
     button(this, bx, 174, bw, bh, 'VIEW MAP', () => toast(this, 'STAR MAP\nCOMING SOON', 260));
     button(this, bx, 214, bw, bh, 'BEGIN MISSION', () => {
       if (!next) {

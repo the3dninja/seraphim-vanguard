@@ -21,7 +21,8 @@ Playtest helper: add `?god` to the end of the link and your ship can't be destro
 - Title screen with Continue / New Game
 - Level 1 (the tutorial): three action segments with Darts and Weavers, two vendor stops, and a final wave
 - Vendor stop arrival sequence and a shop with Buy and Sell tabs
-- Base menu: Vendor works; Ship screen and Star Map are placeholders
+- Base menu: Vendor and Ship screens work; Star Map is a placeholder
+- Ship screen: drag weapons and items from Base Storage onto the ship's slots (or tap one, then tap a slot; arrow keys and Enter work too). Extra slots show as locked until they can be bought at the Base vendor
 - Placeholder pixel art drawn in code (`src/art.ts`), placeholder prices (`src/data/items.ts`)
 
 The full design is in the "Space Shooter Design Spec" doc in the Simple Games project.
@@ -43,7 +44,7 @@ Every push to `main` rebuilds the game and publishes it to the play link above (
 | Path | What it is |
 | --- | --- |
 | `src/main.ts` | Game setup: resolution, scaling, scene list |
-| `src/scenes/` | Title, Game (the level), Vendor, Base |
+| `src/scenes/` | Title, Game (the level), Vendor, Base, Ship |
 | `src/data/levels.ts` | Wave scripts for each level segment |
 | `src/data/items.ts` | Weapons and consumables, prices and stats |
 | `src/art.ts` | Pixel sprites as text grids |
