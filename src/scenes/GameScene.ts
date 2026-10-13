@@ -87,7 +87,7 @@ const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
-const GOD_MODE = new URLSearchParams(location.search).has('god');
+const godMode = () => new URLSearchParams(location.search).has('god');
 
 export class GameScene extends Phaser.Scene {
   private startState!: SaveData; // what to go back to if the ship is destroyed
@@ -1843,7 +1843,7 @@ export class GameScene extends Phaser.Scene {
 
   // Most hits cost 1 health; big ones like the Dreadnought's laser cost 2.
   hurt(amount = 1) {
-    if (this.phase !== 'action' || GOD_MODE) return;
+    if (this.phase !== 'action' || godMode()) return;
     const now = this.time.now;
     if (now < this.invulnUntil || now < this.shieldUntil) return;
     if (this.deflect > 0) {
