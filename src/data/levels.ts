@@ -1,10 +1,13 @@
-export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber';
+export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'driller' | 'lancer' | 'bulwark';
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
+// Drillers come in from the side `x` names instead of the top (pair = one from each side).
 export type Pattern = 'line' | 'column' | 'vee' | 'pair' | 'single' | 'swarm';
-export type Theme = 'outpost' | 'scrapyard' | 'asteroids';
-export type HazardKind = 'debris' | 'rock';
-export type BossKind = 'rockjaw';
+export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade';
+// shard: falling ice. patch: an ice sheet that makes the ship slide. turret: a
+// capital ship gun that leans in from the screen edge and fires a burst.
+export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret';
+export type BossKind = 'rockjaw' | 'dreadnought';
 
 export interface Wave {
   delay: number; // ms after the previous wave spawned (or cleared, with waitClear)
@@ -20,9 +23,9 @@ export interface LevelDef {
   desc: string; // shown on the star map; hints at enemies the player hasn't met
   node: string; // star map picture
   theme: Theme;
-  hazard?: { kind: HazardKind; every: [number, number] }; // ms between hazards during action
+  hazards?: { kind: HazardKind; every: [number, number] }[]; // ms between each hazard during action
   boss?: BossKind; // fought after the last segment
-  segments: Wave[][]; // a vendor stop sits between each pair of segments; empty = not built yet
+  segments: Wave[][]; // two segments with a vendor stop halfway; empty = not built yet
   // Star map "common enemies" for levels that aren't built yet. Built levels
   // count their own wave scripts instead.
   enemies?: [string, number][];
@@ -51,18 +54,16 @@ export const LEVELS: LevelDef[] = [
         { delay: 2500, kind: 'dart', pattern: 'vee', count: 5, x: 0.5 },
         { delay: 3000, kind: 'weaver', pattern: 'pair' },
         { delay: 3000, kind: 'dart', pattern: 'line', count: 5, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'weaver', pattern: 'pair' },
         { delay: 2500, kind: 'dart', pattern: 'column', count: 5, x: 0.2 },
         { delay: 1200, kind: 'dart', pattern: 'column', count: 5, x: 0.8 },
-        { delay: 3000, kind: 'weaver', pattern: 'line', count: 3 },
+        { delay: 3000, kind: 'weaver', pattern: 'line', count: 3, waitClear: true },
+      ],
+      [
         { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
         { delay: 3000, kind: 'dart', pattern: 'line', count: 6 },
         { delay: 1500, kind: 'weaver', pattern: 'pair' },
         { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.35, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'dart', pattern: 'line', count: 6 },
         { delay: 1500, kind: 'weaver', pattern: 'line', count: 3 },
         { delay: 3000, kind: 'dart', pattern: 'column', count: 6, x: 0.3 },
@@ -84,7 +85,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'A GRAVEYARD OF WRECKS THAT BLOCK SHOTS. SALVAGE SWARMS AND ARMED HAULERS.',
     node: 'node_scrap',
     theme: 'scrapyard',
-    hazard: { kind: 'debris', every: [5000, 8000] },
+    hazards: [{ kind: 'debris', every: [5000, 8000] }],
     segments: [
       [
         { delay: 2500, kind: 'dart', pattern: 'line', count: 5 },
@@ -96,18 +97,16 @@ export const LEVELS: LevelDef[] = [
         { delay: 2500, kind: 'dart', pattern: 'column', count: 5, x: 0.2 },
         { delay: 1500, kind: 'dart', pattern: 'column', count: 5, x: 0.8 },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 0, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'drone', pattern: 'swarm', count: 7, x: 1 },
         { delay: 1800, kind: 'drone', pattern: 'swarm', count: 7, x: 0 },
         { delay: 3500, kind: 'gunboat', pattern: 'pair' },
-        { delay: 4000, kind: 'weaver', pattern: 'line', count: 3 },
+        { delay: 4000, kind: 'weaver', pattern: 'line', count: 3, waitClear: true },
+      ],
+      [
         { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
         { delay: 2500, kind: 'gunboat', pattern: 'single', x: 0.3 },
         { delay: 1000, kind: 'dart', pattern: 'line', count: 6, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'weaver', pattern: 'line', count: 3 },
         { delay: 2500, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
         { delay: 1500, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
@@ -129,7 +128,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'ROCKS SPLIT WHEN SHOT. RAIDERS SEED MINES, AND SOMETHING BIG HIDES HERE.',
     node: 'node_rocks',
     theme: 'asteroids',
-    hazard: { kind: 'rock', every: [3000, 5500] },
+    hazards: [{ kind: 'rock', every: [3000, 5500] }],
     boss: 'rockjaw',
     segments: [
       [
@@ -142,18 +141,16 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'gunboat', pattern: 'single', x: 0.5, waitClear: true },
         { delay: 2000, kind: 'dart', pattern: 'column', count: 6, x: 0.3 },
         { delay: 800, kind: 'dart', pattern: 'column', count: 6, x: 0.7, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'bomber', pattern: 'single', x: 0 },
         { delay: 1500, kind: 'bomber', pattern: 'single', x: 1 },
         { delay: 4000, kind: 'weaver', pattern: 'line', count: 4 },
-        { delay: 3000, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'gunboat', pattern: 'pair', waitClear: true },
+      ],
+      [
         { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.4 },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
         { delay: 2500, kind: 'bomber', pattern: 'single', x: 0 },
         { delay: 2500, kind: 'dart', pattern: 'line', count: 6, waitClear: true },
-      ],
-      [
         { delay: 2000, kind: 'gunboat', pattern: 'line', count: 3 },
         { delay: 3500, kind: 'bomber', pattern: 'single', x: 1 },
         { delay: 1500, kind: 'weaver', pattern: 'pair' },
@@ -164,10 +161,92 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  planned('ICE RING OF HALVA', 'A FROZEN RING WHERE ICE SENDS THE SHIP SLIDING. DRILLS AND SNIPERS WAIT.',
-    'node_ice', [['driller', 3], ['lancer', 2], ['dart', 1]]),
-  planned('VOSSARI BLOCKADE', 'THE EMPIRE\'S FLEET RINGS A FORTRESS MOON. ADMIRAL KADE COMMANDS.',
-    'node_moon', [['lancer', 3], ['bulwark', 2], ['gunboat', 1]]),
+  // Level 4: ice shards fall, ice sheets send the ship sliding, Drillers ram
+  // from the sides and Vossari Lancers fire aimed beams after a warning line.
+  {
+    name: 'ICE RING OF HALVA',
+    desc: 'A FROZEN RING WHERE ICE SENDS THE SHIP SLIDING. DRILLS AND SNIPERS WAIT.',
+    node: 'node_ice',
+    theme: 'ice',
+    hazards: [{ kind: 'shard', every: [2500, 4500] }, { kind: 'patch', every: [6000, 9500] }],
+    segments: [
+      [
+        { delay: 2500, kind: 'dart', pattern: 'vee', count: 5, x: 0.5 },
+        { delay: 3000, kind: 'driller', pattern: 'single', x: 0 },
+        { delay: 3000, kind: 'weaver', pattern: 'pair' },
+        { delay: 3500, kind: 'lancer', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 2500, kind: 'driller', pattern: 'single', x: 1 },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 7, x: 0 },
+        { delay: 3500, kind: 'lancer', pattern: 'pair', waitClear: true },
+        { delay: 2500, kind: 'driller', pattern: 'pair' },
+        { delay: 2500, kind: 'dart', pattern: 'column', count: 6, x: 0.3 },
+        { delay: 800, kind: 'dart', pattern: 'column', count: 6, x: 0.7 },
+        { delay: 3000, kind: 'gunboat', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'lancer', pattern: 'single', x: 0.25 },
+        { delay: 1500, kind: 'driller', pattern: 'single', x: 0, waitClear: true },
+      ],
+      [
+        { delay: 2000, kind: 'lancer', pattern: 'pair' },
+        { delay: 2500, kind: 'driller', pattern: 'single', x: 1 },
+        { delay: 2500, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
+        { delay: 2500, kind: 'driller', pattern: 'single', x: 0 },
+        { delay: 3000, kind: 'weaver', pattern: 'line', count: 3 },
+        { delay: 3500, kind: 'lancer', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2500, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'driller', pattern: 'pair' },
+        { delay: 3000, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'lancer', pattern: 'single', x: 0.5, waitClear: true },
+        // Final wave
+        { delay: 2000, kind: 'driller', pattern: 'pair' },
+        { delay: 1500, kind: 'lancer', pattern: 'line', count: 3 },
+        { delay: 2000, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 2500, kind: 'driller', pattern: 'pair' },
+        { delay: 1500, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
+      ],
+    ],
+  },
+  // Level 5: the Vossari fleet. Bulwarks hide behind shields, turrets on the
+  // capital ships fire in from the edges, and Admiral Kade's Dreadnought waits.
+  {
+    name: 'VOSSARI BLOCKADE',
+    desc: 'THE EMPIRE\'S FLEET RINGS A FORTRESS MOON. ADMIRAL KADE COMMANDS.',
+    node: 'node_moon',
+    theme: 'blockade',
+    hazards: [{ kind: 'turret', every: [5000, 8000] }],
+    boss: 'dreadnought',
+    segments: [
+      [
+        { delay: 2500, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 3000, kind: 'lancer', pattern: 'pair' },
+        { delay: 3500, kind: 'gunboat', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'bulwark', pattern: 'single', x: 0.5, waitClear: true },
+        { delay: 2500, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'lancer', pattern: 'single', x: 0.2 },
+        { delay: 1200, kind: 'lancer', pattern: 'single', x: 0.8 },
+        { delay: 3000, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 3500, kind: 'bulwark', pattern: 'single', x: 0.3 },
+        { delay: 2000, kind: 'dart', pattern: 'column', count: 6, x: 0.75, waitClear: true },
+        { delay: 2500, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'lancer', pattern: 'line', count: 3 },
+        { delay: 3500, kind: 'bulwark', pattern: 'pair', waitClear: true },
+      ],
+      [
+        { delay: 2000, kind: 'lancer', pattern: 'pair' },
+        { delay: 2500, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 3000, kind: 'bulwark', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'gunboat', pattern: 'single', x: 0.2 },
+        { delay: 1500, kind: 'lancer', pattern: 'single', x: 0.8, waitClear: true },
+        { delay: 2500, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
+        { delay: 3000, kind: 'bulwark', pattern: 'pair' },
+        { delay: 3000, kind: 'lancer', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 3000, kind: 'gunboat', pattern: 'line', count: 3 },
+        { delay: 3500, kind: 'bulwark', pattern: 'single', x: 0.5 },
+        { delay: 2500, kind: 'lancer', pattern: 'pair', waitClear: true },
+      ],
+    ],
+  },
   planned('EMBER NEBULA', 'A RED NEBULA ALIVE WITH LIGHTNING. WATCH FOR THE FLASH BEFORE A STRIKE.',
     'node_nebula', [['minelayer', 3], ['gunboat', 2], ['dart', 2]]),
   planned('SOLAR FORGE', 'CLOSE ORBIT OF A STAR. FLARES SWEEP THE SCREEN; SHELTER BEHIND ROCK.',

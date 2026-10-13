@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { ITEMS, WEAPONS } from '../data/items';
-import { LEVELS, type EnemyKind, type HazardKind, type LevelDef, type Wave } from '../data/levels';
+import { LEVELS, type EnemyKind, type LevelDef, type Wave } from '../data/levels';
 import { weaponStats } from '../inventory';
+import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
@@ -19,8 +20,14 @@ interface EnemyData {
   fireIn: number;
   dir: number; // -1 or 1: which way it crosses the screen
   wait: number; // ms before it starts moving (swarm members queue up)
-  stopY: number; // where a Gunboat parks
-  hold: number; // ms a parked Gunboat stays
+  stopY: number; // where a Gunboat, Lancer or Bulwark parks
+  hold: number; // ms a parked Gunboat stays; ms a Driller spends lining up
+  step: number; // Driller: 0 sliding in, 1 lining up, 2 ramming. Lancer: beams fired
+  aim: number; // Lancer: the angle its beam is locked to
+  charge: number; // Lancer: ms of warning line left before the beam
+  beam: number; // Lancer: ms the beam stays on
+  shield: number; // Bulwark: shield health left
+  shieldImg: Phaser.GameObjects.Image | null;
 }
 
 const ENEMY_STATS: Record<FoeKind, { hp: number; texture: string; dropChance: number; credits: [number, number] }> = {
@@ -29,11 +36,18 @@ const ENEMY_STATS: Record<FoeKind, { hp: number; texture: string; dropChance: nu
   drone: { hp: 1, texture: 'drone', dropChance: 0.3, credits: [1, 3] },
   gunboat: { hp: 8, texture: 'gunboat', dropChance: 0.9, credits: [10, 16] },
   bomber: { hp: 6, texture: 'bomber', dropChance: 0.9, credits: [10, 18] },
+  driller: { hp: 4, texture: 'driller', dropChance: 0.6, credits: [6, 12] },
+  lancer: { hp: 6, texture: 'lancer', dropChance: 0.8, credits: [8, 14] },
+  bulwark: { hp: 14, texture: 'bulwark', dropChance: 0.9, credits: [18, 30] },
   mine: { hp: 1, texture: 'mine', dropChance: 0, credits: [0, 0] },
   boulder: { hp: 3, texture: 'boulder', dropChance: 0, credits: [0, 0] },
 };
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
+const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
+const BULWARK_SHIELD = 12;
+const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
+const BOSS_NAMES = { rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT' };
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
@@ -52,6 +66,9 @@ export class GameScene extends Phaser.Scene {
   private enemyBullets!: Phaser.Physics.Arcade.Group;
   private coins!: Phaser.Physics.Arcade.Group;
   private hazards!: Phaser.Physics.Arcade.Group;
+  private patches: Phaser.GameObjects.Image[] = []; // ice sheets: harmless, but slippery
+  private slide = { x: 0, y: 0 }; // ship velocity, which lags behind the controls on ice
+  beams!: Phaser.GameObjects.Graphics; // Lancer and boss lasers, redrawn every frame
   sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
   private scroll!: ReturnType<typeof starfield>;
   private scenery: Phaser.GameObjects.TileSprite | null = null;
@@ -61,8 +78,8 @@ export class GameScene extends Phaser.Scene {
   private segment = 0;
   private waveIndex = 0;
   private waveTimer = 0;
-  private hazardIn = 0;
-  private boss: Rockjaw | null = null;
+  private hazardIn: number[] = [];
+  private boss: Rockjaw | Dreadnought | null = null;
   private bossBar: Phaser.GameObjects.Graphics | null = null;
   private bossName: Phaser.GameObjects.Text | null = null;
 
@@ -79,6 +96,7 @@ export class GameScene extends Phaser.Scene {
   private itemButtons: { box: Phaser.GameObjects.Rectangle; icon: Phaser.GameObjects.Image; count: Phaser.GameObjects.Text }[] = [];
   private weaponIcons: Phaser.GameObjects.Image[] = [];
   private tipsShown = new Set<string>();
+  private tipFreeAt = 0; // when the tip on screen is done blinking
 
   constructor() { super('Game'); }
 
@@ -91,7 +109,9 @@ export class GameScene extends Phaser.Scene {
     this.segment = 0;
     this.waveIndex = 0;
     this.waveTimer = 0;
-    this.hazardIn = 4000;
+    this.hazardIn = [];
+    this.patches = [];
+    this.slide = { x: 0, y: 0 };
     this.boss = null;
     this.bossBar = null;
     this.bossName = null;
@@ -104,6 +124,7 @@ export class GameScene extends Phaser.Scene {
     this.itemButtons = [];
     this.weaponIcons = [];
     this.tipsShown = new Set();
+    this.tipFreeAt = 0;
     this.scenery = null;
     this.planet = null;
   }
@@ -111,14 +132,18 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
-    if (this.level.theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
-    else this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${this.level.theme}`).setOrigin(0);
+    const theme = this.level.theme;
+    if (theme !== 'outpost') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
+    if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
+    if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
+    this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
     this.hazards = this.physics.add.group();
     this.enemies = this.physics.add.group();
     this.enemyBullets = this.physics.add.group();
     this.coins = this.physics.add.group();
+    this.beams = this.add.graphics().setDepth(12);
 
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
@@ -158,7 +183,7 @@ export class GameScene extends Phaser.Scene {
   private setupInput() {
     // Relative drag: the finger moves a target by however far it moves, so the
     // finger can be anywhere on screen and never covers the ship. The ship then
-    // flies toward that target at keyboard speed (see touchMove).
+    // flies toward that target at keyboard speed (see wantedStep).
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length > 0) return; // tapped a button
       const { x, y } = this.player;
@@ -182,30 +207,53 @@ export class GameScene extends Phaser.Scene {
     ITEM_KEYS.forEach((k, i) => kb.on(`keydown-${k}`, () => this.useItem(i)));
   }
 
-  private keyboardMove(dt: number) {
+  // How far the controls ask the ship to move this frame: keyboard first, then
+  // the drag target. Touch flies toward the target at keyboard speed, landing
+  // exactly on it once it's within one frame's step so the ship doesn't jitter.
+  private wantedStep(dt: number) {
     const k = this.keys;
-    const dx = (k.right.isDown || k.d.isDown ? 1 : 0) - (k.left.isDown || k.a.isDown ? 1 : 0);
-    const dy = (k.down.isDown || k.s.isDown ? 1 : 0) - (k.up.isDown || k.w.isDown ? 1 : 0);
-    if (!dx && !dy) return;
-    this.dragFrom = null;
-    this.player.x = Phaser.Math.Clamp(this.player.x + dx * SHIP_SPEED_KEYS * dt, 6, W - 6);
-    this.player.y = Phaser.Math.Clamp(this.player.y + dy * SHIP_SPEED_KEYS * dt, 24, H - 30);
-  }
-
-  // Fly toward the drag target at keyboard speed, landing exactly on it once
-  // it's within one frame's step so the ship doesn't jitter around it.
-  private touchMove(dt: number) {
-    if (!this.dragFrom) return;
+    const kx = (k.right.isDown || k.d.isDown ? 1 : 0) - (k.left.isDown || k.a.isDown ? 1 : 0);
+    const ky = (k.down.isDown || k.s.isDown ? 1 : 0) - (k.up.isDown || k.w.isDown ? 1 : 0);
+    if (kx || ky) {
+      this.dragFrom = null;
+      return { x: kx * SHIP_SPEED_KEYS * dt, y: ky * SHIP_SPEED_KEYS * dt };
+    }
+    if (!this.dragFrom) return { x: 0, y: 0 };
     const dx = this.dragFrom.tx - this.player.x;
     const dy = this.dragFrom.ty - this.player.y;
     const dist = Math.hypot(dx, dy);
     const step = SHIP_SPEED_KEYS * dt;
-    if (dist <= step) {
-      this.player.setPosition(this.dragFrom.tx, this.dragFrom.ty);
+    if (dist <= step) return { x: dx, y: dy };
+    return { x: (dx / dist) * step, y: (dy / dist) * step };
+  }
+
+  // On ice the ship's speed only slowly catches up with the controls, so it
+  // drifts on after letting go and swings past where it was aimed.
+  private move(dt: number) {
+    if (dt <= 0) return;
+    const want = this.wantedStep(dt);
+    let mx = want.x, my = want.y;
+    if (this.onIce()) {
+      if (this.state.level === 4) this.tipOnce('ice', 'ICE MAKES YOU SLIDE');
+      const grip = Math.min(1, ICE_GRIP * dt);
+      this.slide.x += (want.x / dt - this.slide.x) * grip;
+      this.slide.y += (want.y / dt - this.slide.y) * grip;
+      mx = this.slide.x * dt;
+      my = this.slide.y * dt;
     } else {
-      this.player.x += (dx / dist) * step;
-      this.player.y += (dy / dist) * step;
+      this.slide = { x: want.x / dt, y: want.y / dt };
     }
+    const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
+    const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
+    // Sliding into the edge of the screen stops the slide that way.
+    if (nx !== this.player.x + mx) this.slide.x = 0;
+    if (ny !== this.player.y + my) this.slide.y = 0;
+    this.player.setPosition(nx, ny);
+  }
+
+  private onIce() {
+    const { x, y } = this.player;
+    return this.patches.some((p) => ((x - p.x) / (p.displayWidth / 2 - 1)) ** 2 + ((y - p.y) / (p.displayHeight / 2 - 1)) ** 2 <= 1);
   }
 
   // --- HUD ---------------------------------------------------------------
@@ -246,7 +294,19 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // Tips take turns, so two that come up together don't print over each other.
   private blinkTip(msg: string) {
+    const wait = this.tipFreeAt - this.time.now;
+    if (wait > 0) {
+      this.tipFreeAt += 2500;
+      this.time.delayedCall(wait, () => this.showTip(msg));
+      return;
+    }
+    this.tipFreeAt = this.time.now + 2500;
+    this.showTip(msg);
+  }
+
+  private showTip(msg: string) {
     const t = text(this, W / 2, H / 2 + 30, msg, COLOR.yellow).setOrigin(0.5).setDepth(1000);
     t.setAlign('center');
     this.tweens.add({ targets: t, alpha: 0.2, yoyo: true, repeat: 3, duration: 300, onComplete: () => t.destroy() });
@@ -337,6 +397,7 @@ export class GameScene extends Phaser.Scene {
     const data: EnemyData = {
       kind, hp: stats.hp, t: 0, baseX: x, fireIn: Phaser.Math.Between(900, 2200),
       dir: x < W / 2 ? 1 : -1, wait: 0, stopY: Phaser.Math.Between(46, 80), hold: 5000,
+      step: 0, aim: 0, charge: 0, beam: 0, shield: 0, shieldImg: null,
     };
     e.setData('e', data);
     // Weaver sine amplitude has to stay on screen.
@@ -344,6 +405,22 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'gunboat') data.fireIn = 700;
     if (kind === 'bomber') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
     if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
+    if (kind === 'driller') {
+      // Slides in from the side, somewhere in the lower half where the ship flies.
+      e.setPosition(x < W / 2 ? -8 : W + 8, Phaser.Math.Between(Math.round(H * 0.4), Math.round(H * 0.72)));
+      e.setFlipX(data.dir < 0);
+      data.hold = 900;
+      if (this.state.level === 4) this.tipOnce('driller', 'DRILLERS RAM\nFROM THE SIDES');
+    }
+    if (kind === 'lancer') data.fireIn = Phaser.Math.Between(300, 900);
+    if (kind === 'bulwark') {
+      data.stopY = Phaser.Math.Between(60, 84);
+      data.fireIn = 1400;
+      data.shield = BULWARK_SHIELD;
+      data.shieldImg = this.add.image(x, y + 9, 'bshield').setDepth(e.depth + 1);
+      e.once('destroy', () => data.shieldImg?.destroy());
+      if (this.state.level === 5) this.tipOnce('bulwark', 'BREAK THE SHIELD\nTO HIT THE HULL');
+    }
     return e;
   }
 
@@ -413,9 +490,99 @@ export class GameScene extends Phaser.Scene {
         case 'boulder':
           e.rotation += dt * 2;
           break;
+        case 'driller':
+          if (this.updateDriller(e, d, dt)) continue;
+          break;
+        case 'lancer':
+          if (this.updateLancer(e, d, dt, firing)) continue;
+          break;
+        case 'bulwark':
+          // Lumbers down to its spot, fires aimed pairs, then creeps on down.
+          e.y += (e.y < d.stopY ? 28 : 7) * dt;
+          if (d.fireIn <= 0 && firing && e.y > 20) {
+            d.fireIn = 2000;
+            this.enemyShoot(e.x - 5, e.y + 8);
+            this.enemyShoot(e.x + 5, e.y + 8);
+          }
+          d.shieldImg?.setPosition(e.x, e.y + 9);
+          break;
       }
-      if (e.y > H + 16 || e.x < -24 || e.x > W + 24) e.destroy();
+      if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || e.y < -40) e.destroy();
     }
+  }
+
+  // Driller: slides in from its side, lines up with the ship (shaking, its drill
+  // flickering), then rams straight across. Returns true if it left the screen.
+  private updateDriller(e: Phaser.Physics.Arcade.Sprite, d: EnemyData, dt: number) {
+    const edge = d.dir > 0 ? 12 : W - 12;
+    if (d.step === 0) {
+      e.x += d.dir * 50 * dt;
+      if ((d.dir > 0 && e.x >= edge) || (d.dir < 0 && e.x <= edge)) { e.x = edge; d.step = 1; }
+    } else if (d.step === 1) {
+      d.hold -= dt * 1000;
+      const gap = this.player.y - e.y;
+      e.y += Phaser.Math.Clamp(gap, -45 * dt, 45 * dt);
+      e.x = edge + (Math.floor(d.t * 30) % 2 ? 1 : -1);
+      if (Math.floor(d.t * 12) % 2) e.setTintFill(0xfc7460);
+      else e.clearTint();
+      if (d.hold <= 0) { d.step = 2; e.clearTint(); }
+    } else {
+      e.x += d.dir * 170 * dt;
+    }
+    if ((d.dir > 0 && e.x > W + 20) || (d.dir < 0 && e.x < -20)) { e.destroy(); return true; }
+    return false;
+  }
+
+  // Lancer: parks, locks onto where the ship is with a blinking warning line,
+  // then fires a beam down that line. After three beams it pulls back up.
+  private updateLancer(e: Phaser.Physics.Arcade.Sprite, d: EnemyData, dt: number, firing: boolean) {
+    const ms = dt * 1000;
+    if (d.step >= 3 && d.charge <= 0 && d.beam <= 0) {
+      e.y -= 40 * dt;
+      if (e.y < -20) { e.destroy(); return true; }
+      return false;
+    }
+    if (e.y < d.stopY) { e.y += 45 * dt; return false; }
+    const nose = { x: e.x, y: e.y + 7 };
+    if (d.beam > 0) {
+      d.beam -= ms;
+      this.drawBeam(nose.x, nose.y, d.aim, 3, 0xd800cc);
+      if (firing && this.beamHits(nose.x, nose.y, d.aim, 2.5)) this.hurt();
+      if (d.beam <= 0) { d.step++; d.fireIn = 1600; }
+    } else if (d.charge > 0) {
+      d.charge -= ms;
+      if (Math.floor(d.charge / 90) % 2 === 0) this.drawBeam(nose.x, nose.y, d.aim, 1, 0xf878f8, 0.7);
+      if (d.charge <= 0) d.beam = 320;
+    } else {
+      // Drift toward the ship between shots.
+      e.x += Phaser.Math.Clamp(this.player.x - e.x, -18 * dt, 18 * dt);
+      if (d.fireIn <= 0 && firing) {
+        d.aim = Phaser.Math.Angle.Between(nose.x, nose.y, this.player.x, this.player.y);
+        d.charge = LANCER_WARN;
+        if (this.state.level === 4) this.tipOnce('lancer', 'DODGE THE LINE');
+      }
+    }
+    return false;
+  }
+
+  // A straight laser from (x, y) at `angle` to the edge of the screen.
+  drawBeam(x: number, y: number, angle: number, width: number, color: number, alpha = 1) {
+    const len = 420;
+    const g = this.beams;
+    g.lineStyle(width, color, alpha);
+    g.lineBetween(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+    if (width > 1) {
+      g.lineStyle(1, 0xfcfcfc, alpha);
+      g.lineBetween(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+    }
+  }
+
+  // Whether the ship is within `reach` px of a beam's center line.
+  beamHits(x: number, y: number, angle: number, reach: number) {
+    const px = this.player.x - x, py = this.player.y - y;
+    const along = px * Math.cos(angle) + py * Math.sin(angle);
+    if (along < 0) return false;
+    return Math.abs(-px * Math.sin(angle) + py * Math.cos(angle)) <= reach;
   }
 
   // Fires at `angle`, or at the player if no angle is given.
@@ -436,16 +603,23 @@ export class GameScene extends Phaser.Scene {
 
   // --- Hazards ---------------------------------------------------------------
 
-  private runHazards(dt: number) {
-    const hz = this.level.hazard;
-    if (!hz || this.boss) return;
-    this.hazardIn -= dt * 1000;
-    if (this.hazardIn > 0) return;
-    this.hazardIn = Phaser.Math.Between(...hz.every);
-    this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
+  private resetHazardTimers(first: number) {
+    this.hazardIn = (this.level.hazards ?? []).map((_hz, i) => first + i * 2500);
   }
 
-  private spawnHazard(kind: HazardKind | 'pebble', x: number, y: number) {
+  private runHazards(dt: number) {
+    if (this.boss) return;
+    (this.level.hazards ?? []).forEach((hz, i) => {
+      this.hazardIn[i] -= dt * 1000;
+      if (this.hazardIn[i] > 0) return;
+      this.hazardIn[i] = Phaser.Math.Between(...hz.every);
+      if (hz.kind === 'patch') this.spawnPatch();
+      else if (hz.kind === 'turret') this.edgeTurret();
+      else this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
+    });
+  }
+
+  private spawnHazard(kind: 'debris' | 'rock' | 'shard' | 'pebble', x: number, y: number) {
     const tex = kind === 'debris' ? Phaser.Utils.Array.GetRandom(['debris1', 'debris2']) : kind;
     const h = this.hazards.create(x, y, tex) as Phaser.Physics.Arcade.Image;
     h.setData('kind', kind);
@@ -453,6 +627,12 @@ export class GameScene extends Phaser.Scene {
       h.setVelocity(Phaser.Math.Between(-6, 6), Phaser.Math.Between(20, 28));
       h.body!.setSize(h.width - 6, h.height - 4);
       if (this.state.level === 2) this.tipOnce('debris', 'WRECKS BLOCK SHOTS');
+    } else if (kind === 'shard') {
+      // Falls fast and slanted; one shot shatters it.
+      h.setData('hp', 1);
+      h.setVelocity(Phaser.Math.Between(-18, 18), Phaser.Math.Between(70, 95));
+      h.setRotation(Math.atan2(h.body!.velocity.y, h.body!.velocity.x) - Math.PI / 2);
+      h.body!.setSize(3, 6);
     } else {
       h.setData('hp', kind === 'rock' ? 6 : 2);
       h.setVelocity(Phaser.Math.Between(-10, 10), Phaser.Math.Between(30, 45));
@@ -461,6 +641,39 @@ export class GameScene extends Phaser.Scene {
       if (kind === 'rock' && this.state.level === 3) this.tipOnce('rock', 'SHOOT ROCKS OR DODGE');
     }
     return h;
+  }
+
+  // An ice sheet drifting down with the ring. Drawn under everything that flies.
+  private spawnPatch() {
+    this.patches.push(this.add.image(Phaser.Math.Between(30, W - 30), -20, 'icepatch').setDepth(1).setAlpha(0.6));
+  }
+
+  // A capital ship gun leans in from one edge, blinks, fires a burst at the
+  // ship, and pulls back. It can't be shot.
+  private edgeTurret() {
+    const left = Math.random() < 0.5;
+    const y = Phaser.Math.Between(70, H - 90);
+    const out = left ? -6 : W + 6;
+    const t = this.add.image(out, y, 'eturret').setFlipX(!left).setDepth(9);
+    if (this.state.level === 5) this.tipOnce('turret', 'WATCH THE EDGES');
+    this.tweens.chain({
+      targets: t,
+      tweens: [
+        { x: left ? 4 : W - 4, duration: 350, ease: 'Quad.easeOut' },
+        { alpha: 0.3, duration: 110, yoyo: true, repeat: 3 },
+        {
+          alpha: 1, duration: 520, onStart: () => {
+            for (let i = 0; i < 3; i++) {
+              this.time.delayedCall(i * 170, () => {
+                if (t.active && this.phase === 'action') this.enemyShoot(t.x + (left ? 6 : -6), t.y);
+              });
+            }
+          },
+        },
+        { x: out, duration: 400, ease: 'Quad.easeIn' },
+      ],
+      onComplete: () => t.destroy(),
+    });
   }
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
@@ -516,7 +729,17 @@ export class GameScene extends Phaser.Scene {
     if (!b.active || !e.active) return;
     b.destroy();
     const d = e.getData('e') as EnemyData;
-    d.hp -= (b.getData('dmg') as number) ?? 1;
+    const dmg = (b.getData('dmg') as number) ?? 1;
+    // A Bulwark's shield takes shots from below until it breaks.
+    if (d.shieldImg && b.y > e.y) {
+      d.shield -= dmg;
+      if (d.shield > 0) { this.flash(d.shieldImg); this.tink(b.x, b.y); return; }
+      this.sparks.explode(12, d.shieldImg.x, d.shieldImg.y);
+      d.shieldImg.destroy();
+      d.shieldImg = null;
+      return;
+    }
+    d.hp -= dmg;
     if (d.hp <= 0) this.killEnemy(e, true);
     else this.flash(e);
   }
@@ -552,11 +775,12 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.creditsText, scale: 1, duration: 150 });
   }
 
-  hurt() {
+  // Most hits cost 1 health; big ones like the Dreadnought's laser cost 2.
+  hurt(amount = 1) {
     if (this.phase !== 'action' || GOD_MODE) return;
     const now = this.time.now;
     if (now < this.invulnUntil || now < this.shieldUntil) return;
-    this.health--;
+    this.health = Math.max(0, this.health - amount);
     this.invulnUntil = now + 1200;
     this.cameras.main.shake(120, 0.01);
     this.refreshHud();
@@ -581,9 +805,12 @@ export class GameScene extends Phaser.Scene {
   private startBoss() {
     const warn = text(this, W / 2, H / 2 - 30, 'WARNING', COLOR.red, 16).setOrigin(0.5).setDepth(1000);
     this.tweens.add({ targets: warn, alpha: 0.1, yoyo: true, repeat: 4, duration: 250, onComplete: () => warn.destroy() });
-    this.boss = new Rockjaw(this, () => this.bossDefeated());
+    const kind = this.level.boss!;
+    this.boss = kind === 'dreadnought'
+      ? new Dreadnought(this, () => this.bossDefeated())
+      : new Rockjaw(this, () => this.bossDefeated());
     this.bossBar = this.add.graphics().setDepth(900);
-    this.bossName = text(this, W / 2, 28, 'ROCKJAW', COLOR.red).setOrigin(0.5, 0).setDepth(900);
+    this.bossName = text(this, W / 2, 28, BOSS_NAMES[kind], COLOR.red).setOrigin(0.5, 0).setDepth(900);
   }
 
   private drawBossBar() {
@@ -602,7 +829,7 @@ export class GameScene extends Phaser.Scene {
     this.bossBar = null;
     this.enemyBullets.clear(true, true);
     // Wait for the gold to drop before gathering it up.
-    this.time.delayedCall(1800, () => {
+    this.time.delayedCall(this.level.boss === 'dreadnought' ? 3600 : 1800, () => {
       this.boss = null;
       this.levelClear();
     });
@@ -626,36 +853,52 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(550, then);
   }
 
-  // The station drifts in, the ship lines up, barrel-rolls and flies in.
+  // The station drifts in and keeps scrolling. The ship lines up, barrel-rolls,
+  // and starts sinking toward the station partway through its last roll, timed
+  // so the station passes right under it as it bottoms out.
   private vendorArrival() {
     this.phase = 'arrival';
     this.dragFrom = null;
     this.enemyBullets.clear(true, true);
     this.gatherCoins(() => {
-      if (this.state.level === 1 && this.segment === 0) this.blinkTip('VENDOR AHEAD');
+      if (this.state.level === 1) this.blinkTip('VENDOR AHEAD');
+      const shipY = Math.round(H * 0.62);
+      const speed = 0.044; // px per ms the station scrolls
       const station = this.add.image(W / 2, -20, 'station').setAlpha(0.55).setScale(1.6).setDepth(5);
-      this.tweens.add({ targets: this.player, x: W / 2, y: H * 0.64, duration: 1400, ease: 'Sine.easeInOut' });
-      this.tweens.add({
-        targets: station, y: H / 2, duration: 4200, ease: 'Linear',
-        onComplete: () => {
-          this.tweens.chain({
-            targets: this.player,
-            tweens: [
-              { scaleX: -1, duration: 160, yoyo: true, repeat: 1 },
-              { y: station.y, scale: 0.15, alpha: 0.5, duration: 700, ease: 'Quad.easeIn' },
-            ],
-            onComplete: () => {
-              this.cameras.main.fadeOut(350);
-              this.cameras.main.once('camerafadeoutcomplete', () => {
-                station.destroy();
-                this.hazards.clear(true, true);
-                this.phase = 'vendor';
-                this.scene.pause();
-                this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {} });
-              });
-            },
-          });
-        },
+      this.tweens.add({ targets: station, y: H + 40, duration: (H + 60) / speed, ease: 'Linear' });
+      this.tweens.add({ targets: this.player, x: W / 2, y: shipY, duration: 1400, ease: 'Sine.easeInOut' });
+
+      const ROLL = 340; // ms per barrel roll
+      const ROLLS = 2;
+      const SINK_AT = 380; // the sink starts this far into the rolls
+      const SINK = 1150;
+      const total = SINK_AT + SINK;
+      const meet = (shipY + 20) / speed; // when the station's center reaches the ship
+      this.time.delayedCall(meet - total, () => {
+        const p = { t: 0 };
+        this.tweens.add({
+          targets: p, t: total, duration: total, ease: 'Linear',
+          onUpdate: () => {
+            const roll = p.t < ROLL * ROLLS ? Math.cos((p.t / ROLL) * Math.PI * 2) : 1;
+            const k = Phaser.Math.Clamp((p.t - SINK_AT) / SINK, 0, 1);
+            const sink = k * k;
+            const scale = 1 - 0.85 * sink;
+            this.player.setScale(scale * roll, scale).setAlpha(1 - 0.5 * sink);
+          },
+          onComplete: () => {
+            this.cameras.main.fadeOut(350);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+              this.tweens.killTweensOf(station);
+              station.destroy();
+              this.hazards.clear(true, true);
+              this.patches.forEach((pt) => pt.destroy());
+              this.patches = [];
+              this.phase = 'vendor';
+              this.scene.pause();
+              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {} });
+            });
+          },
+        });
       });
     });
   }
@@ -664,6 +907,7 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'vendor') return;
     this.phase = 'ready';
     this.player.setPosition(W / 2, H - 50).setScale(1).setAlpha(1);
+    this.slide = { x: 0, y: 0 };
     this.refreshHud();
     this.cameras.main.fadeIn(350);
     const ready = text(this, W / 2, H / 2, 'READY', COLOR.white).setOrigin(0.5).setDepth(1000);
@@ -673,7 +917,7 @@ export class GameScene extends Phaser.Scene {
       this.segment++;
       this.waveIndex = 0;
       this.waveTimer = 0;
-      this.hazardIn = 3000;
+      this.resetHazardTimers(3000);
       this.phase = 'action';
     });
   }
@@ -704,10 +948,14 @@ export class GameScene extends Phaser.Scene {
     this.scroll(dt, speed);
     if (this.scenery) this.scenery.tilePositionY -= 11 * speed * dt;
     if (this.planet) this.planet.y += 1.2 * dt;
+    for (const p of this.patches.slice()) {
+      p.y += 30 * speed * dt;
+      if (p.y > H + 30) { p.destroy(); this.patches.splice(this.patches.indexOf(p), 1); }
+    }
+    this.beams.clear();
 
     if (this.phase === 'action') {
-      this.keyboardMove(dt);
-      this.touchMove(dt);
+      this.move(dt);
       this.autoFire(dt);
       this.runWaves(dt);
       this.runHazards(dt);

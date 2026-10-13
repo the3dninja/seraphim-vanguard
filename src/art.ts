@@ -192,6 +192,98 @@ const SPRITES: Record<string, string[]> = {
   ],
   core: ['..RRRR..', '.RROORR.', 'RROWWORR', 'ROWYYWOR', 'ROWYYWOR', 'RROWWORR', '.RROORR.', '..RRRR..'],
 
+  // Level 4 and 5 enemies and hazards.
+  // Driller (Drone Swarm), drawn facing right; flipped when it comes from the right.
+  driller: [
+    '.G.GGG........',
+    '..GLLLGOO.....',
+    '.GLLLLGOYOO...',
+    'GLLYKLLGOYOOO.',
+    'GLLKYLLGYOYOYW',
+    'GLLYKLLGOYOOO.',
+    '.GLLLLGOYOO...',
+    '..GLLLGOO.....',
+    '.G.GGG........',
+  ],
+  // Vossari Lancer: the lance under the hull is where its beam comes from.
+  lancer: [
+    '..PP...PP..',
+    '.PLLP.PLLP.',
+    'PLWLLPLLWLP',
+    'PLLLMMMLLLP',
+    '.PLLMWMLLP.',
+    '..PPMWMPP..',
+    '....MWM....',
+    '....LWL....',
+    '....LCL....',
+    '.....C.....',
+    '.....C.....',
+    '.....W.....',
+  ],
+  bulwark: [
+    '....PPPPPPPPP....',
+    '..PPLLLLLLLLLPP..',
+    '.PLLWLLLLLLLLLLP.',
+    'PLLLLDDDDDDDLLLLP',
+    'PLLLDMMMMMMMDLLLP',
+    'PLLLDMYYYYYMDLLLP',
+    'PLLLDMMMMMMMDLLLP',
+    '.PLLLDDDDDDDLLLP.',
+    '..PPLLLLLLLLLPP..',
+    '...GG.PPPPP.GG...',
+    '...G.........G...',
+  ],
+  // The Bulwark's shield, a bowl under its nose that soaks up shots from below.
+  bshield: [
+    'C...................C',
+    'CA.................AC',
+    '.CAA.............AAC.',
+    '..CCAAAWAAAAAWAAACC..',
+    '....CCCCCCCCCCCCC....',
+  ],
+  shard: ['..W..', '.WA..', '.AAC.', 'WACC.', '.ACCB', '.ACB.', '..CB.', '..B..'],
+  // A capital ship gun leaning in from the left edge (flipped for the right).
+  eturret: [
+    'GGGG......',
+    'GLLLG.....',
+    'GLRRLGGGGG',
+    'GLRYLLLLLW',
+    'GLRRLGGGGG',
+    'GLLLG.....',
+    'GGGG......',
+  ],
+  // Admiral Kade's Dreadnought: four gun turrets and the bridge.
+  kturret: [
+    '...DDDDD...',
+    '.DDPPPPPDD.',
+    '.DPLLLLLPD.',
+    'DPLMMMMMLPD',
+    'DPLMYYYMLPD',
+    'DPLMYWYMLPD',
+    'DPLMMMMMLPD',
+    '.DPLLLLLPD.',
+    '.DDPGGGPDD.',
+    '...DGGGD...',
+    '....GGG....',
+    '....DKD....',
+  ],
+  kbridge: [
+    '.....PPPPPPPP.....',
+    '...PPLLLLLLLLPP...',
+    '..PLWLLLLLLLLLLP..',
+    '.PLLDDDDDDDDDDLLP.',
+    'PLLDCACCACCACCDLLP',
+    'PLLDAACAACAACADLLP',
+    'PLLDDDDDDDDDDDDLLP',
+    '.PLLLLLMMMMLLLLLP.',
+    '..PLLLMRRRRMLLLP..',
+    '...PPLMRYYRMLPP...',
+    '.....PMRWWRMP.....',
+    '......PMRRMP......',
+    '.......PMMP.......',
+    '........PP........',
+  ],
+
   lock: ['..GGG..', '.G...G.', '.G...G.', 'LLLLLLL', 'LLLDLLL', 'LLLDLLL', 'LLLLLLL'],
   // Faint pictures inside empty or locked Ship screen slots, so each slot shows what it holds.
   slotWeapon: ['....GG....', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '..GGGGGG..', '.GG.GG.GG.', '.G..GG..G.', '....GG....'],
@@ -243,22 +335,27 @@ function makeTexture(scene: Phaser.Scene, key: string, rows: string[]) {
   tex.refresh();
 }
 
-// A banded gas giant with a dithered shadow edge, for the level 1 backdrop.
-function makePlanet(scene: Phaser.Scene) {
-  const r = 34;
+// A banded planet with a dithered shadow edge: the level 1 gas giant and the
+// level 5 fortress moon.
+function makePlanet(scene: Phaser.Scene, key: string, r: number, bands: string[], shadow: string, craters = 0) {
   const size = r * 2;
-  const tex = scene.textures.createCanvas('planet', size, size)!;
+  const tex = scene.textures.createCanvas(key, size, size)!;
   const ctx = tex.getContext();
-  const bands = ['#0058f8', '#3cbcfc', '#0058f8', '#0000bc', '#3cbcfc', '#0058f8', '#0000bc'];
+  const rand = rng(r * 31 + craters);
+  const pits = Array.from({ length: craters }, () => [rand() * size, rand() * size, 1.5 + rand() * r * 0.18]);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const dx = x - r + 0.5;
       const dy = y - r + 0.5;
       if (dx * dx + dy * dy > r * r) continue;
-      const band = bands[Math.floor(((y + Math.sin(x / 9) * 2) / size) * bands.length) % bands.length];
+      let band = bands[Math.floor(((y + Math.sin(x / 9) * 2) / size) * bands.length) % bands.length];
+      for (const [cx, cy, cr] of pits) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < cr) band = d > cr - 1 && x + y < cx + cy ? shadow : bands[bands.length - 1];
+      }
       // Shadow on the lower right, dithered in a checkerboard at the edge.
       const shade = dx * 0.6 + dy * 0.8;
-      if (shade > r * 0.55 || (shade > r * 0.35 && (x + y) % 2 === 0)) ctx.fillStyle = '#000058';
+      if (shade > r * 0.55 || (shade > r * 0.35 && (x + y) % 2 === 0)) ctx.fillStyle = shadow;
       else ctx.fillStyle = band;
       ctx.fillRect(x, y, 1, 1);
     }
@@ -277,19 +374,81 @@ function makeStars(scene: Phaser.Scene, key: string, count: number, colors: stri
   tex.refresh();
 }
 
-function makeShieldBubble(scene: Phaser.Scene) {
-  const r = 11;
-  const tex = scene.textures.createCanvas('bubble', r * 2 + 1, r * 2 + 1)!;
+// A dotted ring: the ship's shield bubble and the Dreadnought bridge's shield.
+function makeRing(scene: Phaser.Scene, key: string, rx: number, ry: number, colors = ['#fcfcfc', '#3cbcfc']) {
+  const tex = scene.textures.createCanvas(key, rx * 2 + 1, ry * 2 + 1)!;
   const ctx = tex.getContext();
-  for (let y = 0; y <= r * 2; y++) {
-    for (let x = 0; x <= r * 2; x++) {
-      const d = Math.hypot(x - r, y - r);
-      if (d > r - 1 && d <= r + 0.2) {
-        ctx.fillStyle = (x + y) % 3 === 0 ? '#fcfcfc' : '#3cbcfc';
+  for (let y = 0; y <= ry * 2; y++) {
+    for (let x = 0; x <= rx * 2; x++) {
+      const d = Math.hypot((x - rx) / rx, (y - ry) / ry);
+      if (d > 1 - 1.2 / Math.min(rx, ry) && d <= 1.02) {
+        ctx.fillStyle = (x + y) % 3 === 0 ? colors[0] : colors[1];
         ctx.fillRect(x, y, 1, 1);
       }
     }
   }
+  tex.refresh();
+}
+
+// A sheet of ice for level 4: a pale, dithered oval with a few cracks.
+function makeIcePatch(scene: Phaser.Scene) {
+  const rx = 30, ry = 16;
+  const tex = scene.textures.createCanvas('icepatch', rx * 2, ry * 2)!;
+  const ctx = tex.getContext();
+  const rand = rng(77);
+  const cracks = Array.from({ length: 4 }, () => [rand() * rx * 2, rand() * ry * 2, rand() * Math.PI]);
+  for (let y = 0; y < ry * 2; y++) {
+    for (let x = 0; x < rx * 2; x++) {
+      const d = Math.hypot((x - rx + 0.5) / rx, (y - ry + 0.5) / ry) + Math.sin(x * 0.7 + y) * 0.04;
+      if (d > 1) continue;
+      let c = d > 0.85 ? '#a4e4fc' : (x + y) % 2 === 0 ? '#3cbcfc' : '#0058f8';
+      if (d < 0.85 && (x * 3 + y * 5) % 23 === 0) c = '#fcfcfc';
+      for (const [cx, cy, a] of cracks) {
+        const along = (x - cx) * Math.cos(a) + (y - cy) * Math.sin(a);
+        const off = -(x - cx) * Math.sin(a) + (y - cy) * Math.cos(a);
+        if (Math.abs(off) < 0.5 && Math.abs(along) < 7) c = '#a4e4fc';
+      }
+      ctx.fillStyle = c;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  tex.refresh();
+}
+
+// Admiral Kade's Dreadnought, as wide as the screen, nose pointing down.
+export const DREAD_W = 176;
+export const DREAD_H = 56;
+// Where the hull's lower edge is, measured from its top, `dx` px from the middle.
+export const dreadBottom = (dx: number) => 34 + 20 * Math.max(0, 1 - Math.abs(dx) / (DREAD_W / 2)) ** 1.6;
+const dreadTop = (dx: number) => 6 + 14 * (Math.abs(dx) / (DREAD_W / 2)) ** 2;
+
+function makeDreadnought(scene: Phaser.Scene) {
+  const tex = scene.textures.createCanvas('dread', DREAD_W, DREAD_H)!;
+  const ctx = tex.getContext();
+  const px = (x: number, y: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); };
+  for (let x = 0; x < DREAD_W; x++) {
+    const dx = x - DREAD_W / 2 + 0.5;
+    const top = Math.round(dreadTop(dx));
+    const bot = Math.round(dreadBottom(dx));
+    // Engines along the back edge.
+    if ([20, 21, 22, 23, 50, 51, 52, 53].includes(Math.floor(Math.abs(dx)))) {
+      for (let y = top - 3; y < top; y++) px(x, y, y === top - 3 ? '#f8b800' : '#fc7460');
+    }
+    for (let y = top; y < bot; y++) {
+      let c = '#7c7c7c';
+      if (y - top < 2) c = '#bcbcbc';
+      else if (bot - y <= 3) c = (x + y) % 2 === 0 ? '#3c3c3c' : '#000000';
+      else if (Math.abs(dx) > 20 && y === 27) c = '#6844fc';
+      else if (Math.abs(dx) > 20 && y === 28) c = '#3c1c7c';
+      else if (Math.abs(dx) < 1.5 && y > 8) c = '#bcbcbc';
+      else if (Math.round(Math.abs(dx)) % 12 === 0 && (y % 2 === 0)) c = '#3c3c3c';
+      else if (y === 31 && Math.abs(dx) > 24 && Math.abs(dx) < 80 && x % 5 === 0) c = '#f8b800';
+      px(x, y, c);
+    }
+  }
+  // A red light on the prow.
+  px(DREAD_W / 2 - 1, Math.round(dreadBottom(0)) - 1, '#d82800');
+  px(DREAD_W / 2, Math.round(dreadBottom(0)) - 1, '#d82800');
   tex.refresh();
 }
 
@@ -465,6 +624,30 @@ function makeSceneries(scene: Phaser.Scene) {
       for (let k = 0; k < h; k += 2) ctx.fillRect(x + w - 1 - Math.floor(rand() * 4), y + k, 4, 2);
     }
   });
+  // Ice ring: diagonal bands of glittering ice specks.
+  makeScenery(scene, 'scenery_ice', (ctx, rand) => {
+    for (let i = 0; i < 260; i++) {
+      const t = rand();
+      const band = Math.floor(rand() * 3);
+      const x = t * W;
+      const y = ((band * H) / 3 + t * 60 + rand() * 18) % H;
+      ctx.fillStyle = rand() < 0.08 ? '#3c78a8' : rand() < 0.4 ? '#1c3c6c' : '#14243c';
+      ctx.fillRect(Math.floor(x), Math.floor(y), rand() < 0.2 ? 2 : 1, 1);
+    }
+  });
+  // Blockade: far-off capital ships with rows of lights.
+  makeScenery(scene, 'scenery_blockade', (ctx, rand) => {
+    for (let i = 0; i < 4; i++) {
+      const w = 40 + Math.floor(rand() * 40), h = 5 + Math.floor(rand() * 4);
+      const x = Math.floor(rand() * (W - w)), y = Math.floor((i / 4) * H + rand() * 40);
+      ctx.fillStyle = '#12122a';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillRect(x + w * 0.3, y - 3, w * 0.25, 3);
+      for (let k = 0; k < h / 2; k++) ctx.fillRect(x - k * 2 - 2, y + k + 1, k * 2 + 2, h - k * 2 - 2 > 0 ? h - k * 2 - 2 : 1);
+      ctx.fillStyle = '#2c2c3c';
+      for (let k = x + 3; k < x + w - 2; k += 5) ctx.fillRect(k, y + 2, 1, 1);
+    }
+  });
   // Asteroids: a distant field of small dim rocks.
   makeScenery(scene, 'scenery_asteroids', (ctx, rand) => {
     for (let i = 0; i < 28; i++) {
@@ -487,8 +670,12 @@ export function generateArt(scene: Phaser.Scene) {
   makeRock(scene, 'rockjaw', 34, 22, 5);
   for (const [key, kind, colors] of NODES) makeNode(scene, key, kind, colors);
   makeSceneries(scene);
-  makePlanet(scene);
-  makeShieldBubble(scene);
+  makePlanet(scene, 'planet', 34, ['#0058f8', '#3cbcfc', '#0058f8', '#0000bc', '#3cbcfc', '#0058f8', '#0000bc'], '#000058');
+  makePlanet(scene, 'moon', 40, ['#5c5c5c', '#4c4c4c', '#5c5c5c', '#4c4c4c', '#2c2c2c'], '#141414', 9);
+  makeRing(scene, 'bubble', 11, 11);
+  makeRing(scene, 'kshield', 14, 11);
+  makeIcePatch(scene);
+  makeDreadnought(scene);
   makeStars(scene, 'stars-far', 70, ['#3c3c3c', '#7c7c7c']);
   makeStars(scene, 'stars-near', 25, ['#bcbcbc', '#fcfcfc', '#a4e4fc']);
 }
