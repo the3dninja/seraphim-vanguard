@@ -30,11 +30,17 @@ For example `https://the3dninja.github.io/seraphim-vanguard/?god&rich&level=3`.
 - Level 3, Kessel Asteroids: rocks that split when shot, Bombers that lay mines, and the **Rockjaw** mini boss. Break off its three armor plates to expose the core; it throws boulders, and fires spreads once its core is bare. It drops 150 credits
 - Level 4, Ice Ring of Halva: falling ice shards, ice sheets that send the ship sliding, Drillers that line up and ram from the sides, and Vossari Lancers that blink a warning line before firing a beam down it
 - Level 5, Vossari Blockade: Bulwarks behind shields that soak up shots until they break, capital ship guns that lean in from the screen edges, and **Admiral Kade's Dreadnought**. Destroy its four turrets; then its bridge sweeps two lasers in from the sides (2 damage a hit) and drops its shield while they fire, so hit it from the lane under it. It drops 400 credits
-- Vendor stop arrival sequence (the station scrolls in under the ship as it rolls and sinks into it) and a shop with Buy and Sell tabs
+- Level 6, Ember Nebula: **Mine Layers** seed proximity mines that burst when you get close, and lightning strikes down a column after it flashes
+- Level 7, Solar Forge: **Vossari Carriers** park and launch four Darts each, and solar flares sweep down the screen. A shelter rock drifts in before each flare; sit in the dark lane under it
+- Level 8, Silent Relay: **Phantoms** cloak (shots pass through them) and decloak to fire, laser fences blink on and off as they scroll down (cross while off), and **The Watcher** mini boss. It cloaks, then decloaks beside decoy afterimages; only the real one takes damage (decoys look a shade fainter and flicker). Below half health it brings three decoys that fire too, and seeds mines. It drops 150 credits
+- Levels 6 to 8 run about 50% longer than levels 1 to 5
+- **Gear** (from level 6): Hull Plating (+2 max health) and Credit Magnet at the Base vendor; Deflector (absorbs a hit, recharges) and Satellite (an orbiting drone that fires) as in-level vendor exclusives. Gear slots 1 and 2 and gear levels 1 to 5 are in the Base vendor's Upgrade tab
+- Item stacks show against their cap, like 1/3, in flight, on the vendor's slot strip and on the Ship screen
+- The vendor shows Storage as a compact row of icons with counts under the listed items (the station scrolls in under the ship as it rolls and sinks into it) and a shop with Buy and Sell tabs
 - Base menu: Vendor, Ship, View Map and Begin Mission
 - Base vendor **Upgrade** tab: Hull plates (+1 max health, up to 10), a second weapon slot (both weapons fire), item slots 2 and 3, and weapon levels 1 to 5 (more damage each level; faster fire at level 3; twin shots or 5-way spread at level 5)
 - Star map: all 15 levels on a route. The next level is picked, and you can tap the one after it (or any cleared level) to read about it. Common enemies show as icons with 1 to 3 pips for how many there are; enemies you haven't met show as ?
-- Ship screen: drag weapons and items from Base Storage onto the ship's slots (or tap one, then tap a slot; arrow keys and Enter work too). Locked slots show their price
+- Ship screen: drag weapons, gear and items from Base Storage onto the ship's slots (or tap one, then tap a slot; arrow keys and Enter work too). Locked slots show their price
 - Placeholder pixel art drawn in code (`src/art.ts`), placeholder prices (`src/data/items.ts`, `src/inventory.ts`)
 
 The full design is in the "Space Shooter Design Spec" doc in the Simple Games project.
@@ -60,7 +66,8 @@ Every push to `main` rebuilds the game and publishes it to the play link above (
 | `src/data/levels.ts` | All 15 levels: map info, and wave scripts for the built ones |
 | `src/rockjaw.ts` | The level 3 mini boss |
 | `src/dreadnought.ts` | The level 5 boss |
+| `src/watcher.ts` | The level 8 mini boss |
 | `src/inventory.ts` | Slots, storage, selling and Base vendor upgrades |
-| `src/data/items.ts` | Weapons and consumables, prices and stats |
+| `src/data/items.ts` | Weapons, gear and consumables, prices and stats |
 | `src/art.ts` | Pixel sprites as text grids |
 | `src/save.ts` | Autosave to browser storage |

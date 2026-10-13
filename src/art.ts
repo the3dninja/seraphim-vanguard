@@ -284,6 +284,71 @@ const SPRITES: Record<string, string[]> = {
     '........PP........',
   ],
 
+  // Level 6 to 8 enemies.
+  // Mine Layer (Drone Swarm): a hauler with a mine rack underneath.
+  minelayer: [
+    '..G.......G..',
+    '.GLLGGGGGLLG.',
+    'GLLLLLLLLLLLG',
+    'GLYKLLLLLKYLG',
+    'GLLLLOOOLLLLG',
+    '.GGLOYCYOLGG.',
+    '..G.OCCCO.G..',
+    '.....OCO.....',
+    '......C......',
+  ],
+  // Proximity mine: dim until the ship comes close, then it blinks fast.
+  pmine: ['...C...', '.C.D.C.', '..DCD..', 'CDCACDC', '..DCD..', '.C.D.C.', '...C...'],
+  pmineLit: ['...W...', '.W.R.W.', '..RWR..', 'WRWWWRW', '..RWR..', '.W.R.W.', '...W...'],
+  // Vossari Carrier: a broad hull with a launch bay that opens downward.
+  carrier: [
+    '......PPPPPPPPP......',
+    '...PPPLLLLLLLLLPPP...',
+    '.PPLLLWLLLLLLLLLLLPP.',
+    'PLLLLLLLDDDDDLLLLLLLP',
+    'PLMMLLLDKKKKKDLLLMMLP',
+    'PLLLLLLDKKKKKDLLLLLLP',
+    '.PLLLLLDKKKKKDLLLLLP.',
+    '..PPLLLDKKKKKDLLLPP..',
+    '...GPPLDYKKKYDLPPG...',
+    '...G..PPPDDDPPP..G...',
+    '..........D..........',
+  ],
+  // Phantom: a thin dark stealth ship with a single eye.
+  phantom: [
+    'B.........B',
+    'BB.......BB',
+    '.BPPPPPPPB.',
+    '..PDDCDDP..',
+    '...PDADP...',
+    '....PDP....',
+    '.....P.....',
+  ],
+  // The Watcher, the level 8 mini boss: a Vossari spy frigate with a big eye.
+  watcher: [
+    '.........PPPPPPPPPPP.........',
+    '......PPPLLLLLLLLLLLPPP......',
+    '..PPPPLLLLLDDDDDLLLLLLLPPPP..',
+    'PPLLLLLLLLDKKKKKDLLLLLLLLLLPP',
+    'PLLWLLLLLDKCCCCCKDLLLLLLLLLLP',
+    'PLLLLMMMLDKCAWACKDLMMMLLLLLLP',
+    'PLLLLLLLLDKCCACCKDLLLLLLLLLLP',
+    '.PPLLLLLLLDKKKKKDLLLLLLLLLPP.',
+    '...PPPLLLLLDDDDDLLLLLLPPP....',
+    '......PPPGPPPPPPPPPGPPP......',
+    '.........G.........G.........',
+    '.........D.........D.........',
+  ],
+  // Gear
+  sat: ['.C.', 'CWC', '.C.'],
+  satshot: ['A', 'C', 'C'],
+  fencepost: ['GGGG.', 'GLLG.', 'GLRRR', 'GLRWR', 'GLRRR', 'GLLG.', 'GGGG.'],
+  icon_plating: ['LLLLLLLL', 'LWLGGLWL', 'LLLLLLLL', 'GGLLLLGG', 'LLLLLLLL', 'LWLGGLWL', 'LLLLLLLL', '.GGGGGG.'],
+  icon_magnet: ['.RR..RR.', '.RR..RR.', '.RR..RR.', '.RR..RR.', '.RRRRRR.', '..RRRR..', 'WW....WW', 'WW....WW'],
+  icon_deflector: ['..PPPP..', '.P....P.', 'P..WW..P', 'P.W..W.P', 'P..WW..P', '.P....P.', '..PPPP..', '........'],
+  icon_satellite: ['C.....C.', '.C...C..', '..CCC...', '.CCWCC..', '..CCC...', '.C...C..', 'C.....C.', '........'],
+  slotGearSmall: ['...LL...', '.L.LL.L.', '..LLLL..', 'LLL..LLL', 'LLL..LLL', '..LLLL..', '.L.LL.L.', '...LL...'],
+
   lock: ['..GGG..', '.G...G.', '.G...G.', 'LLLLLLL', 'LLLDLLL', 'LLLDLLL', 'LLLLLLL'],
   // Faint pictures inside empty or locked Ship screen slots, so each slot shows what it holds.
   slotWeapon: ['....GG....', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '..GGGGGG..', '.GG.GG.GG.', '.G..GG..G.', '....GG....'],
@@ -648,6 +713,41 @@ function makeSceneries(scene: Phaser.Scene) {
       for (let k = x + 3; k < x + w - 2; k += 5) ctx.fillRect(k, y + 2, 1, 1);
     }
   });
+  // Ember Nebula: soft red cloud blobs, dithered.
+  makeScenery(scene, 'scenery_nebula', (ctx, rand) => {
+    const blobs = Array.from({ length: 6 }, () => [rand() * W, rand() * H, 20 + rand() * 30]);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let v = 0;
+      for (const [bx, by, r] of blobs) {
+        // Wrap vertically so the tile scrolls without a seam.
+        const dy = Math.min(Math.abs(y - by), H - Math.abs(y - by));
+        v = Math.max(v, 1 - Math.hypot(x - bx, dy) / r);
+      }
+      if (v > 0.55 && (x + y) % 2 === 0) { ctx.fillStyle = '#3c0c08'; ctx.fillRect(x, y, 1, 1); }
+      else if (v > 0.2 && (x * 3 + y * 5) % 7 === 0) { ctx.fillStyle = '#2c0804'; ctx.fillRect(x, y, 1, 1); }
+    }
+  });
+  // Solar Forge: drifting heat specks.
+  makeScenery(scene, 'scenery_forge', (ctx, rand) => {
+    for (let i = 0; i < 160; i++) {
+      ctx.fillStyle = rand() < 0.15 ? '#7c2c00' : '#3c1404';
+      ctx.fillRect(Math.floor(rand() * W), Math.floor(rand() * H), rand() < 0.3 ? 2 : 1, 1);
+    }
+  });
+  // Silent Relay: dim girders and dead panels.
+  makeScenery(scene, 'scenery_relay', (ctx, rand) => {
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(rand() * (W - 30)), y = Math.floor((i / 6) * H + rand() * 20);
+      const w = 20 + Math.floor(rand() * 40);
+      ctx.fillStyle = '#1c1c24';
+      ctx.fillRect(x, y, w, 2);
+      for (let k = x; k < x + w; k += 6) { ctx.fillRect(k, y + 2, 1, 5); ctx.fillRect(k + 1, y + 6, 4, 1); }
+      ctx.fillStyle = '#10202c';
+      if (rand() < 0.6) ctx.fillRect(x + 4, y - 6, 8, 5);
+      ctx.fillStyle = '#183c4c';
+      if (rand() < 0.4) ctx.fillRect(x + 6, y - 4, 1, 1);
+    }
+  });
   // Asteroids: a distant field of small dim rocks.
   makeScenery(scene, 'scenery_asteroids', (ctx, rand) => {
     for (let i = 0; i < 28; i++) {
@@ -672,8 +772,11 @@ export function generateArt(scene: Phaser.Scene) {
   makeSceneries(scene);
   makePlanet(scene, 'planet', 34, ['#0058f8', '#3cbcfc', '#0058f8', '#0000bc', '#3cbcfc', '#0058f8', '#0000bc'], '#000058');
   makePlanet(scene, 'moon', 40, ['#5c5c5c', '#4c4c4c', '#5c5c5c', '#4c4c4c', '#2c2c2c'], '#141414', 9);
+  makePlanet(scene, 'sun', 46, ['#fcfcfc', '#f8b800', '#fce0a8', '#f8b800', '#fc7460'], '#d82800');
   makeRing(scene, 'bubble', 11, 11);
   makeRing(scene, 'kshield', 14, 11);
+  makeRing(scene, 'deflect', 10, 10, ['#fcfcfc', '#9878f8']);
+  makeRock(scene, 'shelter', 16, 12, 41, ['#fc7460', '#c84c0c', '#7c2c00', '#4c1800']);
   makeIcePatch(scene);
   makeDreadnought(scene);
   makeStars(scene, 'stars-far', 70, ['#3c3c3c', '#7c7c7c']);

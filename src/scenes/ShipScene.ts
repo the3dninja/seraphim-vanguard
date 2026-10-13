@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { ITEMS, defOf, isItem, isWeapon } from '../data/items';
+import { ITEMS, defOf, isGear, isItem, isWeapon, stackLabel } from '../data/items';
 import {
-  equipFromStorage, equipStack, equipWeapon, unequipItem, unequipWeapon, weaponLevel,
+  equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, unequipGear, unequipItem, unequipWeapon, weaponLevel,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { button, text } from '../ui';
@@ -98,7 +98,7 @@ export class ShipScene extends Phaser.Scene {
 
   // Extra slots are bought at the Base vendor.
   private unlocked(def: SlotDef) {
-    const counts: Record<Kind, number> = { weapon: this.s.weapons.length, item: this.s.items.length, gear: this.s.gearSlots };
+    const counts: Record<Kind, number> = { weapon: this.s.weapons.length, item: this.s.items.length, gear: this.s.gear.length };
     return def.n < counts[def.kind];
   }
 
@@ -108,7 +108,11 @@ export class ShipScene extends Phaser.Scene {
       const w = this.s.weapons[def.n];
       return w ? { id: w, count: 1 } : null;
     }
-    const it = def.kind === 'item' ? this.s.items[def.n] : null;
+    if (def.kind === 'gear') {
+      const g = this.s.gear[def.n];
+      return g ? { id: g, count: 1 } : null;
+    }
+    const it = this.s.items[def.n];
     return it ? { id: it.id, count: it.count } : null;
   }
 
@@ -200,7 +204,9 @@ export class ShipScene extends Phaser.Scene {
     const cx = def.x + SLOT / 2, cy = def.y + SLOT / 2;
     if (held) {
       add(this.add.image(cx, cy, defOf(held.id).icon).setScale(2));
-      if (def.kind === 'item') add(text(this, def.x + SLOT - 1, def.y + SLOT - 7, `${held.count}`, COLOR.white).setOrigin(1, 0));
+      // Stacks show against their cap under the slot, like 1/3.
+      const it = def.kind === 'item' ? this.s.items[def.n] : null;
+      if (it) add(text(this, cx, def.y + SLOT + 2, stackLabel(it), COLOR.white).setOrigin(0.5, 0));
     } else {
       // Empty or locked: a faint picture of what the slot takes.
       add(this.add.image(cx, open ? cy : cy + 3, SLOT_ART[def.kind]).setAlpha(open ? 0.6 : 0.35));
@@ -234,11 +240,12 @@ export class ShipScene extends Phaser.Scene {
         id = held.id;
       } else {
         title = `EMPTY ${KIND_NAME[slot.kind]} SLOT`;
-        body = `TAP ${slot.kind === 'item' ? 'AN ITEM' : 'A WEAPON'} IN STORAGE TO EQUIP IT.`;
+        body = `TAP ${slot.kind === 'item' ? 'AN ITEM' : slot.kind === 'gear' ? 'GEAR' : 'A WEAPON'} IN STORAGE TO EQUIP IT.`;
       }
     }
     if (id) {
-      title = isWeapon(id) ? `${defOf(id).name} LV${weaponLevel(this.s, id)}` : defOf(id).name;
+      title = isWeapon(id) ? `${defOf(id).name} LV${weaponLevel(this.s, id)}`
+        : isGear(id) ? `${defOf(id).name} LV${gearLevel(this.s, id)}` : defOf(id).name;
       body = defOf(id).desc;
       if (isItem(id)) add(text(this, W - 6, INFO_Y, `MAX ${ITEMS[id].cap}`, COLOR.gray).setOrigin(1, 0));
     }
@@ -270,9 +277,7 @@ export class ShipScene extends Phaser.Scene {
   private tapSlot(i: number) {
     const def = SLOTS[i];
     if (!this.unlocked(def)) {
-      this.say(def.kind === 'gear'
-        ? 'LOCKED GEAR SLOT. GEAR IS NOT IN THE GAME YET.'
-        : `LOCKED ${KIND_NAME[def.kind]} SLOT. BUY IT FOR ${def.price} CR IN THE BASE VENDOR'S UPGRADE TAB.`);
+      this.say(`LOCKED ${KIND_NAME[def.kind]} SLOT. BUY IT FOR ${def.price} CR IN THE BASE VENDOR'S UPGRADE TAB.`);
       return;
     }
     const sel = this.sel;
@@ -303,9 +308,10 @@ export class ShipScene extends Phaser.Scene {
       else { s.storage.splice(s.storage.indexOf(id), 1); equipWeapon(s, id, n); }
     } else if (isItem(id)) {
       if (!equipStack(s, id, n)) { this.say('THAT STACK IS ALREADY FULL.'); return; }
-    } else {
-      this.say('NO OPEN GEAR SLOT.');
-      return;
+    } else if (isGear(id)) {
+      if (s.gear.length === 0) { this.say('NO GEAR SLOT YET. BUY ONE IN THE BASE VENDOR\'S UPGRADE TAB.'); return; }
+      s.storage.splice(s.storage.indexOf(id), 1);
+      equipGear(s, id, n);
     }
     this.changed();
   }
@@ -317,6 +323,7 @@ export class ShipScene extends Phaser.Scene {
       return;
     }
     if (def.kind === 'item') unequipItem(this.s, def.n);
+    if (def.kind === 'gear') unequipGear(this.s, def.n);
     this.changed();
   }
 

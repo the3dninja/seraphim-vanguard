@@ -1,13 +1,17 @@
-export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'driller' | 'lancer' | 'bulwark';
+export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'driller' | 'lancer' | 'bulwark'
+  | 'minelayer' | 'carrier' | 'phantom';
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
 // Drillers come in from the side `x` names instead of the top (pair = one from each side).
 export type Pattern = 'line' | 'column' | 'vee' | 'pair' | 'single' | 'swarm';
-export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade';
+export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' | 'nebula' | 'forge' | 'relay';
 // shard: falling ice. patch: an ice sheet that makes the ship slide. turret: a
 // capital ship gun that leans in from the screen edge and fires a burst.
-export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret';
-export type BossKind = 'rockjaw' | 'dreadnought';
+// lightning: a column flashes, then a bolt strikes down it. flare: a sweep of
+// fire down the screen; only the shadow under a shelter rock is safe. fence: a
+// laser fence across the screen that blinks on and off as it scrolls down.
+export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lightning' | 'flare' | 'fence';
+export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher';
 
 export interface Wave {
   delay: number; // ms after the previous wave spawned (or cleared, with waitClear)
@@ -247,12 +251,170 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  planned('EMBER NEBULA', 'A RED NEBULA ALIVE WITH LIGHTNING. WATCH FOR THE FLASH BEFORE A STRIKE.',
-    'node_nebula', [['minelayer', 3], ['gunboat', 2], ['dart', 2]]),
-  planned('SOLAR FORGE', 'CLOSE ORBIT OF A STAR. FLARES SWEEP THE SCREEN; SHELTER BEHIND ROCK.',
-    'node_star', [['carrier', 3], ['dart', 3], ['lancer', 1]]),
-  planned('SILENT RELAY', 'AN ABANDONED RELAY OF LASER FENCES. SOMETHING WATCHES, UNSEEN.',
-    'node_relay', [['phantom', 3], ['drone', 2], ['minelayer', 1]]),
+  // Act 2. Levels 6 to 8 run about half again as long as levels 1 to 5.
+  // Level 6: Mine Layers seed the nebula with proximity mines, Raiders press in,
+  // and lightning strikes down columns that flash first.
+  {
+    name: 'EMBER NEBULA',
+    desc: 'A RED NEBULA ALIVE WITH LIGHTNING. WATCH FOR THE FLASH BEFORE A STRIKE.',
+    node: 'node_nebula',
+    theme: 'nebula',
+    hazards: [{ kind: 'lightning', every: [3500, 6000] }],
+    segments: [
+      [
+        { delay: 2500, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 3000, kind: 'minelayer', pattern: 'single', x: 0.3 },
+        { delay: 3000, kind: 'weaver', pattern: 'pair' },
+        { delay: 3000, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 3000, kind: 'minelayer', pattern: 'single', x: 0.7 },
+        { delay: 2500, kind: 'gunboat', pattern: 'single', x: 0.5, waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'column', count: 6, x: 0.2 },
+        { delay: 800, kind: 'dart', pattern: 'column', count: 6, x: 0.8 },
+        { delay: 3000, kind: 'bomber', pattern: 'single', x: 0 },
+        { delay: 2500, kind: 'minelayer', pattern: 'pair' },
+        { delay: 3500, kind: 'weaver', pattern: 'line', count: 4, waitClear: true },
+        { delay: 2000, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
+        { delay: 2000, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.3 },
+        { delay: 1500, kind: 'dart', pattern: 'vee', count: 7, x: 0.7 },
+        { delay: 3000, kind: 'minelayer', pattern: 'single', x: 0.5 },
+        { delay: 2500, kind: 'bomber', pattern: 'single', x: 1, waitClear: true },
+        { delay: 2000, kind: 'weaver', pattern: 'pair' },
+        { delay: 2000, kind: 'gunboat', pattern: 'line', count: 3 },
+        { delay: 3500, kind: 'minelayer', pattern: 'pair', waitClear: true },
+      ],
+      [
+        { delay: 2500, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.25 },
+        { delay: 1500, kind: 'minelayer', pattern: 'single', x: 0.75 },
+        { delay: 3000, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'weaver', pattern: 'line', count: 4, waitClear: true },
+        { delay: 2000, kind: 'bomber', pattern: 'single', x: 0 },
+        { delay: 1500, kind: 'bomber', pattern: 'single', x: 1 },
+        { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'drone', pattern: 'swarm', count: 9, x: 1 },
+        { delay: 2500, kind: 'minelayer', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2000, kind: 'gunboat', pattern: 'single', x: 0.2 },
+        { delay: 1200, kind: 'gunboat', pattern: 'single', x: 0.8 },
+        { delay: 3000, kind: 'dart', pattern: 'column', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'weaver', pattern: 'pair' },
+        { delay: 2500, kind: 'minelayer', pattern: 'pair', waitClear: true },
+        // Final wave
+        { delay: 2000, kind: 'gunboat', pattern: 'line', count: 3 },
+        { delay: 1500, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 1500, kind: 'minelayer', pattern: 'single', x: 0.5 },
+        { delay: 2000, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 2000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+      ],
+    ],
+  },
+  // Level 7: Vossari Carriers park and launch Darts. Solar flares sweep down
+  // the screen; the shadow under a shelter rock is the only safe place.
+  {
+    name: 'SOLAR FORGE',
+    desc: 'CLOSE ORBIT OF A STAR. FLARES SWEEP THE SCREEN; SHELTER BEHIND ROCK.',
+    node: 'node_star',
+    theme: 'forge',
+    hazards: [{ kind: 'flare', every: [11000, 15000] }],
+    segments: [
+      [
+        { delay: 2500, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 3000, kind: 'carrier', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'weaver', pattern: 'pair' },
+        { delay: 3000, kind: 'lancer', pattern: 'single', x: 0.3, waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 3000, kind: 'carrier', pattern: 'single', x: 0.25 },
+        { delay: 3500, kind: 'gunboat', pattern: 'single', x: 0.75 },
+        { delay: 3000, kind: 'dart', pattern: 'column', count: 6, x: 0.5, waitClear: true },
+        { delay: 2000, kind: 'lancer', pattern: 'pair' },
+        { delay: 3000, kind: 'carrier', pattern: 'single', x: 0.7 },
+        { delay: 3500, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 3000, kind: 'dart', pattern: 'line', count: 7, waitClear: true },
+        { delay: 2000, kind: 'bulwark', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.3 },
+        { delay: 2500, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'carrier', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'lancer', pattern: 'line', count: 3 },
+        { delay: 3000, kind: 'dart', pattern: 'column', count: 7, x: 0.25 },
+        { delay: 800, kind: 'dart', pattern: 'column', count: 7, x: 0.75, waitClear: true },
+      ],
+      [
+        { delay: 2500, kind: 'carrier', pattern: 'single', x: 0.5 },
+        { delay: 3500, kind: 'lancer', pattern: 'pair' },
+        { delay: 3000, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 3000, kind: 'bulwark', pattern: 'single', x: 0.3, waitClear: true },
+        { delay: 2000, kind: 'carrier', pattern: 'pair' },
+        { delay: 4000, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 2500, kind: 'gunboat', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5, waitClear: true },
+        { delay: 2000, kind: 'lancer', pattern: 'line', count: 3 },
+        { delay: 3000, kind: 'carrier', pattern: 'single', x: 0.2 },
+        { delay: 1500, kind: 'carrier', pattern: 'single', x: 0.8 },
+        { delay: 4000, kind: 'bulwark', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 2500, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'lancer', pattern: 'pair', waitClear: true },
+        // Final wave
+        { delay: 2000, kind: 'carrier', pattern: 'line', count: 3 },
+        { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2000, kind: 'lancer', pattern: 'pair' },
+        { delay: 2500, kind: 'weaver', pattern: 'line', count: 4 },
+      ],
+    ],
+  },
+  // Level 8: Phantoms cloak between shots, Drones and Mine Layers fill the
+  // relay, laser fences blink on and off, and The Watcher waits at the end.
+  {
+    name: 'SILENT RELAY',
+    desc: 'AN ABANDONED RELAY OF LASER FENCES. SOMETHING WATCHES, UNSEEN.',
+    node: 'node_relay',
+    theme: 'relay',
+    hazards: [{ kind: 'fence', every: [9000, 13000] }],
+    boss: 'watcher',
+    segments: [
+      [
+        { delay: 2500, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
+        { delay: 3000, kind: 'phantom', pattern: 'single', x: 0.5 },
+        { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
+        { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.3, waitClear: true },
+        { delay: 2000, kind: 'phantom', pattern: 'pair' },
+        { delay: 4000, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 9, x: 0 },
+        { delay: 1500, kind: 'drone', pattern: 'swarm', count: 9, x: 1, waitClear: true },
+        { delay: 2000, kind: 'lancer', pattern: 'single', x: 0.5 },
+        { delay: 2500, kind: 'phantom', pattern: 'single', x: 0.25 },
+        { delay: 2000, kind: 'phantom', pattern: 'single', x: 0.75 },
+        { delay: 3500, kind: 'minelayer', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 2500, kind: 'gunboat', pattern: 'pair' },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 10, x: 1 },
+        { delay: 3000, kind: 'phantom', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.6, waitClear: true },
+      ],
+      [
+        { delay: 2500, kind: 'phantom', pattern: 'pair' },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 9, x: 0 },
+        { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.7 },
+        { delay: 3000, kind: 'lancer', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'dart', pattern: 'line', count: 7 },
+        { delay: 2000, kind: 'phantom', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'drone', pattern: 'swarm', count: 10, x: 1 },
+        { delay: 1500, kind: 'drone', pattern: 'swarm', count: 10, x: 0, waitClear: true },
+        { delay: 2000, kind: 'gunboat', pattern: 'single', x: 0.3 },
+        { delay: 1500, kind: 'minelayer', pattern: 'single', x: 0.8 },
+        { delay: 3000, kind: 'phantom', pattern: 'line', count: 3 },
+        { delay: 4000, kind: 'weaver', pattern: 'line', count: 4, waitClear: true },
+        { delay: 2000, kind: 'bulwark', pattern: 'single', x: 0.5 },
+        { delay: 2500, kind: 'dart', pattern: 'vee', count: 7, x: 0.3 },
+        { delay: 2500, kind: 'phantom', pattern: 'pair' },
+        { delay: 3000, kind: 'minelayer', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'drone', pattern: 'swarm', count: 10, x: 1 },
+        { delay: 2000, kind: 'lancer', pattern: 'line', count: 3, waitClear: true },
+      ],
+    ],
+  },
   planned('BLIGHT COLONY', 'AN IMPERIAL COLONY GONE WRONG. SPORE CLOUDS HIDE WHAT MOVES INSIDE.',
     'node_blight', [['spore', 3], ['lancer', 2], ['bulwark', 1]]),
   planned('THRONE OF VOSS', 'THE VOSSARI CAPITAL. DOORS SLAM SHUT; THE DEFENSE GRID NEVER SLEEPS.',

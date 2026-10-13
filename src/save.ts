@@ -1,4 +1,4 @@
-import type { ItemId, WeaponId } from './data/items';
+import type { GearId, ItemId, WeaponId } from './data/items';
 
 export interface ItemStack { id: ItemId; count: number }
 
@@ -11,9 +11,10 @@ export interface SaveData {
   maxHealth: number; // 5 to start, +1 per Hull upgrade up to 10
   weapons: (WeaponId | null)[]; // one entry per unlocked weapon slot; slot 0 always holds one
   items: (ItemStack | null)[]; // one entry per unlocked item slot
-  gearSlots: number; // unlocked gear slots (no gear exists yet)
+  gear: (GearId | null)[]; // one entry per unlocked gear slot (0 to 2)
   weaponLevels: Partial<Record<WeaponId, number>>; // 1 to 5; missing means 1
-  storage: string[]; // weapon and item ids not in a slot
+  gearLevels: Partial<Record<GearId, number>>; // 1 to 5; missing means 1
+  storage: string[]; // weapon, gear and item ids not in a slot
 }
 
 const KEY = 'seraphim-vanguard-save';
@@ -21,13 +22,19 @@ const KEY = 'seraphim-vanguard-save';
 export function newSave(): SaveData {
   return {
     v: 2, level: 1, credits: 0, maxHealth: 5,
-    weapons: ['pulse'], items: [null], gearSlots: 0, weaponLevels: {}, storage: [],
+    weapons: ['pulse'], items: [null], gear: [], weaponLevels: {}, gearLevels: {}, storage: [],
   };
 }
 
-// Version 1 saves had exactly one weapon and one item slot.
+// Version 1 saves had exactly one weapon and one item slot. Early version 2
+// saves counted gear slots (gearSlots) before gear existed.
 function migrate(data: any): SaveData | null {
-  if (data?.v === 2) return { ...newSave(), ...data };
+  if (data?.v === 2) {
+    const { gearSlots, ...rest } = data;
+    const out = { ...newSave(), ...rest };
+    if (!Array.isArray(data.gear)) out.gear = Array(gearSlots ?? 0).fill(null);
+    return out;
+  }
   if (data?.v === 1) {
     const { weapon, item, ...rest } = data;
     return { ...newSave(), ...rest, v: 2, weapons: [weapon ?? 'pulse'], items: [item ?? null] };

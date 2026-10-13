@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { ITEMS, WEAPONS, defOf, isItem, isWeapon, type ItemId, type WeaponId } from '../data/items';
 import {
-  addConsumable, emptyWeaponSlot, equipFromStorage, equipWeapon, itemSlotFor, sellFromStorage, sellPrice,
-  unequipItem, upgradesFor, weaponLevel, type Upgrade,
+  GEAR, ITEMS, WEAPONS, defOf, isGear, isItem, isWeapon, stackLabel, type GearId, type ItemId, type WeaponId,
+} from '../data/items';
+import {
+  addConsumable, emptyGearSlot, emptyWeaponSlot, equipFromStorage, equipGear, equipWeapon, gearLevel, itemSlotFor,
+  sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { ask, button, text, toast } from '../ui';
@@ -19,8 +21,10 @@ type Tab = 'buy' | 'sell' | 'upgrade';
 
 const ROW_H = 28;
 const LIST_Y = 46;
-const MAX_ROWS = 7;
-
+const LIST_END = 228; // the list, storage strip and pager share the space down to here
+const INFO_Y = 234;
+const STRIP_Y = 270; // equipped slots: weapons and gear, then items on the line below
+const STORE_X = 64; // where storage icons start, after the label
 // The shop, used both at in-level vendor stops and at Base. The Base vendor
 // adds an Upgrade tab for hull, extra slots and weapon levels.
 export class VendorScene extends Phaser.Scene {
@@ -49,20 +53,24 @@ export class VendorScene extends Phaser.Scene {
     this.render();
   }
 
-  private owns(id: WeaponId) {
+  private owns(id: WeaponId | GearId) {
     const s = this.d.state;
-    return s.weapons.includes(id) || s.storage.includes(id);
+    return (s.weapons as string[]).includes(id) || (s.gear as string[]).includes(id) || s.storage.includes(id);
   }
 
   // In-level vendors roll a small random stock on arrival; Base always has the basics.
+  // Gear shows up from its first level on: Base gear always, in-level exclusives sometimes.
   private rollStock(): string[] {
+    const s = this.d.state;
     const items: string[] = [];
     const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w));
-    if (this.d.mode === 'base') return [...weapons, ...Object.keys(ITEMS)];
+    const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && s.level >= GEAR[g].from);
+    if (this.d.mode === 'base') return [...weapons, ...gear.filter((g) => GEAR[g].where === 'base'), ...Object.keys(ITEMS)];
+    const exclusives = gear.filter((g) => GEAR[g].where === 'level' && Math.random() < 0.5);
     const chance: Record<ItemId, number> = { repair: 0.85, shield: 0.45, overdrive: 0.55 };
     for (const id of Object.keys(ITEMS) as ItemId[]) if (Math.random() < chance[id]) items.push(id);
     if (items.length === 0) items.push('repair');
-    return [...weapons, ...items];
+    return [...weapons, ...exclusives, ...items];
   }
 
   private render() {
@@ -90,13 +98,21 @@ export class VendorScene extends Phaser.Scene {
     const rows: { id: string; count: number; up?: Upgrade }[] = this.tab === 'buy' ? this.stock.map((id) => ({ id, count: 1 }))
       : this.tab === 'sell' ? this.groupedStorage()
       : upgradesFor(s).map((u) => ({ id: u.key, count: 1, up: u }));
-    const pages = Math.max(1, Math.ceil(rows.length / MAX_ROWS));
+
+    // Storage sits in the space under the list as a compact strip of icons and
+    // counts. The Sell tab lists storage already, so it leaves the strip out.
+    const stored = this.tab === 'sell' ? [] : this.storageLayout();
+    const storeLines = this.tab === 'sell' ? 0 : Math.max(1, ...stored.map((e) => e.line + 1));
+    const storeH = storeLines ? storeLines * 13 + 4 : 0;
+    let maxRows = Math.floor((LIST_END - LIST_Y - storeH) / ROW_H);
+    if (rows.length > maxRows) maxRows = Math.floor((LIST_END - LIST_Y - storeH - 18) / ROW_H);
+    const pages = Math.max(1, Math.ceil(rows.length / maxRows));
     this.page = Math.min(this.page, pages - 1);
-    const shown = rows.slice(this.page * MAX_ROWS, (this.page + 1) * MAX_ROWS);
+    const shown = rows.slice(this.page * maxRows, (this.page + 1) * maxRows);
 
     if (rows.length === 0) {
       const empty = { buy: 'SOLD OUT', sell: 'STORAGE IS EMPTY', upgrade: 'FULLY UPGRADED' }[this.tab];
-      add(text(this, W / 2, LIST_Y + 40, empty, COLOR.gray).setOrigin(0.5));
+      add(text(this, W / 2, LIST_Y + 20, empty, COLOR.gray).setOrigin(0.5));
     }
 
     shown.forEach((row, i) => {
@@ -110,13 +126,13 @@ export class VendorScene extends Phaser.Scene {
       }
       const def = defOf(row.id);
       add(this.add.image(12, y + 9, def.icon));
-      const lv = isWeapon(row.id) && this.tab === 'sell' ? weaponLevel(s, row.id) : 1;
+      const lv = this.tab !== 'sell' ? 1 : isWeapon(row.id) ? weaponLevel(s, row.id) : isGear(row.id) ? gearLevel(s, row.id) : 1;
       add(text(this, 22, y + 3, row.count > 1 ? `${def.name} X${row.count}` : lv > 1 ? `${def.name} L${lv}` : def.name));
       if (this.tab === 'buy') {
         add(text(this, 22, y + 14, `${def.price} CR`, COLOR.yellow));
         add(button(this, W - 44, y + 7, 38, 16, 'BUY', () => this.buy(row.id)).setEnabled(s.credits >= def.price));
       } else {
-        add(text(this, 22, y + 14, `SELLS ${sellPrice(s, row.id)}`, COLOR.yellow));
+        add(text(this, 22, y + 14, `${sellPrice(s, row.id)} CR`, COLOR.yellow));
         add(button(this, W - 86, y + 11, 40, 14, 'EQUIP', () => {
           equipFromStorage(s, s.storage.indexOf(row.id));
           this.render();
@@ -128,23 +144,57 @@ export class VendorScene extends Phaser.Scene {
       }
     });
 
+    let y = LIST_Y + Math.max(shown.length, rows.length === 0 ? 1 : 0) * ROW_H + 2;
+    if (storeLines) {
+      this.storageStrip(add, stored, y);
+      y += storeH;
+    }
     if (pages > 1) {
-      add(button(this, 6, LIST_Y + MAX_ROWS * ROW_H - 2, 40, 14, '<', () => { this.page = (this.page + pages - 1) % pages; this.render(); }));
-      add(text(this, W / 2, LIST_Y + MAX_ROWS * ROW_H + 5, `${this.page + 1}/${pages}`, COLOR.gray).setOrigin(0.5));
-      add(button(this, W - 46, LIST_Y + MAX_ROWS * ROW_H - 2, 40, 14, '>', () => { this.page = (this.page + 1) % pages; this.render(); }));
+      add(button(this, 6, y, 40, 14, '<', () => { this.page = (this.page + pages - 1) % pages; this.render(); }));
+      add(text(this, W / 2, y + 7, `${this.page + 1}/${pages}`, COLOR.gray).setOrigin(0.5));
+      add(button(this, W - 46, y, 40, 14, '>', () => { this.page = (this.page + 1) % pages; this.render(); }));
     }
 
     // Info box for the tapped entry.
-    const infoY = 248;
-    add(this.add.rectangle(4, infoY - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
+    add(this.add.rectangle(4, INFO_Y - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
     const sel = this.selected;
     const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
-    const info = up ? up.desc : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel)) ? defOf(sel).desc : 'TAP AN ENTRY FOR INFO';
-    add(text(this, 6, infoY, info, sel ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+    const info = up ? up.desc : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel)) ? defOf(sel).desc : 'TAP AN ENTRY FOR INFO';
+    add(text(this, 6, INFO_Y, info, sel ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
 
-    this.slotStrip(add, 280);
+    this.slotStrip(add, STRIP_Y);
 
     add(button(this, 6, H - 22, W - 12, 18, this.d.mode === 'base' ? 'BACK' : 'LEAVE', () => this.leave(), COLOR.cyan));
+  }
+
+  // Storage entries flowed into lines after the label: icon, count, small gap.
+  private storageLayout() {
+    let x = STORE_X;
+    let line = 0;
+    return this.groupedStorage().map((e) => {
+      const w = 10 + `${e.count}`.length * 8 + 6;
+      if (x + w - 6 > W - 4) { x = STORE_X; line++; }
+      const at = { ...e, x, line, w };
+      x += w;
+      return at;
+    });
+  }
+
+  // What's in storage, as icons with a count, so it takes little room. Tap one for its info.
+  private storageStrip(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T,
+    stored: { id: string; count: number; x: number; line: number; w: number }[], y: number) {
+    add(this.add.rectangle(4, y, W - 8, 1, 0x1c1c3c).setOrigin(0));
+    add(text(this, 6, y + 4, 'STORAGE', COLOR.gray));
+    if (stored.length === 0) add(text(this, STORE_X, y + 4, 'EMPTY', COLOR.dim));
+    for (const e of stored) {
+      const ly = y + 4 + e.line * 13;
+      const picked = this.selected === e.id;
+      add(this.add.image(e.x + 4, ly + 4, defOf(e.id).icon));
+      add(text(this, e.x + 10, ly, `${e.count}`, picked ? COLOR.yellow : COLOR.white));
+      const hit = add(this.add.rectangle(e.x - 2, ly - 3, e.w - 2, 13, 0x000000, 0).setOrigin(0).setInteractive());
+      hit.on('pointerup', () => { this.selected = e.id; this.render(); });
+      if (picked) add(this.add.rectangle(e.x - 2, ly - 3, e.w - 3, 13).setOrigin(0).setStrokeStyle(1, 0xf8b800));
+    }
   }
 
   private upgradeRow(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T, up: Upgrade, y: number) {
@@ -157,30 +207,46 @@ export class VendorScene extends Phaser.Scene {
     add(button(this, W - 44, y + 7, 38, 16, 'BUY', () => this.buyUpgrade(up)).setEnabled(s.credits >= up.price));
   }
 
-  // What's equipped right now, so purchases can be compared. Tap an item to stow it.
+  // What's equipped right now, so purchases can be compared: weapons and gear
+  // on one line, items with their stack counts (like 1/3) on the next. Tap an
+  // item or gear to stow it.
   private slotStrip(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T, y: number) {
     const s = this.d.state;
-    add(text(this, 6, y, 'WPN', COLOR.gray));
-    s.weapons.forEach((w, i) => {
-      const x = 34 + i * 14;
-      add(this.add.rectangle(x, y - 3, 12, 12, 0x000000).setOrigin(0).setStrokeStyle(1, 0x3c3c3c));
-      if (w) add(this.add.image(x + 6, y + 3, WEAPONS[w].icon));
-    });
-    const ix = 72;
-    add(text(this, ix, y, 'ITEM', COLOR.gray));
-    s.items.forEach((it, i) => {
-      const x = ix + 36 + i * 24;
-      add(this.add.rectangle(x, y - 3, 12, 12, 0x000000).setOrigin(0).setStrokeStyle(1, 0x3c3c3c));
-      if (!it) return;
-      add(this.add.image(x + 6, y + 3, ITEMS[it.id].icon));
-      add(text(this, x + 13, y, `${it.count}`));
-      const hit = add(this.add.rectangle(x - 2, y - 5, 24, 16, 0x000000, 0).setOrigin(0).setInteractive());
+    const box = (x: number, by: number) => add(this.add.rectangle(x, by - 3, 12, 12, 0x000000).setOrigin(0).setStrokeStyle(1, 0x3c3c3c));
+    const stowOnTap = (x: number, by: number, w: number, name: string, stow: () => void) => {
+      const hit = add(this.add.rectangle(x - 2, by - 5, w, 16, 0x000000, 0).setOrigin(0).setInteractive());
       hit.on('pointerup', () => {
-        ask(this, `MOVE ${ITEMS[it.id].name} TO STORAGE?`, ['YES', 'NO'], (a) => {
-          if (a === 0) unequipItem(s, i);
+        ask(this, `MOVE ${name} TO STORAGE?`, ['YES', 'NO'], (a) => {
+          if (a === 0) stow();
           this.render();
         });
       });
+    };
+    add(text(this, 6, y, 'WPN', COLOR.gray));
+    s.weapons.forEach((w, i) => {
+      const x = 34 + i * 14;
+      box(x, y);
+      if (w) add(this.add.image(x + 6, y + 3, WEAPONS[w].icon));
+    });
+    if (s.gear.length > 0) {
+      add(text(this, 76, y, 'GEAR', COLOR.gray));
+      s.gear.forEach((g, i) => {
+        const x = 112 + i * 14;
+        box(x, y);
+        if (!g) return;
+        add(this.add.image(x + 6, y + 3, GEAR[g].icon));
+        stowOnTap(x, y, 16, GEAR[g].name, () => unequipGear(s, i));
+      });
+    }
+    const iy = y + 15;
+    add(text(this, 6, iy, 'ITEM', COLOR.gray));
+    s.items.forEach((it, i) => {
+      const x = 42 + i * 44;
+      box(x, iy);
+      if (!it) return;
+      add(this.add.image(x + 6, iy + 3, ITEMS[it.id].icon));
+      add(text(this, x + 14, iy, stackLabel(it)));
+      stowOnTap(x, iy, 40, ITEMS[it.id].name, () => unequipItem(s, i));
     });
   }
 
@@ -193,6 +259,7 @@ export class VendorScene extends Phaser.Scene {
   private canEquip(id: string) {
     const s = this.d.state;
     if (isWeapon(id)) return true;
+    if (isGear(id)) return s.gear.length > 0;
     if (!isItem(id)) return false;
     const it = s.items[itemSlotFor(s, id) ?? 0];
     return !(it && it.id === id && it.count >= ITEMS[id].cap);
@@ -209,17 +276,43 @@ export class VendorScene extends Phaser.Scene {
       this.render();
       return;
     }
-    if (!isWeapon(id)) return;
+    if (!isWeapon(id) && !isGear(id)) return;
     this.stock = this.stock.filter((x) => x !== id);
     this.render();
+    if (isGear(id) && s.gear.length === 0) {
+      s.storage.push(id);
+      ask(this, `${def.name} STOWED.\nBUY A GEAR SLOT AT THE\nBASE VENDOR TO USE IT.`, ['OK'], () => this.render());
+      return;
+    }
     ask(this, `${def.name}\nEQUIP OR STOW?`, ['EQUIP', 'STOW'], (choice) => {
       if (choice === 1) {
         s.storage.push(id);
         this.render();
         return;
       }
-      this.equipBought(id);
+      if (isGear(id)) this.equipBoughtGear(id);
+      else this.equipBought(id);
     });
+  }
+
+  // Same as weapons: an empty gear slot takes it, otherwise ask what to swap out.
+  private equipBoughtGear(id: GearId) {
+    const s = this.d.state;
+    const name = GEAR[id].name;
+    const done = (slot: number | null) => {
+      if (slot === null) s.storage.push(id);
+      else equipGear(s, id, slot);
+      this.render();
+    };
+    const empty = emptyGearSlot(s);
+    if (empty !== null) { done(empty); return; }
+    if (s.gear.length === 1) {
+      const cur = GEAR[s.gear[0]!].name;
+      ask(this, `REPLACE ${cur} WITH ${name}?\n${cur} MOVES TO STORAGE.`, ['YES', 'NO'], (a) => done(a === 0 ? 0 : null));
+      return;
+    }
+    const list = s.gear.map((g, i) => `${i + 1} ${GEAR[g!].name}`).join('\n');
+    ask(this, `REPLACE WHICH?\n${list}`, ['1', '2', 'NO'], (a) => done(a < 2 ? a : null));
   }
 
   // An empty weapon slot takes it straight away; otherwise ask which weapon to swap out.

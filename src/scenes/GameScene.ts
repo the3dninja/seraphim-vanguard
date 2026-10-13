@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { ITEMS, WEAPONS } from '../data/items';
+import { GEAR, ITEMS, WEAPONS, gearStats, stackLabel } from '../data/items';
 import { LEVELS, type EnemyKind, type LevelDef, type Wave } from '../data/levels';
-import { weaponStats } from '../inventory';
+import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponStats } from '../inventory';
 import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
+import { Watcher } from '../watcher';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
-// Mines are dropped by Bombers and boulders are thrown by Rockjaw; both can be shot down.
-type FoeKind = EnemyKind | 'mine' | 'boulder';
+// Mines are dropped by Bombers, proximity mines (pmine) by Mine Layers, and
+// boulders are thrown by Rockjaw; all can be shot down.
+type FoeKind = EnemyKind | 'mine' | 'pmine' | 'boulder';
 
 interface EnemyData {
   kind: FoeKind;
@@ -28,7 +30,13 @@ interface EnemyData {
   beam: number; // Lancer: ms the beam stays on
   shield: number; // Bulwark: shield health left
   shieldImg: Phaser.GameObjects.Image | null;
+  cloaked: boolean; // Phantom: can't be hit or rammed while cloaked
 }
+
+// Level hazards that live a while and are drawn every frame.
+interface Strike { x: number; t: number } // lightning: ms since the column started flashing
+interface Flare { rock: Phaser.Physics.Arcade.Image; t: number; sweepY: number } // ms since the rock appeared
+interface Fence { y: number; t: number; posts: Phaser.GameObjects.Image[] } // t: ms into its on/off cycle
 
 const ENEMY_STATS: Record<FoeKind, { hp: number; texture: string; dropChance: number; credits: [number, number] }> = {
   dart: { hp: 1, texture: 'dart', dropChance: 0.5, credits: [2, 4] },
@@ -39,7 +47,11 @@ const ENEMY_STATS: Record<FoeKind, { hp: number; texture: string; dropChance: nu
   driller: { hp: 4, texture: 'driller', dropChance: 0.6, credits: [6, 12] },
   lancer: { hp: 6, texture: 'lancer', dropChance: 0.8, credits: [8, 14] },
   bulwark: { hp: 14, texture: 'bulwark', dropChance: 0.9, credits: [18, 30] },
+  minelayer: { hp: 7, texture: 'minelayer', dropChance: 0.85, credits: [8, 14] },
+  carrier: { hp: 22, texture: 'carrier', dropChance: 0.95, credits: [20, 32] },
+  phantom: { hp: 5, texture: 'phantom', dropChance: 0.85, credits: [9, 15] },
   mine: { hp: 1, texture: 'mine', dropChance: 0, credits: [0, 0] },
+  pmine: { hp: 1, texture: 'pmine', dropChance: 0, credits: [0, 0] },
   boulder: { hp: 3, texture: 'boulder', dropChance: 0, credits: [0, 0] },
 };
 
@@ -47,7 +59,11 @@ const SHIP_SPEED_KEYS = 110; // px/s with keyboard
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
 const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
-const BOSS_NAMES = { rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT' };
+const BOSS_NAMES = { rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER' };
+const STRIKE_WARN = 900; // ms a lightning column flashes before the bolt
+const STRIKE_HIT = 260; // ms the bolt stays
+const FLARE_WARN = 3000; // ms from the shelter rock appearing to the flare sweeping down
+const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
@@ -79,7 +95,19 @@ export class GameScene extends Phaser.Scene {
   private waveIndex = 0;
   private waveTimer = 0;
   private hazardIn: number[] = [];
-  private boss: Rockjaw | Dreadnought | null = null;
+  private boss: Rockjaw | Dreadnought | Watcher | null = null;
+  private strikes: Strike[] = [];
+  private flares: Flare[] = [];
+  private fences: Fence[] = [];
+  private flareGlow!: Phaser.GameObjects.Rectangle;
+
+  // Gear
+  private maxHp = 5;
+  private deflect = 0; // Deflector charges ready
+  private deflectAt = 0; // when the next charge comes back
+  private deflectRing!: Phaser.GameObjects.Image;
+  private sats: Phaser.GameObjects.Image[] = [];
+  private satTimer = 0;
   private bossBar: Phaser.GameObjects.Graphics | null = null;
   private bossName: Phaser.GameObjects.Text | null = null;
 
@@ -95,6 +123,7 @@ export class GameScene extends Phaser.Scene {
   private creditsText!: Phaser.GameObjects.Text;
   private itemButtons: { box: Phaser.GameObjects.Rectangle; icon: Phaser.GameObjects.Image; count: Phaser.GameObjects.Text }[] = [];
   private weaponIcons: Phaser.GameObjects.Image[] = [];
+  private gearIcons: Phaser.GameObjects.Image[] = [];
   private tipsShown = new Set<string>();
   private tipFreeAt = 0; // when the tip on screen is done blinking
 
@@ -104,8 +133,16 @@ export class GameScene extends Phaser.Scene {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.state);
     this.level = LEVELS[this.state.level - 1];
-    this.health = this.state.maxHealth;
+    this.maxHp = totalMaxHealth(this.state);
+    this.health = this.maxHp;
     this.phase = 'action';
+    this.strikes = [];
+    this.flares = [];
+    this.fences = [];
+    this.sats = [];
+    this.satTimer = 0;
+    this.deflect = 0;
+    this.deflectAt = 0;
     this.segment = 0;
     this.waveIndex = 0;
     this.waveTimer = 0;
@@ -123,6 +160,7 @@ export class GameScene extends Phaser.Scene {
     this.hearts = [];
     this.itemButtons = [];
     this.weaponIcons = [];
+    this.gearIcons = [];
     this.tipsShown = new Set();
     this.tipFreeAt = 0;
     this.scenery = null;
@@ -136,6 +174,7 @@ export class GameScene extends Phaser.Scene {
     if (theme !== 'outpost') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
     if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
     if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
+    if (theme === 'forge') this.planet = this.add.image(150, -6, 'sun').setAlpha(0.85);
     this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
@@ -148,6 +187,9 @@ export class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
     this.bubble = this.add.image(0, 0, 'bubble').setDepth(11).setVisible(false);
+    this.deflectRing = this.add.image(0, 0, 'deflect').setDepth(11).setVisible(false);
+    this.flareGlow = this.add.rectangle(0, 0, W, H, 0xf8b800, 0).setOrigin(0).setDepth(5); // under the ship and the shadow lane
+    this.setupGear();
 
     this.sparks = this.add.particles(0, 0, 'px', {
       speed: { min: 20, max: 90 }, lifespan: { min: 200, max: 500 }, scale: { start: 1, end: 0 },
@@ -160,7 +202,11 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.playerBullets, this.hazards, (b, h) => this.hitHazard(img(b), img(h)));
     this.physics.add.overlap(this.enemyBullets, this.hazards, (b) => b.destroy());
     this.physics.add.overlap(this.player, this.enemyBullets, (_p, b) => { b.destroy(); this.hurt(); });
-    this.physics.add.overlap(this.player, this.enemies, (_p, e) => { this.killEnemy(spr(e), false); this.hurt(); });
+    this.physics.add.overlap(this.player, this.enemies, (_p, e) => {
+      if ((spr(e).getData('e') as EnemyData).cloaked) return;
+      this.killEnemy(spr(e), false);
+      this.hurt();
+    });
     this.physics.add.overlap(this.player, this.hazards, () => this.hurt());
     this.physics.add.overlap(this.player, this.coins, (_p, c) => this.collect(img(c)));
 
@@ -259,20 +305,25 @@ export class GameScene extends Phaser.Scene {
   // --- HUD ---------------------------------------------------------------
 
   private createHud() {
-    for (let i = 0; i < 10; i++) this.hearts.push(this.add.image(6 + i * 9, 8, 'heart').setOrigin(0, 0.5).setDepth(900));
+    // Ten hearts to a row; Hull Plating can add a second row.
+    for (let i = 0; i < 16; i++) {
+      this.hearts.push(this.add.image(6 + (i % 10) * 9, 8 + Math.floor(i / 10) * 8, 'heart').setOrigin(0, 0.5).setDepth(900));
+    }
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
 
-    // Weapon readout bottom left, one item button per slot bottom right (big enough for a thumb).
+    // Weapon readout bottom left with gear above it, one item button per slot
+    // bottom right (big enough for a thumb), each showing its stack like 1/3.
     this.state.weapons.forEach((_w, i) => this.weaponIcons.push(this.add.image(10 + i * 12, H - 12, 'icon_pulse').setDepth(900)));
+    for (let i = 0; i < 2; i++) this.gearIcons.push(this.add.image(10 + i * 12, H - 24, 'icon_plating').setDepth(900).setAlpha(0.8));
     const slots = this.state.items.length;
     this.state.items.forEach((_it, i) => {
-      const x = W - 34 - (slots - 1 - i) * 33; // slot 1 on the left, like the Ship screen
-      const box = this.add.rectangle(x, H - 26, 30, 22, 0x000000).setOrigin(0).setDepth(900)
+      const x = W - 42 - (slots - 1 - i) * 42; // slot 1 on the left, like the Ship screen
+      const box = this.add.rectangle(x, H - 26, 39, 22, 0x000000).setOrigin(0).setDepth(900)
         .setStrokeStyle(1, 0xfcfcfc).setInteractive();
       box.on('pointerdown', () => this.useItem(i));
-      const icon = this.add.image(x + 8, H - 15, 'icon_repair').setDepth(901);
-      const count = text(this, x + 16, H - 19, '', COLOR.white).setDepth(901);
+      const icon = this.add.image(x + 7, H - 15, 'icon_repair').setDepth(901);
+      const count = text(this, x + 13, H - 19, '', COLOR.white).setDepth(901);
       this.itemButtons.push({ box, icon, count });
     });
     this.refreshHud();
@@ -280,15 +331,17 @@ export class GameScene extends Phaser.Scene {
 
   private refreshHud() {
     this.hearts.forEach((h, i) => {
-      h.setVisible(i < this.state.maxHealth);
+      h.setVisible(i < this.maxHp);
       h.setTexture(i < this.health ? 'heart' : 'heartEmpty');
     });
     this.creditsText.setText(`${this.state.credits}`);
     this.state.weapons.forEach((w, i) => this.weaponIcons[i].setVisible(!!w).setTexture(w ? WEAPONS[w].icon : 'icon_pulse'));
+    const gear = equippedGear(this.state);
+    this.gearIcons.forEach((g, i) => g.setVisible(!!gear[i]).setTexture(gear[i] ? GEAR[gear[i]].icon : 'icon_plating'));
     this.state.items.forEach((item, i) => {
       const b = this.itemButtons[i];
       b.icon.setVisible(!!item);
-      b.count.setText(item ? `${item.count}` : '');
+      b.count.setText(item ? stackLabel(item) : '');
       if (item) b.icon.setTexture(ITEMS[item.id].icon);
       b.box.setStrokeStyle(1, item ? 0xfcfcfc : 0x3c3c3c);
     });
@@ -325,8 +378,8 @@ export class GameScene extends Phaser.Scene {
     const item = this.state.items[slot];
     if (!item || this.phase !== 'action') return;
     if (item.id === 'repair') {
-      if (this.health >= this.state.maxHealth) { toast(this, 'HEALTH IS FULL', H / 2 + 30, 600); return; }
-      this.health = Math.min(this.state.maxHealth, this.health + 2);
+      if (this.health >= this.maxHp) { toast(this, 'HEALTH IS FULL', H / 2 + 30, 600); return; }
+      this.health = Math.min(this.maxHp, this.health + 2);
     } else if (item.id === 'shield') {
       this.shieldUntil = this.time.now + 5000;
     } else if (item.id === 'overdrive') {
@@ -397,7 +450,7 @@ export class GameScene extends Phaser.Scene {
     const data: EnemyData = {
       kind, hp: stats.hp, t: 0, baseX: x, fireIn: Phaser.Math.Between(900, 2200),
       dir: x < W / 2 ? 1 : -1, wait: 0, stopY: Phaser.Math.Between(46, 80), hold: 5000,
-      step: 0, aim: 0, charge: 0, beam: 0, shield: 0, shieldImg: null,
+      step: 0, aim: 0, charge: 0, beam: 0, shield: 0, shieldImg: null, cloaked: false,
     };
     e.setData('e', data);
     // Weaver sine amplitude has to stay on screen.
@@ -405,6 +458,26 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'gunboat') data.fireIn = 700;
     if (kind === 'bomber') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
     if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
+    if (kind === 'pmine') e.body!.setCircle(3.5);
+    if (kind === 'minelayer') {
+      data.baseX = Phaser.Math.Clamp(x, 44, W - 44);
+      data.stopY = Phaser.Math.Between(40, 90);
+      data.fireIn = 1100;
+      if (this.state.level === 6) this.tipOnce('pmine', 'MINES BURST WHEN\nYOU GET CLOSE');
+    }
+    if (kind === 'carrier') {
+      data.stopY = Phaser.Math.Between(38, 58);
+      data.fireIn = 500;
+      data.hold = 1400;
+      if (this.state.level === 7) this.tipOnce('carrier', 'CARRIERS LAUNCH DARTS');
+    }
+    if (kind === 'phantom') {
+      data.cloaked = true;
+      data.hold = 1500;
+      data.stopY = Phaser.Math.Between(44, 110);
+      e.setAlpha(0.1);
+      if (this.state.level === 8) this.tipOnce('phantom', 'PHANTOMS CAN ONLY\nBE HIT WHEN SEEN');
+    }
     if (kind === 'driller') {
       // Slides in from the side, somewhere in the lower half where the ship flies.
       e.setPosition(x < W / 2 ? -8 : W + 8, Phaser.Math.Between(Math.round(H * 0.4), Math.round(H * 0.72)));
@@ -487,6 +560,50 @@ export class GameScene extends Phaser.Scene {
             continue;
           }
           break;
+        case 'pmine':
+          // Drifts with the nebula until the ship comes close, then arms and bursts.
+          e.y += 14 * dt;
+          if (d.charge > 0) {
+            d.charge -= dt * 1000;
+            e.setTexture(Math.floor(d.t * 14) % 2 ? 'pmineLit' : 'pmine');
+            if (d.charge <= 0 && firing) {
+              for (let i = 0; i < 8; i++) this.enemyShoot(e.x, e.y, (i / 8) * Math.PI * 2, 60);
+              this.sparks.explode(8, e.x, e.y);
+              e.destroy();
+              continue;
+            }
+          } else {
+            e.setTexture(Math.floor(d.t * 2) % 2 ? 'pmineLit' : 'pmine');
+            if (firing && Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 30) d.charge = 500;
+          }
+          break;
+        case 'minelayer':
+          // Sinks to its height weaving side to side, seeds four mines, then sinks on.
+          e.y += (e.y < d.stopY ? 34 : d.step >= 4 ? 28 : 5) * dt;
+          e.x = d.baseX + Math.sin(d.t * 1.1) * 38;
+          if (d.fireIn <= 0 && firing && e.y > 20 && d.step < 4) {
+            d.fireIn = 1500;
+            d.step++;
+            this.spawnEnemy('pmine', e.x, e.y + 6);
+          }
+          break;
+        case 'carrier':
+          // Parks, launches four Darts from its bay, then backs off the screen.
+          if (d.step < 4) {
+            if (e.y < d.stopY) e.y += 30 * dt;
+            else if (d.fireIn <= 0 && firing) {
+              d.fireIn = 650;
+              this.spawnEnemy('dart', e.x + (d.step % 2 ? 7 : -7), e.y + 8);
+              d.step++;
+            }
+          } else {
+            d.hold -= dt * 1000;
+            if (d.hold <= 0) e.y -= 24 * dt;
+          }
+          break;
+        case 'phantom':
+          this.updatePhantom(e, d, dt, firing);
+          break;
         case 'boulder':
           e.rotation += dt * 2;
           break;
@@ -565,6 +682,39 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
+  // Phantom: slips into place cloaked (shots pass through it), decloaks, fires
+  // three aimed shots, then cloaks and moves again. After three rounds it leaves.
+  private updatePhantom(e: Phaser.Physics.Arcade.Sprite, d: EnemyData, dt: number, firing: boolean) {
+    d.hold -= dt * 1000;
+    if (d.cloaked) {
+      e.setAlpha(Math.floor(d.t * 20) % 6 === 0 ? 0.3 : 0.1);
+      if (d.step >= 3) { e.y -= 50 * dt; return; }
+      e.y += Phaser.Math.Clamp(d.stopY - e.y, -45 * dt, 45 * dt);
+      e.x += Phaser.Math.Clamp(d.baseX - e.x, -60 * dt, 60 * dt);
+      if (d.hold <= 0) {
+        d.cloaked = false;
+        d.hold = 1500;
+        d.fireIn = 450;
+        d.charge = 3; // shots left this round
+        e.setAlpha(1);
+        this.flash(e);
+      }
+      return;
+    }
+    if (d.fireIn <= 0 && d.charge > 0 && firing) {
+      d.charge--;
+      d.fireIn = 170;
+      this.enemyShoot(e.x, e.y + 5);
+    }
+    if (d.hold <= 0) {
+      d.cloaked = true;
+      d.step++;
+      d.hold = 1500;
+      d.baseX = Phaser.Math.Clamp(this.player.x + Phaser.Math.Between(-50, 50), 14, W - 14);
+      d.stopY = Phaser.Math.Between(44, 110);
+    }
+  }
+
   // A straight laser from (x, y) at `angle` to the edge of the screen.
   drawBeam(x: number, y: number, angle: number, width: number, color: number, alpha = 1) {
     const len = 420;
@@ -615,15 +765,22 @@ export class GameScene extends Phaser.Scene {
       this.hazardIn[i] = Phaser.Math.Between(...hz.every);
       if (hz.kind === 'patch') this.spawnPatch();
       else if (hz.kind === 'turret') this.edgeTurret();
+      else if (hz.kind === 'lightning') this.spawnStrike();
+      else if (hz.kind === 'flare') this.spawnFlare();
+      else if (hz.kind === 'fence') this.spawnFence();
       else this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
     });
   }
 
-  private spawnHazard(kind: 'debris' | 'rock' | 'shard' | 'pebble', x: number, y: number) {
+  private spawnHazard(kind: 'debris' | 'rock' | 'shard' | 'pebble' | 'shelter', x: number, y: number) {
     const tex = kind === 'debris' ? Phaser.Utils.Array.GetRandom(['debris1', 'debris2']) : kind;
     const h = this.hazards.create(x, y, tex) as Phaser.Physics.Arcade.Image;
     h.setData('kind', kind);
-    if (kind === 'debris') {
+    if (kind === 'shelter') {
+      // A big rock that can't be broken: its shadow is the shelter from a flare.
+      h.setVelocity(0, 30);
+      h.body!.setCircle(12, h.width / 2 - 12, h.height / 2 - 12);
+    } else if (kind === 'debris') {
       h.setVelocity(Phaser.Math.Between(-6, 6), Phaser.Math.Between(20, 28));
       h.body!.setSize(h.width - 6, h.height - 4);
       if (this.state.level === 2) this.tipOnce('debris', 'WRECKS BLOCK SHOTS');
@@ -676,10 +833,129 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // Lightning: a column flashes, then a bolt strikes down it. Often it picks
+  // the ship's column, so standing still isn't safe.
+  private spawnStrike() {
+    const near = Math.random() < 0.6;
+    const x = near ? Phaser.Math.Clamp(this.player.x + Phaser.Math.Between(-12, 12), 10, W - 10) : Phaser.Math.Between(10, W - 10);
+    this.strikes.push({ x, t: 0 });
+    if (this.state.level === 6) this.tipOnce('lightning', 'MOVE WHEN A\nCOLUMN FLASHES');
+  }
+
+  private updateStrikes(dt: number) {
+    const g = this.beams;
+    for (const st of this.strikes.slice()) {
+      st.t += dt * 1000;
+      if (st.t < STRIKE_WARN) {
+        if (Math.floor(st.t / 110) % 2 === 0) g.fillStyle(0xfc7460, 0.22).fillRect(st.x - 6, 0, 12, H);
+        continue;
+      }
+      if (st.t > STRIKE_WARN + STRIKE_HIT) { this.strikes.splice(this.strikes.indexOf(st), 1); continue; }
+      // A jagged bolt, redrawn every frame so it crackles.
+      let x = st.x;
+      for (const [w, col] of [[3, 0xf8b800], [1, 0xfcfcfc]] as const) {
+        g.lineStyle(w, col, 1);
+        x = st.x;
+        g.beginPath();
+        g.moveTo(x, 0);
+        for (let y = 12; y <= H; y += 12) { x = st.x + Phaser.Math.Between(-4, 4); g.lineTo(x, y); }
+        g.strokePath();
+      }
+      if (this.phase === 'action' && Math.abs(this.player.x - st.x) < 6) this.hurt();
+    }
+  }
+
+  // Solar flare: a shelter rock drifts in first, then the flare sweeps down the
+  // screen. Anywhere but the shadow straight under the rock gets burned.
+  private spawnFlare() {
+    const rock = this.spawnHazard('shelter', Phaser.Math.Between(40, W - 40), -16);
+    this.flares.push({ rock, t: 0, sweepY: -20 });
+  }
+
+  private inShadow(rock: Phaser.Physics.Arcade.Image, x: number, y: number) {
+    return rock.active && y > rock.y && Math.abs(x - rock.x) < rock.width / 2 - 4;
+  }
+
+  private updateFlares(dt: number) {
+    const g = this.beams;
+    let glow = 0;
+    for (const f of this.flares.slice()) {
+      f.t += dt * 1000;
+      const r = f.rock;
+      const half = r.width / 2 - 4;
+      if (f.t > 900 && f.sweepY < H && r.active) {
+        // The shadow: a dark lane under the rock, where the flare can't reach.
+        g.fillStyle(0x000000, 0.45).fillRect(r.x - half, r.y + 6, half * 2, H - r.y);
+      }
+      if (f.t < FLARE_WARN) {
+        if (f.t > 900) {
+          glow = Math.max(glow, 0.06 + 0.06 * Math.sin(f.t / 70));
+          if (this.state.level === 7) this.tipOnce('flare', 'FLARE COMING!\nHIDE UNDER THE ROCK');
+        }
+        continue;
+      }
+      f.sweepY += 240 * dt;
+      glow = Math.max(glow, 0.18);
+      // The flare front: a band of fire with a gap where the rock's shadow is.
+      const y = f.sweepY;
+      for (const [hh, col, a] of [[16, 0xd82800, 0.5], [8, 0xf8b800, 0.8], [3, 0xfcfcfc, 1]] as const) {
+        g.fillStyle(col, a);
+        if (r.active && y > r.y) {
+          g.fillRect(0, y - hh / 2, r.x - half, hh);
+          g.fillRect(r.x + half, y - hh / 2, W - r.x - half, hh);
+        } else g.fillRect(0, y - hh / 2, W, hh);
+      }
+      if (this.phase === 'action' && Math.abs(this.player.y - y) < 7 && !this.inShadow(r, this.player.x, this.player.y)) this.hurt();
+      if (f.sweepY > H + 12) this.flares.splice(this.flares.indexOf(f), 1);
+    }
+    this.flareGlow.setFillStyle(0xf8b800, glow);
+  }
+
+  // Laser fence: two posts at the screen edges scroll down with a beam between
+  // them that blinks off, flickers a warning, then switches on. Cross while it's off.
+  private spawnFence() {
+    const posts = [this.add.image(3, -6, 'fencepost').setDepth(9), this.add.image(W - 3, -6, 'fencepost').setDepth(9).setFlipX(true)];
+    this.fences.push({ y: -6, t: 0, posts });
+    if (this.state.level === 8) this.tipOnce('fence', 'CROSS THE FENCE\nWHEN IT IS OFF');
+  }
+
+  private updateFences(dt: number) {
+    const g = this.beams;
+    const [off, warn, on] = FENCE_CYCLE;
+    for (const f of this.fences.slice()) {
+      f.y += 30 * dt;
+      f.t = (f.t + dt * 1000) % (off + warn + on);
+      f.posts.forEach((p) => p.setY(f.y));
+      if (f.y > H + 10) {
+        f.posts.forEach((p) => p.destroy());
+        this.fences.splice(this.fences.indexOf(f), 1);
+        continue;
+      }
+      if (f.t < off) {
+        g.fillStyle(0x3c3c3c, 1);
+        for (let x = 6; x < W - 6; x += 4) g.fillRect(x, f.y, 1, 1);
+      } else if (f.t < off + warn) {
+        if (Math.floor(f.t / 60) % 2) g.fillStyle(0xd82800, 0.8).fillRect(6, f.y, W - 12, 1);
+      } else {
+        g.fillStyle(0xd82800, 0.7).fillRect(6, f.y - 1, W - 12, 3);
+        g.fillStyle(0xfcfcfc, 1).fillRect(6, f.y, W - 12, 1);
+        if (this.phase === 'action' && Math.abs(this.player.y - f.y) < 4) this.hurt();
+      }
+    }
+  }
+
+  private clearTimedHazards() {
+    this.strikes = [];
+    this.flares = [];
+    this.fences.forEach((f) => f.posts.forEach((p) => p.destroy()));
+    this.fences = [];
+    this.flareGlow.setFillStyle(0xf8b800, 0);
+  }
+
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
     if (!b.active || !h.active) return;
     b.destroy();
-    if (h.getData('kind') === 'debris') { this.tink(b.x, b.y); return; }
+    if (h.getData('kind') === 'debris' || h.getData('kind') === 'shelter') { this.tink(b.x, b.y); return; }
     const hp = (h.getData('hp') as number) - ((b.getData('dmg') as number) ?? 1);
     h.setData('hp', hp);
     if (hp > 0) { this.flash(h); return; }
@@ -694,6 +970,70 @@ export class GameScene extends Phaser.Scene {
       this.dropCoin(h.x, h.y, Phaser.Math.Between(1, 3));
     }
     h.destroy();
+  }
+
+  // --- Gear ------------------------------------------------------------------
+
+  // Called at the start and again after a vendor stop, where gear may have changed.
+  private setupGear() {
+    const s = this.state;
+    this.sats.forEach((sat) => sat.destroy());
+    this.sats = [];
+    this.deflect = 0;
+    this.deflectRing.setVisible(false);
+    if (hasGear(s, 'deflector')) this.deflect = gearStats.deflector(gearLevel(s, 'deflector')).hits;
+    if (hasGear(s, 'satellite')) {
+      const n = gearStats.satellite(gearLevel(s, 'satellite')).drones;
+      for (let i = 0; i < n; i++) this.sats.push(this.add.image(0, 0, 'sat').setDepth(10));
+    }
+  }
+
+  private updateGear(dt: number) {
+    const s = this.state;
+    const now = this.time.now;
+    const flying = this.phase === 'action' || this.phase === 'ready';
+
+    // Deflector: charges come back one at a time.
+    if (hasGear(s, 'deflector')) {
+      const st = gearStats.deflector(gearLevel(s, 'deflector'));
+      if (this.deflect < st.hits && now >= this.deflectAt) {
+        this.deflect++;
+        if (this.deflect < st.hits) this.deflectAt = now + st.recharge;
+      }
+      this.deflectRing.setVisible(flying && this.deflect > 0 && this.player.visible)
+        .setPosition(this.player.x, this.player.y).setAlpha(this.deflect > 1 ? 0.8 : 0.45);
+    }
+
+    // Credit Magnet: drops inside the radius drift to the ship.
+    if (hasGear(s, 'magnet') && this.phase === 'action') {
+      const st = gearStats.magnet(gearLevel(s, 'magnet'));
+      for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) {
+        if (!c.body?.enable) continue;
+        const dist = Phaser.Math.Distance.Between(c.x, c.y, this.player.x, this.player.y);
+        if (dist > st.radius) continue;
+        const a = Phaser.Math.Angle.Between(c.x, c.y, this.player.x, this.player.y);
+        c.setVelocity(Math.cos(a) * st.pull, Math.sin(a) * st.pull);
+      }
+    }
+
+    // Satellites circle the ship and fire straight up.
+    if (this.sats.length) {
+      const st = gearStats.satellite(gearLevel(s, 'satellite'));
+      this.sats.forEach((sat, i) => {
+        const a = (now / 1000) * 3 + (i * Math.PI * 2) / this.sats.length;
+        sat.setPosition(this.player.x + Math.cos(a) * 15, this.player.y + Math.sin(a) * 11);
+        sat.setVisible(flying && this.player.scale === 1);
+      });
+      this.satTimer -= dt * 1000;
+      if (this.phase === 'action' && this.satTimer <= 0) {
+        this.satTimer = st.interval;
+        for (const sat of this.sats) {
+          const b = this.playerBullets.create(sat.x, sat.y - 3, 'satshot') as Phaser.Physics.Arcade.Image;
+          b.setData('dmg', st.damage);
+          b.setVelocity(0, -260);
+        }
+      }
+    }
   }
 
   // --- Combat ----------------------------------------------------------------
@@ -727,8 +1067,9 @@ export class GameScene extends Phaser.Scene {
 
   private hitEnemy(b: Phaser.Physics.Arcade.Image, e: Phaser.Physics.Arcade.Sprite) {
     if (!b.active || !e.active) return;
-    b.destroy();
     const d = e.getData('e') as EnemyData;
+    if (d.cloaked) return; // shots pass through a cloaked Phantom
+    b.destroy();
     const dmg = (b.getData('dmg') as number) ?? 1;
     // A Bulwark's shield takes shots from below until it breaks.
     if (d.shieldImg && b.y > e.y) {
@@ -780,6 +1121,16 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'action' || GOD_MODE) return;
     const now = this.time.now;
     if (now < this.invulnUntil || now < this.shieldUntil) return;
+    if (this.deflect > 0) {
+      // The Deflector takes the whole hit, then starts recharging.
+      const st = gearStats.deflector(gearLevel(this.state, 'deflector'));
+      if (this.deflect === st.hits) this.deflectAt = now + st.recharge;
+      this.deflect--;
+      this.invulnUntil = now + 700;
+      this.sparks.explode(10, this.player.x, this.player.y);
+      this.flash(this.deflectRing);
+      return;
+    }
     this.health = Math.max(0, this.health - amount);
     this.invulnUntil = now + 1200;
     this.cameras.main.shake(120, 0.01);
@@ -792,6 +1143,7 @@ export class GameScene extends Phaser.Scene {
     this.sparks.explode(40, this.player.x, this.player.y);
     this.player.setVisible(false);
     this.bubble.setVisible(false);
+    this.sats.forEach((sat) => sat.setVisible(false));
     this.time.delayedCall(900, () => {
       text(this, W / 2, H / 2 - 16, 'SHIP DESTROYED', COLOR.red).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
@@ -806,9 +1158,8 @@ export class GameScene extends Phaser.Scene {
     const warn = text(this, W / 2, H / 2 - 30, 'WARNING', COLOR.red, 16).setOrigin(0.5).setDepth(1000);
     this.tweens.add({ targets: warn, alpha: 0.1, yoyo: true, repeat: 4, duration: 250, onComplete: () => warn.destroy() });
     const kind = this.level.boss!;
-    this.boss = kind === 'dreadnought'
-      ? new Dreadnought(this, () => this.bossDefeated())
-      : new Rockjaw(this, () => this.bossDefeated());
+    const done = () => this.bossDefeated();
+    this.boss = kind === 'dreadnought' ? new Dreadnought(this, done) : kind === 'watcher' ? new Watcher(this, done) : new Rockjaw(this, done);
     this.bossBar = this.add.graphics().setDepth(900);
     this.bossName = text(this, W / 2, 28, BOSS_NAMES[kind], COLOR.red).setOrigin(0.5, 0).setDepth(900);
   }
@@ -891,6 +1242,7 @@ export class GameScene extends Phaser.Scene {
               this.tweens.killTweensOf(station);
               station.destroy();
               this.hazards.clear(true, true);
+              this.clearTimedHazards();
               this.patches.forEach((pt) => pt.destroy());
               this.patches = [];
               this.phase = 'vendor';
@@ -908,6 +1260,10 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'ready';
     this.player.setPosition(W / 2, H - 50).setScale(1).setAlpha(1);
     this.slide = { x: 0, y: 0 };
+    // Gear may have changed at the vendor.
+    this.maxHp = totalMaxHealth(this.state);
+    this.health = Math.min(this.health, this.maxHp);
+    this.setupGear();
     this.refreshHud();
     this.cameras.main.fadeIn(350);
     const ready = text(this, W / 2, H / 2, 'READY', COLOR.white).setOrigin(0.5).setDepth(1000);
@@ -926,6 +1282,7 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'action') return;
     this.phase = 'clear';
     this.enemyBullets.clear(true, true);
+    this.clearTimedHazards();
     this.gatherCoins(() => {
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
@@ -963,6 +1320,10 @@ export class GameScene extends Phaser.Scene {
     this.updateEnemies(dt);
     this.boss?.update(dt);
     this.drawBossBar();
+    this.updateStrikes(dt);
+    this.updateFlares(dt);
+    this.updateFences(dt);
+    this.updateGear(dt);
 
     // Blink while invulnerable after a hit; show the bubble while shielded.
     const now = this.time.now;
