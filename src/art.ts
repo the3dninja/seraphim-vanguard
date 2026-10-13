@@ -77,6 +77,10 @@ const SPRITES: Record<string, string[]> = {
   icon_spread: ['W..W..W.', 'Y..Y..Y.', '.Y.Y.Y..', '..YYY...', '...Y....', '........', '...C....', '..CCC...'],
   coinIcon: ['.YY.', 'YWYO', 'YYYO', '.OO.'],
   lock: ['..GGG..', '.G...G.', '.G...G.', 'LLLLLLL', 'LLLDLLL', 'LLLDLLL', 'LLLLLLL'],
+  // Faint pictures inside empty or locked Ship screen slots, so each slot shows what it holds.
+  slotWeapon: ['....GG....', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '..GGGGGG..', '.GG.GG.GG.', '.G..GG..G.', '....GG....'],
+  slotItem: ['.GGGGGGGG.', 'GG......GG', 'G...GG...G', 'G...GG...G', 'G.GGGGGG.G', 'G.GGGGGG.G', 'G...GG...G', 'G...GG...G', 'GG......GG', '.GGGGGGGG.'],
+  slotGear: ['...GGGG...', '.G.GGGG.G.', '.GGGGGGGG.', 'GGGG..GGGG', 'GGG....GGG', 'GGG....GGG', 'GGGG..GGGG', '.GGGGGGGG.', '.G.GGGG.G.', '...GGGG...'],
 };
 
 // The big ship for the Ship screen, drawn as its left half plus the center

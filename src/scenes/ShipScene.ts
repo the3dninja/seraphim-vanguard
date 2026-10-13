@@ -19,10 +19,10 @@ type Filter = Kind | 'all';
 interface SlotDef { kind: Kind; n: number; x: number; y: number; price: number }
 const SLOT = 22;
 const SLOTS: SlotDef[] = [
-  { kind: 'weapon', n: 0, x: 26, y: 30, price: 0 },
-  { kind: 'weapon', n: 1, x: W - 26 - SLOT, y: 30, price: 600 },
-  { kind: 'item', n: 0, x: 8, y: 68, price: 0 },
-  { kind: 'item', n: 1, x: W - 8 - SLOT, y: 68, price: 300 },
+  { kind: 'weapon', n: 0, x: 44, y: 32, price: 0 },
+  { kind: 'weapon', n: 1, x: W - 44 - SLOT, y: 32, price: 600 },
+  { kind: 'item', n: 0, x: 32, y: 66, price: 0 },
+  { kind: 'item', n: 1, x: W - 32 - SLOT, y: 66, price: 300 },
   { kind: 'item', n: 2, x: W / 2 - SLOT / 2, y: 110, price: 1000 },
   { kind: 'gear', n: 0, x: 40, y: 106, price: 600 },
   { kind: 'gear', n: 1, x: W - 40 - SLOT, y: 106, price: 1000 },
@@ -39,6 +39,7 @@ const PAGER_Y = LIST_Y + MAX_ROWS * ROW_H + 2;
 const INFO_Y = 262;
 const DRAG_START = 5; // px of movement before a press becomes a drag
 
+const SLOT_ART: Record<Kind, string> = { weapon: 'slotWeapon', item: 'slotItem', gear: 'slotGear' };
 const kindOf = (id: string): Kind => (isWeapon(id) ? 'weapon' : isItem(id) ? 'item' : 'gear');
 const KIND_NAME: Record<Kind, string> = { weapon: 'WEAPON', item: 'ITEM', gear: 'GEAR' };
 
@@ -190,16 +191,18 @@ export class ShipScene extends Phaser.Scene {
     const picked = this.sel?.from === 'slot' && this.sel.slot === i;
     const target = open && this.sel?.from === 'storage' && kindOf(this.sel.id) === def.kind;
     const border = picked ? 0xf8b800 : target ? 0x3cbcfc : open ? 0x7c7c7c : 0x3c3c3c;
-    const box = add(this.add.rectangle(def.x, def.y, SLOT, SLOT, 0x000000).setOrigin(0).setStrokeStyle(1, border));
+    const box = add(this.add.rectangle(def.x, def.y, SLOT, SLOT, held ? 0x000000 : 0x101018).setOrigin(0).setStrokeStyle(1, border));
     const cx = def.x + SLOT / 2, cy = def.y + SLOT / 2;
-    if (!open) {
-      add(this.add.image(cx, cy - 3, 'lock'));
-      add(text(this, cx, def.y + SLOT + 2, `${def.price}`, COLOR.dim).setOrigin(0.5, 0));
-    } else if (held) {
+    if (held) {
       add(this.add.image(cx, cy, defOf(held.id).icon).setScale(2));
       if (def.kind === 'item') add(text(this, def.x + SLOT - 1, def.y + SLOT - 7, `${held.count}`, COLOR.white).setOrigin(1, 0));
     } else {
-      add(text(this, cx, cy, def.kind === 'item' ? 'I' : def.kind === 'gear' ? 'G' : 'W', COLOR.dim).setOrigin(0.5));
+      // Empty or locked: a faint picture of what the slot takes.
+      add(this.add.image(cx, open ? cy : cy + 3, SLOT_ART[def.kind]).setAlpha(open ? 0.6 : 0.35));
+    }
+    if (!open) {
+      add(this.add.image(cx, def.y + 5, 'lock'));
+      add(text(this, cx, def.y + SLOT + 2, `${def.price}`, COLOR.dim).setOrigin(0.5, 0));
     }
     box.setInteractive().on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.press = { from: 'slot', slot: i, x: p.x, y: p.y, dragging: false };
