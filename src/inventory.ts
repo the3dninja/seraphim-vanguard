@@ -32,6 +32,21 @@ export function equipFromStorage(s: SaveData, index: number) {
   }
 }
 
+// Fill the item slot with as many of one consumable from storage as it holds,
+// sending a different item that was there back to storage. Returns false if
+// nothing could move (the slot already holds a full stack of it).
+export function equipStack(s: SaveData, id: ItemId): boolean {
+  if (s.item && s.item.id !== id) unequipItem(s);
+  let moved = false;
+  while (s.storage.includes(id) && (!s.item || s.item.count < ITEMS[id].cap)) {
+    s.storage.splice(s.storage.indexOf(id), 1);
+    if (s.item) s.item.count++;
+    else s.item = { id, count: 1 };
+    moved = true;
+  }
+  return moved;
+}
+
 export function unequipItem(s: SaveData) {
   if (!s.item) return;
   for (let i = 0; i < s.item.count; i++) s.storage.push(s.item.id);

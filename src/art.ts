@@ -76,7 +76,42 @@ const SPRITES: Record<string, string[]> = {
   icon_pulse: ['...W....', '...Y....', '...Y....', '........', '...W....', '...Y....', '...Y....', '........'],
   icon_spread: ['W..W..W.', 'Y..Y..Y.', '.Y.Y.Y..', '..YYY...', '...Y....', '........', '...C....', '..CCC...'],
   coinIcon: ['.YY.', 'YWYO', 'YYYO', '.OO.'],
+  lock: ['..GGG..', '.G...G.', '.G...G.', 'LLLLLLL', 'LLLDLLL', 'LLLDLLL', 'LLLLLLL'],
+  // Faint pictures inside empty or locked Ship screen slots, so each slot shows what it holds.
+  slotWeapon: ['....GG....', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '...GGGG...', '..GGGGGG..', '.GG.GG.GG.', '.G..GG..G.', '....GG....'],
+  slotItem: ['.GGGGGGGG.', 'GG......GG', 'G...GG...G', 'G...GG...G', 'G.GGGGGG.G', 'G.GGGGGG.G', 'G...GG...G', 'G...GG...G', 'GG......GG', '.GGGGGGGG.'],
+  slotGear: ['...GGGG...', '.G.GGGG.G.', '.GGGGGGGG.', 'GGGG..GGGG', 'GGG....GGG', 'GGG....GGG', 'GGGG..GGGG', '.GGGGGGGG.', '.G.GGGG.G.', '...GGGG...'],
 };
+
+// The big ship for the Ship screen, drawn as its left half plus the center
+// column and mirrored, so it stays symmetric while being tweaked.
+const SHIP_LARGE_HALF = [
+  '............W',
+  '...........WC',
+  '...........WC',
+  '..........WBC',
+  '..........WBA',
+  '.........WBBA',
+  '.........WBAA',
+  '........WBBAA',
+  '........WBBBB',
+  '...R....WBBBB',
+  '...R...WBBLBB',
+  '...G...WBBLBB',
+  '...G..WBBBLBB',
+  '..WGWWBBBBBBB',
+  '.WBBBBBBBBBBB',
+  'WBBBBBBBBBBBB',
+  'WBBCCBBBBBBBB',
+  'WBBBBBBWWBBBB',
+  'WBB..WBBWWBBB',
+  'WB...WBBBBBBB',
+  'W....WBBBDDDB',
+  '.....WDRRDKDD',
+  '......RYYR.K.',
+  '.......YY....',
+];
+SPRITES.shipLarge = SHIP_LARGE_HALF.map((r) => r + [...r.slice(0, -1)].reverse().join(''));
 
 function makeTexture(scene: Phaser.Scene, key: string, rows: string[]) {
   const w = Math.max(...rows.map((r) => r.length));

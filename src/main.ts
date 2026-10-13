@@ -6,6 +6,7 @@ import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
 import { VendorScene } from './scenes/VendorScene';
 import { BaseScene } from './scenes/BaseScene';
+import { ShipScene } from './scenes/ShipScene';
 
 function start() {
   new Phaser.Game({
@@ -19,7 +20,7 @@ function start() {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { debug: false } },
     input: { activePointers: 2 },
-    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene],
+    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene, ShipScene],
   });
 }
 
