@@ -1,5 +1,6 @@
 import {
-  ITEMS, MAX_WEAPON_LEVEL, WEAPONS, defOf, isItem, isWeapon, type ItemId, type WeaponId,
+  GEAR, ITEMS, MAX_GEAR_LEVEL, MAX_WEAPON_LEVEL, WEAPONS, defOf, gearStats, isGear, isItem, isWeapon,
+  type GearId, type ItemId, type WeaponId,
 } from './data/items';
 import type { SaveData } from './save';
 
@@ -30,6 +31,35 @@ export function unequipWeapon(s: SaveData, slot: number): boolean {
   s.storage.push(id);
   s.weapons[slot] = null;
   return true;
+}
+
+// --- Gear ----------------------------------------------------------------
+
+export const equippedGear = (s: SaveData) => s.gear.filter((g): g is GearId => !!g);
+export const gearLevel = (s: SaveData, id: GearId) => s.gearLevels[id] ?? 1;
+export const hasGear = (s: SaveData, id: GearId) => s.gear.includes(id);
+
+// Max health with Hull Plating counted in.
+export const totalMaxHealth = (s: SaveData) =>
+  s.maxHealth + (hasGear(s, 'plating') ? gearStats.plating(gearLevel(s, 'plating')).health : 0);
+
+export const emptyGearSlot = (s: SaveData) => {
+  const i = s.gear.indexOf(null);
+  return i >= 0 ? i : null;
+};
+
+// Put gear in a slot, sending whatever was there to storage.
+export function equipGear(s: SaveData, id: GearId, slot = emptyGearSlot(s) ?? 0) {
+  const old = s.gear[slot];
+  if (old) s.storage.push(old);
+  s.gear[slot] = id;
+}
+
+export function unequipGear(s: SaveData, slot: number) {
+  const id = s.gear[slot];
+  if (!id) return;
+  s.storage.push(id);
+  s.gear[slot] = null;
 }
 
 // --- Items ---------------------------------------------------------------
@@ -85,6 +115,12 @@ export function equipFromStorage(s: SaveData, index: number): boolean {
     equipWeapon(s, id);
     return true;
   }
+  if (isGear(id)) {
+    if (s.gear.length === 0) return false;
+    s.storage.splice(index, 1);
+    equipGear(s, id);
+    return true;
+  }
   if (isItem(id)) {
     const slot = itemSlotFor(s, id) ?? 0;
     const it = s.items[slot];
@@ -100,23 +136,25 @@ export function equipFromStorage(s: SaveData, index: number): boolean {
 
 // --- Selling -------------------------------------------------------------
 
-// Credits spent upgrading a weapon to its current level.
-export function upgradeSpend(s: SaveData, id: WeaponId) {
+// Credits spent upgrading a weapon or gear to its current level.
+export function upgradeSpend(s: SaveData, id: WeaponId | GearId) {
+  const level = isWeapon(id) ? weaponLevel(s, id) : gearLevel(s, id);
   let total = 0;
-  for (let lv = 2; lv <= weaponLevel(s, id); lv++) total += weaponUpgradePrice(lv);
+  for (let lv = 2; lv <= level; lv++) total += weaponUpgradePrice(lv);
   return total;
 }
 
 // Half of what it cost, upgrades included.
 export const sellPrice = (s: SaveData, id: string) =>
-  Math.floor((defOf(id).price + (isWeapon(id) ? upgradeSpend(s, id) : 0)) / 2);
+  Math.floor((defOf(id).price + (isWeapon(id) || isGear(id) ? upgradeSpend(s, id) : 0)) / 2);
 
 export function sellFromStorage(s: SaveData, index: number) {
   const [id] = s.storage.splice(index, 1);
   if (!id) return;
   s.credits += sellPrice(s, id);
-  // Weapons are one of a kind, so a sold one forgets its upgrades.
+  // Weapons and gear are one of a kind, so a sold one forgets its upgrades.
   if (isWeapon(id)) delete s.weaponLevels[id];
+  if (isGear(id)) delete s.gearLevels[id];
 }
 
 // --- Base vendor upgrades ------------------------------------------------
@@ -124,12 +162,14 @@ export function sellFromStorage(s: SaveData, index: number) {
 export const MAX_HEALTH_CAP = 10;
 export const MAX_WEAPON_SLOTS = 2;
 export const MAX_ITEM_SLOTS = 3;
+export const MAX_GEAR_SLOTS = 2;
 
 // Placeholder prices for playtesting. Slot prices match the Ship screen.
 export const weaponUpgradePrice = (nextLevel: number) => 100 * nextLevel;
 export const hullPrice = (s: SaveData) => 100 * (s.maxHealth - 4);
 export const weaponSlotPrice = (n: number) => [0, 600][n] ?? 0;
 export const itemSlotPrice = (n: number) => [0, 300, 1000][n] ?? 0;
+export const gearSlotPrice = (n: number) => [600, 1000][n] ?? 0;
 
 export interface Upgrade {
   key: string;
@@ -168,6 +208,14 @@ export function upgradesFor(s: SaveData): Upgrade[] {
       price: itemSlotPrice(n), apply: (st) => { st.items.push(null); },
     });
   }
+  if (s.gear.length < MAX_GEAR_SLOTS) {
+    const n = s.gear.length;
+    list.push({
+      key: 'gslot', name: `GEAR SLOT ${n + 1}`, detail: '', icon: 'slotGearSmall',
+      desc: 'HOLDS ONE SPECIAL GEAR. GEAR WORKS ON ITS OWN.',
+      price: gearSlotPrice(n), apply: (st) => { st.gear.push(null); },
+    });
+  }
   // Every weapon the player owns, equipped or stored.
   const owned = [...new Set([...equippedWeapons(s), ...s.storage.filter(isWeapon)])];
   for (const id of owned) {
@@ -177,6 +225,15 @@ export function upgradesFor(s: SaveData): Upgrade[] {
       key: `wlv:${id}`, name: WEAPONS[id].name, detail: `LV ${lv}>${lv + 1}`, icon: WEAPONS[id].icon,
       desc: lv + 1 === 3 || lv + 1 === 5 ? `MORE DAMAGE AND ${signature(id, lv + 1)}` : 'MORE DAMAGE PER SHOT.',
       price: weaponUpgradePrice(lv + 1), apply: (st) => { st.weaponLevels[id] = lv + 1; },
+    });
+  }
+  for (const id of [...new Set([...equippedGear(s), ...s.storage.filter(isGear)])]) {
+    const lv = gearLevel(s, id);
+    if (lv >= MAX_GEAR_LEVEL) continue;
+    list.push({
+      key: `glv:${id}`, name: GEAR[id].name, detail: `LV ${lv}>${lv + 1}`, icon: GEAR[id].icon,
+      desc: GEAR[id].levelUp,
+      price: weaponUpgradePrice(lv + 1), apply: (st) => { st.gearLevels[id] = lv + 1; },
     });
   }
   return list;
