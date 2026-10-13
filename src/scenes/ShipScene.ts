@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { ITEMS, defOf, isItem, isWeapon } from '../data/items';
-import { equipFromStorage, equipStack, unequipItem } from '../inventory';
+import {
+  equipFromStorage, equipStack, equipWeapon, unequipItem, unequipWeapon, weaponLevel,
+} from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { button, text } from '../ui';
 
@@ -94,17 +96,20 @@ export class ShipScene extends Phaser.Scene {
 
   // --- Slots -------------------------------------------------------------
 
-  // Only the starting slots exist until extra slots can be bought at the Base vendor.
+  // Extra slots are bought at the Base vendor.
   private unlocked(def: SlotDef) {
-    const counts: Record<Kind, number> = { weapon: 1, item: 1, gear: 0 };
+    const counts: Record<Kind, number> = { weapon: this.s.weapons.length, item: this.s.items.length, gear: this.s.gearSlots };
     return def.n < counts[def.kind];
   }
 
   private contents(def: SlotDef): { id: string; count: number } | null {
     if (!this.unlocked(def)) return null;
-    if (def.kind === 'weapon') return { id: this.s.weapon, count: 1 };
-    if (def.kind === 'item' && this.s.item) return { id: this.s.item.id, count: this.s.item.count };
-    return null;
+    if (def.kind === 'weapon') {
+      const w = this.s.weapons[def.n];
+      return w ? { id: w, count: 1 } : null;
+    }
+    const it = def.kind === 'item' ? this.s.items[def.n] : null;
+    return it ? { id: it.id, count: it.count } : null;
   }
 
   // --- Drawing -----------------------------------------------------------
@@ -233,7 +238,7 @@ export class ShipScene extends Phaser.Scene {
       }
     }
     if (id) {
-      title = defOf(id).name;
+      title = isWeapon(id) ? `${defOf(id).name} LV${weaponLevel(this.s, id)}` : defOf(id).name;
       body = defOf(id).desc;
       if (isItem(id)) add(text(this, W - 6, INFO_Y, `MAX ${ITEMS[id].cap}`, COLOR.gray).setOrigin(1, 0));
     }
@@ -265,12 +270,14 @@ export class ShipScene extends Phaser.Scene {
   private tapSlot(i: number) {
     const def = SLOTS[i];
     if (!this.unlocked(def)) {
-      this.say(`LOCKED ${KIND_NAME[def.kind]} SLOT. ${def.price} CR AT THE BASE VENDOR (COMING SOON).`);
+      this.say(def.kind === 'gear'
+        ? 'LOCKED GEAR SLOT. GEAR IS NOT IN THE GAME YET.'
+        : `LOCKED ${KIND_NAME[def.kind]} SLOT. BUY IT FOR ${def.price} CR IN THE BASE VENDOR'S UPGRADE TAB.`);
       return;
     }
     const sel = this.sel;
     if (sel?.from === 'storage') {
-      if (kindOf(sel.id) === def.kind) this.place(sel.id);
+      if (kindOf(sel.id) === def.kind) this.place(sel.id, def.n);
       else this.say(`THAT GOES IN ${kindOf(sel.id) === 'item' ? 'AN' : 'A'} ${KIND_NAME[kindOf(sel.id)]} SLOT.`, false);
       return;
     }
@@ -281,20 +288,21 @@ export class ShipScene extends Phaser.Scene {
   private tapRow(id: string) {
     const sel = this.sel;
     if (sel?.from === 'slot' && SLOTS[sel.slot].kind === kindOf(id)) {
-      this.place(id);
+      this.place(id, SLOTS[sel.slot].n);
       return;
     }
     this.sel = sel?.from === 'storage' && sel.id === id ? null : { from: 'storage', id };
     this.render();
   }
 
-  // Equip a storage entry into its (only, for now) open slot of that kind.
-  private place(id: string) {
+  // Equip a storage entry into slot `n` of its kind, or wherever it fits best.
+  private place(id: string, n?: number) {
     const s = this.s;
     if (isWeapon(id)) {
-      equipFromStorage(s, s.storage.indexOf(id));
+      if (n === undefined) equipFromStorage(s, s.storage.indexOf(id));
+      else { s.storage.splice(s.storage.indexOf(id), 1); equipWeapon(s, id, n); }
     } else if (isItem(id)) {
-      if (!equipStack(s, id)) { this.say('THAT STACK IS ALREADY FULL.'); return; }
+      if (!equipStack(s, id, n)) { this.say('THAT STACK IS ALREADY FULL.'); return; }
     } else {
       this.say('NO OPEN GEAR SLOT.');
       return;
@@ -304,11 +312,11 @@ export class ShipScene extends Phaser.Scene {
 
   private stow(i: number) {
     const def = SLOTS[i];
-    if (def.kind === 'weapon') {
-      this.say('THE SHIP NEEDS A WEAPON. SWAP ANOTHER ONE IN INSTEAD.', false);
+    if (def.kind === 'weapon' && !unequipWeapon(this.s, def.n)) {
+      this.say('THE SHIP NEEDS A WEAPON IN SLOT 1. SWAP ANOTHER ONE IN INSTEAD.', false);
       return;
     }
-    if (def.kind === 'item') unequipItem(this.s);
+    if (def.kind === 'item') unequipItem(this.s, def.n);
     this.changed();
   }
 

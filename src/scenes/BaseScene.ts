@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { LEVELS } from '../data/levels';
+import { LEVELS, isBuilt } from '../data/levels';
 import { cloneSave, writeSave, type SaveData } from '../save';
 import { button, starfield, text, toast } from '../ui';
 
@@ -14,6 +14,11 @@ export class BaseScene extends Phaser.Scene {
 
   init(data: { state: SaveData }) {
     this.state = cloneSave(data.state);
+    // Playtest helpers: ?rich tops credits up to 5000, ?level=N jumps to level N.
+    const params = new URLSearchParams(location.search);
+    if (params.has('rich')) this.state.credits = Math.max(this.state.credits, 5000);
+    const jump = Number(params.get('level'));
+    if (isBuilt(LEVELS[jump - 1])) this.state.level = jump;
   }
 
   create() {
@@ -24,7 +29,7 @@ export class BaseScene extends Phaser.Scene {
     text(this, W / 2, 24, 'BASE', COLOR.white, 16).setOrigin(0.5);
     const next = LEVELS[this.state.level - 1];
     text(this, W / 2, 50, `NEXT: LEVEL ${this.state.level}`, COLOR.gray).setOrigin(0.5);
-    text(this, W / 2, 64, next ? next.name : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
+    text(this, W / 2, 64, isBuilt(next) ? next.name : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
 
     this.add.image(W / 2 - 34, 86, 'coinIcon').setOrigin(0, 0.5);
     this.creditsText = text(this, W / 2 - 26, 86, '', COLOR.yellow).setOrigin(0, 0.5);
@@ -47,9 +52,12 @@ export class BaseScene extends Phaser.Scene {
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 174, bw, bh, 'VIEW MAP', () => toast(this, 'STAR MAP\nCOMING SOON', 260));
+    button(this, bx, 174, bw, bh, 'VIEW MAP', () => {
+      this.scene.pause();
+      this.scene.launch('Map', { state: this.state, onLeave: () => {} });
+    });
     button(this, bx, 214, bw, bh, 'BEGIN MISSION', () => {
-      if (!next) {
+      if (!isBuilt(next)) {
         toast(this, `LEVEL ${this.state.level}\nIS NOT BUILT YET`, 260);
         return;
       }

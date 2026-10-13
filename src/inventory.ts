@@ -1,63 +1,190 @@
-import { ITEMS, WEAPONS, defOf, isItem, isWeapon, type ItemId, type WeaponId } from './data/items';
+import {
+  ITEMS, MAX_WEAPON_LEVEL, WEAPONS, defOf, isItem, isWeapon, type ItemId, type WeaponId,
+} from './data/items';
 import type { SaveData } from './save';
 
-// Consumables go into the item slot when they fit, otherwise into storage.
+// --- Weapons -------------------------------------------------------------
+
+export const equippedWeapons = (s: SaveData) => s.weapons.filter((w): w is WeaponId => !!w);
+export const weaponLevel = (s: SaveData, id: WeaponId) => s.weaponLevels[id] ?? 1;
+export const weaponStats = (s: SaveData, id: WeaponId) => WEAPONS[id].stats(weaponLevel(s, id));
+
+// The slot a new weapon should go in when the player didn't pick one: the
+// first empty slot, or null if every slot is full.
+export const emptyWeaponSlot = (s: SaveData) => {
+  const i = s.weapons.indexOf(null);
+  return i >= 0 ? i : null;
+};
+
+// Put a weapon in a slot, sending whatever was there to storage.
+export function equipWeapon(s: SaveData, id: WeaponId, slot = emptyWeaponSlot(s) ?? 0) {
+  const old = s.weapons[slot];
+  if (old) s.storage.push(old);
+  s.weapons[slot] = id;
+}
+
+// The ship always keeps a weapon in slot 1, so only later slots can be emptied.
+export function unequipWeapon(s: SaveData, slot: number): boolean {
+  const id = s.weapons[slot];
+  if (!id || slot === 0) return false;
+  s.storage.push(id);
+  s.weapons[slot] = null;
+  return true;
+}
+
+// --- Items ---------------------------------------------------------------
+
+// Where one more of a consumable fits: a slot with the same item and room,
+// else an empty slot, else null.
+export function itemSlotFor(s: SaveData, id: ItemId): number | null {
+  const same = s.items.findIndex((it) => it && it.id === id && it.count < ITEMS[id].cap);
+  if (same >= 0) return same;
+  const empty = s.items.indexOf(null);
+  return empty >= 0 ? empty : null;
+}
+
+// Consumables go into an item slot when they fit, otherwise into storage.
 export function addConsumable(s: SaveData, id: ItemId) {
-  if (!s.item) s.item = { id, count: 1 };
-  else if (s.item.id === id && s.item.count < ITEMS[id].cap) s.item.count++;
-  else s.storage.push(id);
+  const slot = itemSlotFor(s, id);
+  if (slot === null) { s.storage.push(id); return; }
+  const it = s.items[slot];
+  if (it) it.count++;
+  else s.items[slot] = { id, count: 1 };
 }
 
-export function equipWeapon(s: SaveData, id: WeaponId) {
-  s.storage.push(s.weapon);
-  s.weapon = id;
+export function unequipItem(s: SaveData, slot: number) {
+  const it = s.items[slot];
+  if (!it) return;
+  for (let i = 0; i < it.count; i++) s.storage.push(it.id);
+  s.items[slot] = null;
 }
 
-// Move one storage entry into its slot, swapping out whatever was there.
-export function equipFromStorage(s: SaveData, index: number) {
-  const id = s.storage[index];
-  if (isWeapon(id)) {
-    s.storage.splice(index, 1);
-    equipWeapon(s, id);
-  } else if (isItem(id)) {
-    if (s.item && s.item.id === id) {
-      if (s.item.count >= ITEMS[id].cap) return;
-      s.storage.splice(index, 1);
-      s.item.count++;
-      return;
-    }
-    s.storage.splice(index, 1);
-    if (s.item) for (let i = 0; i < s.item.count; i++) s.storage.push(s.item.id);
-    s.item = { id, count: 1 };
-  }
-}
-
-// Fill the item slot with as many of one consumable from storage as it holds,
+// Fill one item slot with as many of a consumable from storage as it holds,
 // sending a different item that was there back to storage. Returns false if
 // nothing could move (the slot already holds a full stack of it).
-export function equipStack(s: SaveData, id: ItemId): boolean {
-  if (s.item && s.item.id !== id) unequipItem(s);
+export function equipStack(s: SaveData, id: ItemId, slot = itemSlotFor(s, id) ?? 0): boolean {
+  if (s.items[slot] && s.items[slot]!.id !== id) unequipItem(s, slot);
   let moved = false;
-  while (s.storage.includes(id) && (!s.item || s.item.count < ITEMS[id].cap)) {
+  while (s.storage.includes(id)) {
+    const it = s.items[slot];
+    if (it && it.count >= ITEMS[id].cap) break;
     s.storage.splice(s.storage.indexOf(id), 1);
-    if (s.item) s.item.count++;
-    else s.item = { id, count: 1 };
+    if (it) it.count++;
+    else s.items[slot] = { id, count: 1 };
     moved = true;
   }
   return moved;
 }
 
-export function unequipItem(s: SaveData) {
-  if (!s.item) return;
-  for (let i = 0; i < s.item.count; i++) s.storage.push(s.item.id);
-  s.item = null;
+// Move one storage entry into the slot it would naturally go in, swapping
+// out whatever was there. Returns false if it had nowhere to go.
+export function equipFromStorage(s: SaveData, index: number): boolean {
+  const id = s.storage[index];
+  if (isWeapon(id)) {
+    s.storage.splice(index, 1);
+    equipWeapon(s, id);
+    return true;
+  }
+  if (isItem(id)) {
+    const slot = itemSlotFor(s, id) ?? 0;
+    const it = s.items[slot];
+    if (it && it.id === id && it.count >= ITEMS[id].cap) return false;
+    s.storage.splice(index, 1);
+    if (it && it.id === id) { it.count++; return true; }
+    unequipItem(s, slot);
+    s.items[slot] = { id, count: 1 };
+    return true;
+  }
+  return false;
 }
 
-export const sellPrice = (id: string) => Math.floor(defOf(id).price / 2);
+// --- Selling -------------------------------------------------------------
+
+// Credits spent upgrading a weapon to its current level.
+export function upgradeSpend(s: SaveData, id: WeaponId) {
+  let total = 0;
+  for (let lv = 2; lv <= weaponLevel(s, id); lv++) total += weaponUpgradePrice(lv);
+  return total;
+}
+
+// Half of what it cost, upgrades included.
+export const sellPrice = (s: SaveData, id: string) =>
+  Math.floor((defOf(id).price + (isWeapon(id) ? upgradeSpend(s, id) : 0)) / 2);
 
 export function sellFromStorage(s: SaveData, index: number) {
   const [id] = s.storage.splice(index, 1);
-  if (id) s.credits += sellPrice(id);
+  if (!id) return;
+  s.credits += sellPrice(s, id);
+  // Weapons are one of a kind, so a sold one forgets its upgrades.
+  if (isWeapon(id)) delete s.weaponLevels[id];
 }
 
-export const weaponDef = (s: SaveData) => WEAPONS[s.weapon];
+// --- Base vendor upgrades ------------------------------------------------
+
+export const MAX_HEALTH_CAP = 10;
+export const MAX_WEAPON_SLOTS = 2;
+export const MAX_ITEM_SLOTS = 3;
+
+// Placeholder prices for playtesting. Slot prices match the Ship screen.
+export const weaponUpgradePrice = (nextLevel: number) => 100 * nextLevel;
+export const hullPrice = (s: SaveData) => 100 * (s.maxHealth - 4);
+export const weaponSlotPrice = (n: number) => [0, 600][n] ?? 0;
+export const itemSlotPrice = (n: number) => [0, 300, 1000][n] ?? 0;
+
+export interface Upgrade {
+  key: string;
+  name: string;
+  detail: string; // short note after the price, at most 6 characters
+  desc: string;
+  icon: string;
+  price: number;
+  apply: (s: SaveData) => void;
+}
+
+// What the Base vendor's Upgrade tab offers right now. Each kind shows only
+// its next step, so a bought upgrade is replaced by the one after it.
+export function upgradesFor(s: SaveData): Upgrade[] {
+  const list: Upgrade[] = [];
+  if (s.maxHealth < MAX_HEALTH_CAP) {
+    list.push({
+      key: 'hull', name: 'HULL PLATE', detail: `HP ${s.maxHealth}>${s.maxHealth + 1}`, icon: 'icon_hull',
+      desc: `+1 MAX HEALTH, UP TO ${MAX_HEALTH_CAP}.`,
+      price: hullPrice(s), apply: (st) => { st.maxHealth++; },
+    });
+  }
+  if (s.weapons.length < MAX_WEAPON_SLOTS) {
+    const n = s.weapons.length;
+    list.push({
+      key: 'wslot', name: `WEAPON SLOT ${n + 1}`, detail: '', icon: 'slotWeaponSmall',
+      desc: 'BOTH EQUIPPED WEAPONS FIRE AT THE SAME TIME.',
+      price: weaponSlotPrice(n), apply: (st) => { st.weapons.push(null); },
+    });
+  }
+  if (s.items.length < MAX_ITEM_SLOTS) {
+    const n = s.items.length;
+    list.push({
+      key: 'islot', name: `ITEM SLOT ${n + 1}`, detail: '', icon: 'slotItemSmall',
+      desc: 'ONE MORE ITEM, WITH ITS OWN BUTTON IN FLIGHT.',
+      price: itemSlotPrice(n), apply: (st) => { st.items.push(null); },
+    });
+  }
+  // Every weapon the player owns, equipped or stored.
+  const owned = [...new Set([...equippedWeapons(s), ...s.storage.filter(isWeapon)])];
+  for (const id of owned) {
+    const lv = weaponLevel(s, id);
+    if (lv >= MAX_WEAPON_LEVEL) continue;
+    list.push({
+      key: `wlv:${id}`, name: WEAPONS[id].name, detail: `LV ${lv}>${lv + 1}`, icon: WEAPONS[id].icon,
+      desc: lv + 1 === 3 || lv + 1 === 5 ? `MORE DAMAGE AND ${signature(id, lv + 1)}` : 'MORE DAMAGE PER SHOT.',
+      price: weaponUpgradePrice(lv + 1), apply: (st) => { st.weaponLevels[id] = lv + 1; },
+    });
+  }
+  return list;
+}
+
+function signature(id: WeaponId, lv: number) {
+  const before = WEAPONS[id].stats(lv - 1);
+  const after = WEAPONS[id].stats(lv);
+  if (after.shots.length > before.shots.length) return `${after.shots.length} SHOTS AT ONCE.`;
+  return 'A FASTER FIRE RATE.';
+}
