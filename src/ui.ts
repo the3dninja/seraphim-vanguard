@@ -76,3 +76,27 @@ export function starfield(scene: Phaser.Scene) {
     near.tilePositionY -= 18 * speed * dt;
   };
 }
+
+// A modal list to pick one of several things (each with an icon), or cancel
+// (answers -1). Blocks taps on everything behind it.
+export function choose(scene: Phaser.Scene, title: string, options: { label: string; icon: string }[], onPick: (i: number) => void) {
+  const layer = scene.add.container(0, 0).setDepth(2000);
+  const rowH = 20;
+  const shown = options.slice(0, 8);
+  const h = 34 + shown.length * rowH + 26;
+  const top = Math.round(H / 2 - h / 2);
+  const shade = scene.add.rectangle(0, 0, W, H, 0x000000, 0.75).setOrigin(0).setInteractive();
+  const panel = scene.add.rectangle(8, top, W - 16, h, 0xfcfcfc).setOrigin(0);
+  const inner = scene.add.rectangle(9, top + 1, W - 18, h - 2, 0x000000).setOrigin(0);
+  const q = text(scene, W / 2, top + 8, title).setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(W - 32);
+  layer.add([shade, panel, inner, q]);
+  const done = (i: number) => { layer.destroy(); onPick(i); };
+  shown.forEach((o, i) => {
+    const y = top + 28 + i * rowH;
+    layer.add(button(scene, 14, y, W - 28, rowH - 3, '', () => done(i)));
+    layer.add(scene.add.image(24, y + (rowH - 3) / 2, o.icon));
+    layer.add(text(scene, 33, y + 5, o.label));
+  });
+  layer.add(button(scene, 14, top + h - 24, W - 28, 18, 'CANCEL', () => done(-1), COLOR.gray));
+  return layer;
+}

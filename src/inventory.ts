@@ -1,6 +1,6 @@
 import {
-  GEAR, ITEMS, MAX_GEAR_LEVEL, MAX_WEAPON_LEVEL, WEAPONS, defOf, gearStats, isGear, isItem, isWeapon,
-  type GearId, type ItemId, type WeaponId,
+  GEAR, ITEMS, KITS, MAX_GEAR_LEVEL, MAX_WEAPON_LEVEL, WEAPONS, defOf, gearStats, isGear, isItem, isWeapon,
+  type GearId, type ItemId, type KitId, type WeaponId,
 } from './data/items';
 import type { SaveData } from './save';
 
@@ -244,4 +244,20 @@ function signature(id: WeaponId, lv: number) {
   const after = WEAPONS[id].stats(lv);
   if (after.shots.length > before.shots.length) return `${after.shots.length} SHOTS AT ONCE.`;
   return 'A FASTER FIRE RATE.';
+}
+
+// --- Upgrade Kits ----------------------------------------------------------
+
+// What a kit can raise: weapons or gear the player owns (equipped or stored)
+// that aren't at level 5 yet.
+export function kitTargets(s: SaveData, kit: KitId): (WeaponId | GearId)[] {
+  if (KITS[kit].target === 'weapon') {
+    return [...new Set([...equippedWeapons(s), ...s.storage.filter(isWeapon)])].filter((w) => weaponLevel(s, w) < MAX_WEAPON_LEVEL);
+  }
+  return [...new Set([...equippedGear(s), ...s.storage.filter(isGear)])].filter((g) => gearLevel(s, g) < MAX_GEAR_LEVEL);
+}
+
+export function applyKit(s: SaveData, target: WeaponId | GearId) {
+  if (isWeapon(target)) s.weaponLevels[target] = Math.min(MAX_WEAPON_LEVEL, weaponLevel(s, target) + 1);
+  else s.gearLevels[target] = Math.min(MAX_GEAR_LEVEL, gearLevel(s, target) + 1);
 }
