@@ -13,19 +13,19 @@ interface ShipData {
 type Kind = 'weapon' | 'item' | 'gear';
 type Filter = Kind | 'all';
 
-// Slots around the big ship: weapons near the nose and wings, items along the
-// sides, gear near the engines. `n` is the slot's number within its kind.
+// Slots around the big ship: weapons near the nose, gear on the sides, items
+// in a row along the bottom. `n` is the slot's number within its kind.
 // Prices are what a locked slot will cost at the Base vendor (placeholders).
 interface SlotDef { kind: Kind; n: number; x: number; y: number; price: number }
 const SLOT = 22;
 const SLOTS: SlotDef[] = [
   { kind: 'weapon', n: 0, x: 44, y: 32, price: 0 },
   { kind: 'weapon', n: 1, x: W - 44 - SLOT, y: 32, price: 600 },
-  { kind: 'item', n: 0, x: 32, y: 66, price: 0 },
-  { kind: 'item', n: 1, x: W - 32 - SLOT, y: 66, price: 300 },
-  { kind: 'item', n: 2, x: W / 2 - SLOT / 2, y: 110, price: 1000 },
-  { kind: 'gear', n: 0, x: 40, y: 106, price: 600 },
-  { kind: 'gear', n: 1, x: W - 40 - SLOT, y: 106, price: 1000 },
+  { kind: 'gear', n: 0, x: 32, y: 66, price: 600 },
+  { kind: 'gear', n: 1, x: W - 32 - SLOT, y: 66, price: 1000 },
+  { kind: 'item', n: 0, x: W / 2 - SLOT / 2 - 32, y: 110, price: 0 },
+  { kind: 'item', n: 1, x: W / 2 - SLOT / 2, y: 110, price: 300 },
+  { kind: 'item', n: 2, x: W / 2 - SLOT / 2 + 32, y: 110, price: 1000 },
 ];
 
 const TABS: { f: Filter; label: string }[] = [
