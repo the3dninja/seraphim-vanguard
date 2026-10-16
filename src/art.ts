@@ -772,6 +772,7 @@ export function generateArt(scene: Phaser.Scene) {
   makeRock(scene, 'pebble', 4, 4, 11);
   makeRock(scene, 'boulder', 7, 7, 23, ['#bcbcbc', '#7c7c7c', '#503000', '#2c1800']);
   makeRock(scene, 'rockjaw', 34, 22, 5);
+  makeRock(scene, 'frostjaw', 34, 22, 5, ['#fcfcfc', '#a4e4fc', '#3cbcfc', '#0058f8']); // a side mission's icy Rockjaw
   for (const [key, kind, colors] of NODES) makeNode(scene, key, kind, colors);
   makeSceneries(scene);
   makePlanet(scene, 'planet', 34, ['#0058f8', '#3cbcfc', '#0058f8', '#0000bc', '#3cbcfc', '#0058f8', '#0000bc'], '#000058');

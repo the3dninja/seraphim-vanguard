@@ -29,4 +29,4 @@ export const shipIn = (g: GameScene, x: number, y: number, hw: number, hh: numbe
   Math.abs(g.player.x - x) < hw && Math.abs(g.player.y - y) < hh;
 
 // Side missions bring back a mini boss in a new color, with more or less health.
-export interface BossOpts { tint?: number; hp?: number }
+export interface BossOpts { tint?: number; hp?: number; skin?: string } // skin: the body's texture

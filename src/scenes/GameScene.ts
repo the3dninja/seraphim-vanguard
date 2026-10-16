@@ -16,6 +16,8 @@ import { HollowMind } from '../hollowmind';
 import { Sporeheart } from '../sporeheart';
 import { Wyrm } from '../wyrm';
 import { Barriers, Tunnel } from '../heart';
+import { SideHazards } from '../sidehaz';
+import { sideById } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
 
@@ -68,6 +70,7 @@ const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
   voss: 'EMPEROR VOSS', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
   sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRM',
+  frostjaw: 'FROSTJAW', hollowwatcher: 'HOLLOW WATCHER', broodmother: 'BROOD MATRIARCH',
 };
 const EGG_HATCH = 5500; // ms before an egg hatches into larvae
 const GEAR_KEYS = ['Q', 'E'];
@@ -130,6 +133,8 @@ export class GameScene extends Phaser.Scene {
   private fog: Phaser.GameObjects.TileSprite | null = null;
   private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private segBossDone = false; // this segment's mini boss is beaten
+  private side: string | null = null; // the side mission being flown, if any
+  private sideHaz!: SideHazards;
 
   phase: Phase = 'action';
   private segment = 0;
@@ -190,10 +195,12 @@ export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   // `resume` comes from a Rewind Beacon: restart at a checkpoint instead of the level start.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number } }) {
+  // `side` names a side mission to fly instead of the next level.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
-    this.level = LEVELS[this.state.level - 1];
+    this.side = data.side ?? null;
+    this.level = (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
     this.checkpoint = data.resume ? { save: cloneSave(data.resume.save), segment: data.resume.segment } : { save: cloneSave(data.state), segment: 0 };
     this.rewound = !!data.resume;
     this.maxHp = totalMaxHealth(this.state);
@@ -268,6 +275,7 @@ export class GameScene extends Phaser.Scene {
     this.beams = this.add.graphics().setDepth(12);
     this.act3 = new Act3Hazards(this);
     this.barriers = new Barriers(this);
+    this.sideHaz = new SideHazards(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
@@ -302,13 +310,13 @@ export class GameScene extends Phaser.Scene {
     this.createHud();
 
     const intro = [
-      text(this, W / 2, H / 2 - 40, `LEVEL ${this.state.level}`, COLOR.gray),
+      text(this, W / 2, H / 2 - 40, this.side ? 'SIDE MISSION' : `LEVEL ${this.state.level}`, this.side ? COLOR.cyan : COLOR.gray),
       text(this, W / 2, H / 2 - 26, this.level.name, COLOR.white),
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
     this.tweens.add({ targets: intro, alpha: 0, delay: 1800, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
-    const call = RADIO[this.state.level];
+    const call = this.side ? undefined : RADIO[this.state.level];
     if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
     if (equippedGear(this.state).some((g) => GEAR[g].active)) this.time.delayedCall(3000, () => this.tipOnce('gearbtn', 'TAP A GEAR BUTTON\nTO USE IT'));
 
@@ -440,7 +448,8 @@ export class GameScene extends Phaser.Scene {
     }
     // Gravity wells drag the ship toward them.
     const pull = this.act3.pull(dt);
-    mx += pull.x + this.bossPull.x * dt;
+    const wind = this.sideHaz.pull(dt);
+    mx += pull.x + wind.x + this.bossPull.x * dt;
     my += pull.y + this.bossPull.y * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
     const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
@@ -1289,6 +1298,7 @@ export class GameScene extends Phaser.Scene {
       else if (hz.kind === 'fence') this.spawnFence();
       else if (hz.kind === 'debris' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
       else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier');
+      else if (['press', 'gust', 'ember', 'blackout', 'sweep'].includes(hz.kind)) this.sideHaz.spawn(hz.kind);
       else this.act3.spawn(hz.kind);
     });
   }
@@ -1473,6 +1483,7 @@ export class GameScene extends Phaser.Scene {
     this.flareGlow.setFillStyle(0xf8b800, 0);
     this.act3.clear();
     this.barriers.clear();
+    this.sideHaz.clear();
   }
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
@@ -2015,7 +2026,7 @@ export class GameScene extends Phaser.Scene {
       });
       this.time.delayedCall(2600, () => {
         this.cameras.main.fadeOut(400);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment } }));
+        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment }, side: this.side ?? undefined }));
       });
       return;
     }
@@ -2042,6 +2053,9 @@ export class GameScene extends Phaser.Scene {
       mind: () => new HollowMind(this, done),
       sporeheart: () => new Sporeheart(this, done),
       wyrm: () => new Wyrm(this, done),
+      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.4 }),
+      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 1.3 }),
+      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 1.1 }),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
@@ -2306,9 +2320,18 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'clear';
     this.enemyBullets.clear(true, true);
     this.clearTimedHazards();
-    const last = this.state.level === LEVELS.length;
+    const last = !this.side && this.state.level === LEVELS.length;
     this.gatherCoins(() => {
       if (last) { this.ending(); return; }
+      if (this.side) {
+        // Side missions don't move the ship on: back to Base, one more beaten.
+        text(this, W / 2, H / 2 - 16, 'SIDE MISSION CLEAR', COLOR.yellow).setOrigin(0.5).setDepth(1000);
+        text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
+        this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+        if (!this.state.sides.includes(this.side)) this.state.sides.push(this.side);
+        this.time.delayedCall(2800, () => this.leaveTo('Base', this.state));
+        return;
+      }
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
       this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
@@ -2400,6 +2423,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.barriers.update(edt);
+    this.sideHaz.update(edt);
     this.updateGear(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);

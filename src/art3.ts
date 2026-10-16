@@ -545,4 +545,18 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
   makeSporeCloud(scene);
   makeSceneries3(scene);
   makePlanet('blightworld', 26, ['#58d854', '#9878f8', '#00a800', '#6844fc'], '#1c1c3c');
+  // Side mission moons on the star map: small, each colored for its locale.
+  const moons: [string, string[], string][] = [
+    ['moon_rust', ['#fca044', '#c84c0c', '#7c2c00'], '#4c1800'],
+    ['moon_frost', ['#fcfcfc', '#a4e4fc', '#3cbcfc'], '#0058f8'],
+    ['moon_glacier', ['#a4e4fc', '#3cbcfc', '#bcbcbc'], '#3c3c7c'],
+    ['moon_storm', ['#f8b800', '#d82800', '#fc7460'], '#4c0010'],
+    ['moon_relay', ['#bcbcbc', '#7c7c7c', '#3cbcfc'], '#3c3c3c'],
+    ['moon_eclipse', ['#3c3c3c', '#7c7c7c', '#3c3c3c'], '#000000'],
+    ['moon_armory', ['#9878f8', '#6844fc', '#f8b800'], '#3c1c7c'],
+    ['moon_drift', ['#58d854', '#3cbcfc', '#00a800'], '#005800'],
+    ['moon_mirror', ['#fcfcfc', '#9878f8', '#3c1c7c'], '#1c1c3c'],
+    ['moon_nursery', ['#f878f8', '#d800cc', '#58d854'], '#4c0040'],
+  ];
+  for (const [key, bands, shadow] of moons) makePlanet(key, 6, bands, shadow);
 }
