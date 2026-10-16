@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { W } from './config';
-import { bossDeath, shipIn, shotsIn } from './bossfx';
+import { bossDeath, shipIn, shotsIn, type BossOpts } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 
 const HOME_Y = 62;
-const MAX_HP = 200;
-const REGEN = 7; // health a second while she isn't being hit
+const MAX_HP = 600;
+const REGEN = 20; // health a second while she isn't being hit
 const REGEN_AFTER = 1500; // ms without a hit before she starts healing
 const REWARD = 150;
 
@@ -17,7 +17,8 @@ type Mode = 'spawn' | 'shoot' | 'warn' | 'charge' | 'return';
 export class BroodQueen {
   private x = W / 2;
   private y = -30;
-  private hp = MAX_HP;
+  private max: number;
+  private hp: number;
   private t = 0;
   private entering = true;
   private dead = false;
@@ -28,15 +29,18 @@ export class BroodQueen {
   private target = { x: 0, y: 0 };
   private img: Phaser.GameObjects.Image;
 
-  constructor(private g: GameScene, private onDefeated: () => void) {
+  constructor(private g: GameScene, private onDefeated: () => void, opts: BossOpts = {}) {
+    this.max = MAX_HP * (opts.hp ?? 1);
+    this.hp = this.max;
     this.img = g.add.image(this.x, this.y, 'queen').setDepth(9.9); // in front of the dark
+    if (opts.tint) this.img.setData('baseTint', opts.tint).setTint(opts.tint);
     g.tweens.add({
       targets: this, y: HOME_Y, duration: 2000, ease: 'Sine.easeOut', delay: 500,
       onComplete: () => { this.entering = false; this.lastHit = g.time.now; },
     });
   }
 
-  healthFraction() { return Math.max(0, this.hp) / MAX_HP; }
+  healthFraction() { return Math.max(0, this.hp) / this.max; }
 
   aimPoint() { return this.dead ? null : { x: this.x, y: this.y }; }
 
@@ -85,7 +89,7 @@ export class BroodQueen {
         break;
       case 'warn':
         this.img.setTint(Math.floor(this.modeT / 80) % 2 ? 0xfc7460 : 0xffffff);
-        if (this.modeT > 700) { this.img.clearTint(); this.setMode('charge'); }
+        if (this.modeT > 700) { this.g.restTint(this.img); this.setMode('charge'); }
         break;
       case 'charge': {
         const a = Phaser.Math.Angle.Between(this.x, this.y, this.target.x, this.target.y);
@@ -102,12 +106,12 @@ export class BroodQueen {
     }
 
     // She heals if left alone.
-    if (g.time.now - this.lastHit > REGEN_AFTER && this.hp < MAX_HP) {
-      this.hp = Math.min(MAX_HP, this.hp + REGEN * dt);
+    if (g.time.now - this.lastHit > REGEN_AFTER && this.hp < this.max) {
+      this.hp = Math.min(this.max, this.hp + REGEN * (this.max / MAX_HP) * dt);
       if (Math.floor(this.t / 400) % 2 === 0 && this.mode !== 'warn') this.img.setTint(0x58d854);
-      else if (this.mode !== 'warn') this.img.clearTint();
+      else if (this.mode !== 'warn') this.g.restTint(this.img);
       g.tipOnce('regen', 'KEEP HITTING HER\nOR SHE HEALS');
-    } else if (this.mode !== 'warn') this.img.clearTint();
+    } else if (this.mode !== 'warn') this.g.restTint(this.img);
 
     if (shipIn(g, this.x, this.y, 18, 11)) g.hurt();
   }

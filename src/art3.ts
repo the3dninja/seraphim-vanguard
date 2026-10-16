@@ -264,6 +264,49 @@ function makeMindCore(scene: Phaser.Scene) {
   });
 }
 
+// The Hollow Mind split open (phase 4): the folds peel back into a maw ringed
+// with teeth, and a huge slit-pupiled eye stares out of it.
+function makeMindMaw(scene: Phaser.Scene) {
+  const w = 44, h = 40;
+  canvas(scene, 'mindmaw', w, h, (px) => {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const nx = (x - w / 2 + 0.5) / (w / 2), ny = (y - h / 2 + 0.5) / (h / 2);
+        const d = Math.hypot(nx, ny);
+        if (d > 1) continue;
+        const maw = Math.hypot(nx / 0.78, ny / 0.9); // the opening
+        let c: string;
+        if (maw < 0.82) c = maw < 0.6 ? '#1c0004' : '#4c0010';
+        else if (maw < 0.95) {
+          // Teeth around the rim, pointing inward.
+          const a = Math.atan2(ny, nx);
+          const tooth = Math.abs(Math.sin(a * 9)) > 0.45 - (0.95 - maw) * 3;
+          c = tooth ? '#fcfcfc' : '#881400';
+        } else {
+          const fold = Math.sin(nx * 9 + Math.sin(ny * 6) * 2) + Math.sin(ny * 11 + nx * 3);
+          c = fold > 0.6 ? '#f878f8' : fold > -0.4 ? '#d82800' : '#881400';
+          if (d > 0.93) c = '#4c0010';
+        }
+        px(x, y, c);
+      }
+    }
+    // The eye.
+    const cx = w / 2 - 0.5, cy = h / 2 - 0.5;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const e = Math.hypot((x - cx) / 9, (y - cy) / 6.5);
+        if (e > 1) continue;
+        const iris = Math.hypot((x - cx) / 5, (y - cy) / 5.5);
+        let c = '#fce0a8';
+        if (iris < 1) c = iris < 0.75 ? '#f8b800' : '#d82800';
+        if (Math.abs(x - cx) < 1 && iris < 0.95) c = '#000000';
+        if (e > 0.85) c = '#881400';
+        px(x, y, c);
+      }
+    }
+  });
+}
+
 // A dotted ring: the Voss shield and the Hollow Mind's membrane.
 function makeRing3(scene: Phaser.Scene, key: string, rx: number, ry: number, colors: string[], thick = 1.2) {
   canvas(scene, key, rx * 2 + 1, ry * 2 + 1, (px) => {
@@ -407,6 +450,7 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
   makeCreature(scene, 'parasite', 36, 26, ['#58d854', '#00a800', '#005800', '#d800cc'], 1, 3);
   makeCreature(scene, 'queen', 42, 28, ['#f878f8', '#d800cc', '#a40080', '#58d854'], 3, 9);
   makeMindCore(scene);
+  makeMindMaw(scene);
   makeRing3(scene, 'vshield', 32, 18, ['#fcfcfc', '#9878f8']);
   makeRing3(scene, 'membrane', 23, 21, ['#f878f8', '#a40080'], 2.5);
   makeDarkness(scene);

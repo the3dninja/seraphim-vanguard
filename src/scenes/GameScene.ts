@@ -109,6 +109,11 @@ export class GameScene extends Phaser.Scene {
   private slide = { x: 0, y: 0 }; // ship velocity, which lags behind the controls on ice
   beams!: Phaser.GameObjects.Graphics; // Lancer and boss lasers, redrawn every frame
   sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private goo!: Phaser.GameObjects.Particles.ParticleEmitter; // Plasma Lobber splashes
+  private blobHitAt = -1; // when a boss last took a Plasma Lobber hit, so its flash shows it
+  // Each player shot's damage, type and look, kept outside the shot itself:
+  // bosses read it after destroying the shot, when its data is already gone.
+  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean }>();
   private scroll!: ReturnType<typeof starfield>;
   private scenery: Phaser.GameObjects.TileSprite | null = null;
   private planet: Phaser.GameObjects.Image | null = null;
@@ -129,6 +134,7 @@ export class GameScene extends Phaser.Scene {
   private zaps: Zap[] = [];
   private allies: Ally[] = [];
   private riftOpen = 0; // 0 to 1: how far the rift has torn open (level 11 cutscene)
+  bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
 
   // Gear
   private maxHp = 5;
@@ -188,6 +194,7 @@ export class GameScene extends Phaser.Scene {
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
+    this.bossPull = { x: 0, y: 0 };
     this.sats = [];
     this.satTimer = 0;
     this.deflect = 0;
@@ -258,6 +265,10 @@ export class GameScene extends Phaser.Scene {
     this.sparks = this.add.particles(0, 0, 'px', {
       speed: { min: 20, max: 90 }, lifespan: { min: 200, max: 500 }, scale: { start: 1, end: 0 },
       tint: [0xfcfcfc, 0xf8b800, 0xd82800], emitting: false,
+    }).setDepth(20);
+    this.goo = this.add.particles(0, 0, 'px', {
+      speed: { min: 30, max: 110 }, lifespan: { min: 250, max: 520 }, scale: { start: 1, end: 0.3 }, gravityY: 60,
+      tint: [0xfcfcfc, 0x58d854, 0x58d854, 0x00a800], emitting: false,
     }).setDepth(20);
 
     const img = (o: unknown) => o as Phaser.Physics.Arcade.Image;
@@ -385,8 +396,8 @@ export class GameScene extends Phaser.Scene {
     }
     // Gravity wells drag the ship toward them.
     const pull = this.act3.pull(dt);
-    mx += pull.x;
-    my += pull.y;
+    mx += pull.x + this.bossPull.x * dt;
+    my += pull.y + this.bossPull.y * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
     const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
     // Sliding into the edge of the screen stops the slide that way.
@@ -1372,9 +1383,11 @@ export class GameScene extends Phaser.Scene {
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
     if (!b.active || !h.active || b.getData('fx') === 'wave') return; // the Wave Beam passes through cover
+    const dmg = (b.getData('dmg') as number) ?? 1;
     b.destroy();
+    this.plasmaSplash(b);
     if (h.getData('kind') === 'debris' || h.getData('kind') === 'shelter') { this.tink(b.x, b.y); return; }
-    const hp = (h.getData('hp') as number) - ((b.getData('dmg') as number) ?? 1);
+    const hp = (h.getData('hp') as number) - dmg;
     h.setData('hp', hp);
     if (hp > 0) { this.flash(h); return; }
     this.sparks.explode(8, h.x, h.y);
@@ -1535,6 +1548,7 @@ export class GameScene extends Phaser.Scene {
   private shot(x: number, y: number, texture: string, deg: number, speed: number, dmg: number, dtype: DType) {
     const b = this.playerBullets.create(x, y, texture) as Phaser.Physics.Arcade.Image;
     b.setData('dmg', dmg).setData('dtype', dtype).setData('t', 0);
+    this.shotInfo.set(b, { dmg, dtype, blob: texture === 'blob' });
     const rad = Phaser.Math.DegToRad(deg - 90);
     b.setVelocity(Math.cos(rad) * speed, Math.sin(rad) * speed);
     b.setRotation(Phaser.Math.DegToRad(deg));
@@ -1643,8 +1657,29 @@ export class GameScene extends Phaser.Scene {
   }
 
   flash(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    if (this.blobHitAt === this.time.now) { this.plasmaFlash(o); return; }
     o.setTintFill(0xffffff);
-    this.time.delayedCall(50, () => o.active && o.clearTint());
+    this.time.delayedCall(50, () => o.active && this.restTint(o));
+  }
+
+  // Back to normal after a flash: no tint, or a side mission boss's own color.
+  restTint(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    const base = o.getData('baseTint') as number | undefined;
+    if (base) o.setTint(base);
+    else o.clearTint();
+  }
+
+  // A Plasma Lobber hit: the target flashes white and green a few times.
+  private plasmaFlash(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    [0xffffff, 0x58d854, 0xffffff, 0x58d854].forEach((c, i) => this.time.delayedCall(i * 45, () => o.active && o.setTintFill(c)));
+    this.time.delayedCall(180, () => o.active && this.restTint(o));
+  }
+
+  // Green goo spraying off whatever a Plasma Lobber blob hits.
+  private plasmaSplash(b: Phaser.GameObjects.Image, x = b.x, y = b.y) {
+    if (!this.shotInfo.get(b)?.blob) return false;
+    this.goo.explode(9, x, y);
+    return true;
   }
 
   // A shot that can't hurt what it hit: a small gray spark.
@@ -1663,7 +1698,9 @@ export class GameScene extends Phaser.Scene {
 
   // What a player shot does to a boss part with these weaknesses.
   shotDamage(b: Phaser.GameObjects.Image, weak: DType[], resist: DType[]) {
-    return this.typedDamage((b.getData('dmg') as number) ?? 1, (b.getData('dtype') as DType) ?? 'kinetic', weak, resist);
+    if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
+    const info = this.shotInfo.get(b);
+    return this.typedDamage(info?.dmg ?? 1, info?.dtype ?? 'kinetic', weak, resist);
   }
 
   private hitEnemy(b: Phaser.Physics.Arcade.Image, e: Phaser.Physics.Arcade.Sprite) {
@@ -1695,6 +1732,7 @@ export class GameScene extends Phaser.Scene {
     const burn = b.getData('burn') as number | undefined;
     if (burn) { d.burn = 2000; d.burnDmg = burn; d.burnTick = Math.min(d.burnTick || 400, 400); }
     const dead = this.damageEnemy(e, dmg, dtype);
+    if (this.plasmaSplash(b, (b.x + e.x) / 2, (b.y + e.y) / 2) && !dead) this.plasmaFlash(e);
     if (b.getData('fx') === 'arc') this.chainArc(e, dmg, dtype);
     if (b.getData('splash')) this.splash(e.x, e.y, b.getData('splash') as number, dmg / 2, dtype, dead ? null : e);
   }
@@ -1931,6 +1969,7 @@ export class GameScene extends Phaser.Scene {
     this.bossBar?.destroy();
     this.bossName?.destroy();
     this.bossBar = null;
+    this.bossPull = { x: 0, y: 0 };
     this.enemyBullets.clear(true, true);
     const big = ['dreadnought', 'voss', 'mind'].includes(this.level.boss!);
     // Wait for the gold to drop before gathering it up.
@@ -2012,7 +2051,12 @@ export class GameScene extends Phaser.Scene {
               this.clearForCutscene();
               this.phase = 'vendor';
               this.scene.pause();
-              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {} });
+              const repair = {
+                health: () => this.health,
+                max: this.maxHp,
+                heal: (n: number) => { this.health = Math.min(this.maxHp, this.health + n); },
+              };
+              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair });
             });
           },
         });
