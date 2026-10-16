@@ -1,11 +1,11 @@
 export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'driller' | 'lancer' | 'bulwark'
-  | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk';
+  | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk' | 'egg' | 'larva';
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
 // Drillers come in from the side `x` names instead of the top (pair = one from each side).
 export type Pattern = 'line' | 'column' | 'vee' | 'pair' | 'single' | 'swarm';
 export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' | 'nebula' | 'forge' | 'relay'
-  | 'blight' | 'throne' | 'deep' | 'rift' | 'reef' | 'bloom' | 'gate' | 'heart';
+  | 'blight' | 'throne' | 'deep' | 'rift' | 'reef' | 'bloom' | 'gate' | 'heart' | 'mist';
 // shard: falling ice. patch: an ice sheet that makes the ship slide. turret: a
 // capital ship gun that leans in from the screen edge and fires a burst.
 // lightning: a column flashes, then a bolt strikes down it. flare: a sweep of
@@ -16,10 +16,11 @@ export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' |
 // a gravity well that pulls the ship and bends shots. wall: living coral that
 // grows in from the side (shooting it cuts it back). tentacle: flickers at the
 // edge, then sweeps across the screen. artery: a pulsing vessel that bursts
-// into shots.
+// into shots. Level 15 (see heart.ts): barrier: a wall of fleshy cells across
+// the screen that has to be shot through. growth: a short piece of one.
 export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lightning' | 'flare' | 'fence'
-  | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery';
-export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind';
+  | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery' | 'barrier' | 'growth';
+export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm';
 export interface HazardSpec { kind: HazardKind; every: [number, number] }
 
 export interface Wave {
@@ -47,6 +48,14 @@ export interface LevelDef {
   riftAfter?: number;
   allies?: number; // wingmen flying with the ship (act 3)
   dark?: boolean; // only a pool of light around the ship (level 13)
+  // Level 15: segments run straight into each other with no vendor stop.
+  vendorless?: boolean;
+  segmentThemes?: Theme[]; // per segment, in place of `theme`
+  segmentBoss?: (BossKind | undefined)[]; // a mini boss at the end of a segment
+  segmentRadio?: (string | undefined)[]; // a radio call as each segment starts
+  // The living tunnel: which segment flies through it, how long its narrow
+  // part runs (px) and where its chambers start.
+  tunnel?: { segment: number; len: number; chambers: number[] };
   // Star map "common enemies" for levels that aren't built yet. Built levels
   // count their own wave scripts instead.
   enemies?: [string, number][];
@@ -858,16 +867,35 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  // Level 15: one long run, as long as two level 12 to 14 legs, with no
-  // vendor and no allies. Everything at once, then the Hollow Mind.
+  // Level 15: the longest run, with no vendor and no allies, in five legs
+  // that run straight into each other. The heart, then a living tunnel that
+  // winds through chambers, then spore haze and the Sporeheart, then a nest of
+  // growths and eggs and the Brood Wyrm, and a last stretch to the Hollow Mind.
   {
     name: 'HEART OF THE HOLLOW',
-    desc: 'INSIDE THE HIVE MIND. NO VENDORS. NO ALLIES. END THIS.',
+    desc: 'THE LONGEST RUN. NO VENDORS, NO ALLIES. A LIVING TUNNEL, SPORE HAZE AND TWO GUARDIANS BEFORE THE MIND.',
     node: 'node_heart',
     theme: 'heart',
-    hazards: [
-      { kind: 'artery', every: [6000, 9000] }, { kind: 'tentacle', every: [9000, 13000] },
-      { kind: 'wall', every: [11000, 15000] }, { kind: 'well', every: [14000, 19000] },
+    vendorless: true,
+    segmentThemes: ['heart', 'heart', 'mist', 'mist', 'heart'],
+    segmentBoss: [undefined, undefined, 'sporeheart', 'wyrm'],
+    segmentRadio: [
+      undefined,
+      'REYES: IT\'S A PASSAGE.\nSTAY IN THE MIDDLE.',
+      'REYES: SPORES. I CAN\'T\nSEE A THING IN HERE.',
+      'VEX: EGGS IN THE\nGROWTH. BURN THEM.',
+      'REYES: THE MIND IS\nRIGHT AHEAD. GO!',
+    ],
+    tunnel: { segment: 1, len: 2400, chambers: [560, 1220, 1880] },
+    segmentHazards: [
+      [
+        { kind: 'artery', every: [6000, 9000] }, { kind: 'tentacle', every: [9000, 13000] },
+        { kind: 'wall', every: [11000, 15000] }, { kind: 'well', every: [14000, 19000] },
+      ],
+      [],
+      [{ kind: 'spores', every: [5000, 8000] }, { kind: 'tentacle', every: [10000, 14000] }, { kind: 'well', every: [13000, 18000] }],
+      [{ kind: 'barrier', every: [9000, 12000] }, { kind: 'growth', every: [4500, 7000] }],
+      [{ kind: 'artery', every: [5000, 8000] }, { kind: 'tentacle', every: [8000, 12000] }, { kind: 'wall', every: [10000, 14000] }],
     ],
     boss: 'mind',
     segments: [
@@ -896,26 +924,70 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'husk', pattern: 'single', x: 0.4 },
         { delay: 4000, kind: 'mimic', pattern: 'single', x: 0.5 },
         { delay: 2000, kind: 'tendril', pattern: 'pair', waitClear: true },
-        { delay: 2000, kind: 'spore', pattern: 'vee', count: 5, x: 0.25 },
-        { delay: 1500, kind: 'husk', pattern: 'single', x: 0.75 },
-        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.7 },
-        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.3 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.75, waitClear: true },
-        { delay: 3500, kind: 'spore', pattern: 'column', count: 5, x: 0.7 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.5 },
-        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.6 },
-        { delay: 2000, kind: 'brood', pattern: 'single', x: 0.25, waitClear: true },
-        { delay: 3500, kind: 'spore', pattern: 'vee', count: 5, x: 0.2 },
-        { delay: 2000, kind: 'tendril', pattern: 'single', x: 0.75 },
-        { delay: 1500, kind: 'husk', pattern: 'single', x: 0.5 },
-        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 4000, kind: 'mimic', pattern: 'line', count: 3, waitClear: true },
-        { delay: 4000, kind: 'brood', pattern: 'pair' },
-        { delay: 4000, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 3000, kind: 'husk', pattern: 'pair' },
-        { delay: 3000, kind: 'husk', pattern: 'pair' },
-        { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.4 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.3, waitClear: true },
+      ],
+      [
+        { delay: 3000, kind: 'spore', pattern: 'column', count: 4, x: 0.5 },
+        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'spore', pattern: 'column', count: 4, x: 0.3 },
+        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.7 },
+        { delay: 4000, kind: 'husk', pattern: 'pair' },
+        { delay: 3000, kind: 'spore', pattern: 'vee', count: 5, x: 0.5 },
+        { delay: 4000, kind: 'tendril', pattern: 'pair' },
+        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.5 },
+        { delay: 5000, kind: 'spore', pattern: 'column', count: 5, x: 0.6 },
+        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.4 },
+        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'tendril', pattern: 'pair' },
+        { delay: 4000, kind: 'mimic', pattern: 'single', x: 0.5 },
+        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.4 },
+        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.5 },
+        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 1500, kind: 'husk', pattern: 'pair' },
+        { delay: 3000, kind: 'larva', pattern: 'line', count: 5 },
+        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'tendril', pattern: 'pair' },
+        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.6 },
+        { delay: 4000, kind: 'spore', pattern: 'vee', count: 5, x: 0.5 },
+        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.4 },
+      ],
+      [
+        { delay: 3000, kind: 'spore', pattern: 'line', count: 5 },
+        { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.3 },
+        { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.75 },
+        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.7 },
+        { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.3 },
+        { delay: 3500, kind: 'mimic', pattern: 'pair' },
+        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.7, waitClear: true },
+        { delay: 2500, kind: 'tendril', pattern: 'pair' },
+        { delay: 1500, kind: 'spore', pattern: 'column', count: 5, x: 0.2 },
+        { delay: 2500, kind: 'husk', pattern: 'pair' },
+        { delay: 3500, kind: 'larva', pattern: 'swarm', count: 6, x: 0.1 },
+        { delay: 2000, kind: 'larva', pattern: 'swarm', count: 6, x: 0.9 },
+        { delay: 3000, kind: 'brood', pattern: 'pair', waitClear: true },
+        { delay: 2500, kind: 'mimic', pattern: 'line', count: 3, waitClear: true },
+      ],
+      [
+        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 3500, kind: 'larva', pattern: 'column', count: 5, x: 0.3 },
+        { delay: 3500, kind: 'husk', pattern: 'single', x: 0.7 },
+        { delay: 4000, kind: 'tendril', pattern: 'pair' },
+        { delay: 4000, kind: 'brood', pattern: 'single', x: 0.5, waitClear: true },
+        { delay: 3000, kind: 'larva', pattern: 'swarm', count: 6, x: 0.9 },
+        { delay: 3500, kind: 'spore', pattern: 'line', count: 5 },
+        { delay: 4000, kind: 'husk', pattern: 'single', x: 0.3 },
+        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3, waitClear: true },
+        { delay: 3000, kind: 'mimic', pattern: 'pair' },
+        { delay: 4000, kind: 'larva', pattern: 'column', count: 6, x: 0.7 },
+        { delay: 3500, kind: 'brood', pattern: 'single', x: 0.3 },
+        { delay: 4000, kind: 'tendril', pattern: 'pair' },
+        { delay: 3500, kind: 'husk', pattern: 'pair', waitClear: true },
+        { delay: 3000, kind: 'larva', pattern: 'swarm', count: 8, x: 0.1 },
+        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.6, waitClear: true },
+      ],
+      [
         { delay: 3000, kind: 'husk', pattern: 'pair' },
         { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.3 },
         { delay: 2500, kind: 'tendril', pattern: 'line', count: 3 },
@@ -928,10 +1000,6 @@ export const LEVELS: LevelDef[] = [
         { delay: 2500, kind: 'husk', pattern: 'single', x: 0.6, waitClear: true },
         { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 3000, kind: 'spore', pattern: 'vee', count: 7, x: 0.25 },
-        { delay: 2500, kind: 'husk', pattern: 'single', x: 0.5 },
-        { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.4 },
-        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.4, waitClear: true },
-        { delay: 2500, kind: 'brood', pattern: 'pair', waitClear: true },
       ],
     ],
   },

@@ -72,6 +72,40 @@ export const SPRITES3: Record<string, string[]> = {
     '..T.....N.....T..',
     '........T........',
   ],
+  // Level 15: eggs that hatch into larvae, and the Brood Wyrm and Sporeheart parts.
+  egg: ['..QQQQ..', '.QFFFFQ.', 'QFFMMFFQ', 'QFMTTMFQ', 'QFMTTMFQ', 'QFFMMFFQ', 'QFFFFFFQ', '.QFFFFQ.', '..QQQQ..'],
+  eggLit: ['..QQQQ..', '.QMMMMQ.', 'QMMFFMMQ', 'QMFWWFMQ', 'QMFWWFMQ', 'QMMFFMMQ', 'QMMMMMMQ', '.QMMMMQ.', '..QQQQ..'],
+  larva: ['.T...T.', '..TNT..', '.NTTTN.', 'NTRKRTN', '.NTTTN.', '..NTN..', '...N...'],
+  larvaLit: ['T.....T', '.T.N.T.', '.NTTTN.', 'NTRKRTN', '.NTTTN.', '.N.T.N.', '...N...'],
+  wyrmhead: [
+    '...QQQQQQQ...',
+    '..QFFFFFFFQ..',
+    '.QFMMMMMMMFQ.',
+    'QFMMTMMMTMMFQ',
+    'QFMWRMMMRWMFQ',
+    'QFMMMMMMMMMFQ',
+    '.QFMMMMMMMFQ.',
+    '.QFFMMMMMFFQ.',
+    '..QW.KKK.WQ..',
+    '..W..KKK..W..',
+    '.W.........W.',
+  ],
+  wyrmseg: ['..QQQQQ..', '.QFFFFFQ.', 'QFMMMMMFQ', 'QFMUMUMFQ', 'QFMMMMMFQ', 'QFMUMUMFQ', 'QFMMMMMFQ', '.QFFFFFQ.', '..QQQQQ..'],
+  petal: [
+    '....S....',
+    '...SNS...',
+    '..SNTNS..',
+    '..SNTNS..',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTTTNS.',
+    '..SNTNS..',
+    '..SNTNS..',
+    '...SNS...',
+    '....S....',
+  ],
   eye: ['..FFF..', '.FWWWF.', 'FWWKWWF', 'FWKRKWF', 'FWWKWWF', '.FWWWF.', '..FFF..'],
 
   // Wingmen in act 3: Vex the Raider, and freed Vossari pilots.
@@ -307,6 +341,44 @@ function makeMindMaw(scene: Phaser.Scene) {
   });
 }
 
+// The Sporeheart's core: a swollen, glowing pod veined with purple.
+function makeSporeheart(scene: Phaser.Scene) {
+  const w = 26, h = 24;
+  canvas(scene, 'sporeheart', w, h, (px) => {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const nx = (x - w / 2 + 0.5) / (w / 2), ny = (y - h / 2 + 0.5) / (h / 2);
+        const d = Math.hypot(nx, ny) + Math.sin(Math.atan2(ny, nx) * 7) * 0.05;
+        if (d > 1) continue;
+        const vein = Math.abs(Math.sin(nx * 8 + ny * 3) + Math.sin(ny * 7 - nx * 2)) < 0.18;
+        let c = d < 0.28 ? '#fcfcfc' : d < 0.45 ? '#b8f818' : d < 0.7 ? '#58d854' : '#00a800';
+        if (vein && d > 0.35) c = '#a40080';
+        if (d > 0.88) c = '#005800';
+        px(x, y, c);
+      }
+    }
+  });
+}
+
+// Level 15's haze: drifting veils of spores laid over the action.
+function makeFog(scene: Phaser.Scene) {
+  canvas(scene, 'fog', W, H, (px) => {
+    const rand = rng(29);
+    const blobs = Array.from({ length: 16 }, () => [rand() * W, rand() * H, 18 + rand() * 30]);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (const [bx, by, r] of blobs) {
+          const dy = Math.min(Math.abs(y - by), H - Math.abs(y - by)); // wraps top to bottom
+          v = Math.max(v, 1 - Math.hypot(x - bx, dy) / r);
+        }
+        if (v > 0.5 && (x + y) % 2 === 0) px(x, y, '#b8d8a8');
+        else if (v > 0.15 && (x + y * 3) % 4 === 0) px(x, y, '#88a878');
+      }
+    }
+  });
+}
+
 // A dotted ring: the Voss shield and the Hollow Mind's membrane.
 function makeRing3(scene: Phaser.Scene, key: string, rx: number, ry: number, colors: string[], thick = 1.2) {
   canvas(scene, key, rx * 2 + 1, ry * 2 + 1, (px) => {
@@ -440,6 +512,20 @@ function makeSceneries3(scene: Phaser.Scene) {
       }
     }
   });
+  // Past the tunnel: pale veils and floating spores.
+  makeScenery3(scene, 'scenery_mist', (px, rand) => {
+    for (let i = 0; i < 9; i++) {
+      const cx = rand() * W, cy = rand() * H, r = 20 + rand() * 30;
+      for (let y = -r; y < r; y++) {
+        for (let x = -r; x < r; x++) {
+          if (Math.hypot(x, y * 1.6) > r || (x + y) % 3 !== 0) continue;
+          const xx = Math.round(cx + x);
+          if (xx >= 0 && xx < W) px(xx, ((Math.round(cy + y) % H) + H) % H, '#16241a');
+        }
+      }
+    }
+    for (let i = 0; i < 70; i++) px(Math.floor(rand() * W), Math.floor(rand() * H), rand() < 0.3 ? '#3c5c3c' : '#24341c');
+  });
 }
 
 export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, rows: string[]) => void,
@@ -451,6 +537,8 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
   makeCreature(scene, 'queen', 42, 28, ['#f878f8', '#d800cc', '#a40080', '#58d854'], 3, 9);
   makeMindCore(scene);
   makeMindMaw(scene);
+  makeSporeheart(scene);
+  makeFog(scene);
   makeRing3(scene, 'vshield', 32, 18, ['#fcfcfc', '#9878f8']);
   makeRing3(scene, 'membrane', 23, 21, ['#f878f8', '#a40080'], 2.5);
   makeDarkness(scene);
