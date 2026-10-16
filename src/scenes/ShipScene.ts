@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { ITEMS, defOf, isGear, isItem, isWeapon, stackLabel } from '../data/items';
 import {
-  equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, unequipGear, unequipItem, unequipWeapon, weaponLevel,
+  ITEMS, KITS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type KitId, type WeaponId,
+} from '../data/items';
+import {
+  applyKit, equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, kitTargets, unequipGear, unequipItem,
+  unequipWeapon, weaponLevel,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
-import { button, text } from '../ui';
+import { button, choose, text } from '../ui';
 
 interface ShipData {
   state: SaveData;
@@ -42,7 +45,8 @@ const INFO_Y = 262;
 const DRAG_START = 5; // px of movement before a press becomes a drag
 
 const SLOT_ART: Record<Kind, string> = { weapon: 'slotWeapon', item: 'slotItem', gear: 'slotGear' };
-const kindOf = (id: string): Kind => (isWeapon(id) ? 'weapon' : isItem(id) ? 'item' : 'gear');
+// Upgrade Kits list with the items, but are used with the USE button rather than equipped.
+const kindOf = (id: string): Kind => (isWeapon(id) ? 'weapon' : isItem(id) || isKit(id) ? 'item' : 'gear');
 const KIND_NAME: Record<Kind, string> = { weapon: 'WEAPON', item: 'ITEM', gear: 'GEAR' };
 
 // What the player has picked up: a slot or a storage entry. Picking a second
@@ -303,6 +307,7 @@ export class ShipScene extends Phaser.Scene {
   // Equip a storage entry into slot `n` of its kind, or wherever it fits best.
   private place(id: string, n?: number) {
     const s = this.s;
+    if (isKit(id)) { this.useKit(id); return; }
     if (isWeapon(id)) {
       if (n === undefined) equipFromStorage(s, s.storage.indexOf(id));
       else { s.storage.splice(s.storage.indexOf(id), 1); equipWeapon(s, id, n); }
@@ -314,6 +319,22 @@ export class ShipScene extends Phaser.Scene {
       equipGear(s, id, n);
     }
     this.changed();
+  }
+
+  // Apply an Upgrade Kit from storage to a weapon or gear the player picks.
+  private useKit(kit: KitId) {
+    const s = this.s;
+    const targets = kitTargets(s, kit);
+    if (targets.length === 0) { this.say(`NOTHING TO UPGRADE WITH THE ${KITS[kit].name} YET.`); return; }
+    const lvOf = (id: WeaponId | GearId) => (isWeapon(id) ? weaponLevel(s, id) : gearLevel(s, id as GearId));
+    choose(this, `${KITS[kit].name}: UPGRADE WHICH?`,
+      targets.map((id) => ({ label: `${defOf(id).name.slice(0, 11)} ${lvOf(id)}>${lvOf(id) + 1}`, icon: defOf(id).icon })), (i) => {
+        if (i < 0) return;
+        s.storage.splice(s.storage.indexOf(kit), 1);
+        applyKit(s, targets[i]);
+        this.sel = null;
+        this.changed();
+      });
   }
 
   private stow(i: number) {
@@ -329,7 +350,7 @@ export class ShipScene extends Phaser.Scene {
 
   private actionFor(): { label: string; run: () => void } | null {
     const sel = this.sel;
-    if (sel?.from === 'storage') return { label: 'EQUIP', run: () => this.place(sel.id) };
+    if (sel?.from === 'storage') return { label: isKit(sel.id) ? 'USE' : 'EQUIP', run: () => this.place(sel.id) };
     if (sel?.from === 'slot' && this.contents(SLOTS[sel.slot])) return { label: 'STOW', run: () => this.stow(sel.slot) };
     return null;
   }

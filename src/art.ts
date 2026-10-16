@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { W, H } from './config';
+import { PAL3, generateArt3, mimicRows } from './art3';
 
 // Placeholder pixel art, drawn from text grids so it can be tweaked without an editor.
 // Each character is one pixel; "." is transparent.
@@ -11,6 +12,7 @@ const PAL: Record<string, string> = {
   b: '#fca044', e: '#c84c0c', f: '#7c2c00', v: '#4c1800',
   h: '#e4e4e4', g: '#5c5c5c',
   q: '#fce0a8', j: '#ac7c00', z: '#6c4800',
+  ...PAL3,
 };
 
 const SPRITES: Record<string, string[]> = {
@@ -763,6 +765,8 @@ function makeSceneries(scene: Phaser.Scene) {
 
 export function generateArt(scene: Phaser.Scene) {
   for (const [key, rows] of Object.entries(SPRITES)) makeTexture(scene, key, rows);
+  makeTexture(scene, 'mimic', mimicRows(SPRITES.ship));
+  generateArt3(scene, (key, rows) => makeTexture(scene, key, rows), (key, r, bands, shadow) => makePlanet(scene, key, r, bands, shadow));
   for (const key of ['ingot1', 'ingot2', 'ingot3', 'ingot4']) makeGlint(scene, key);
   makeRock(scene, 'rock', 9, 8, 7);
   makeRock(scene, 'pebble', 4, 4, 11);

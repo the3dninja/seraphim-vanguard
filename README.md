@@ -33,7 +33,19 @@ For example `https://the3dninja.github.io/seraphim-vanguard/?god&rich&level=3`.
 - Level 6, Ember Nebula: **Mine Layers** seed proximity mines that burst when you get close, and lightning strikes down a column after it flashes
 - Level 7, Solar Forge: **Vossari Carriers** park and launch four Darts each, and solar flares sweep down the screen. A shelter rock drifts in before each flare; sit in the dark lane under it
 - Level 8, Silent Relay: **Phantoms** cloak (shots pass through them) and decloak to fire, laser fences blink on and off as they scroll down (cross while off), and **The Watcher** mini boss. It cloaks, then decloaks beside decoy afterimages; only the real one takes damage (decoys look a shade fainter and flicker). Below half health it brings three decoys that fire too, and seeds mines. It drops 150 credits
-- Levels 6 to 8 run about 50% longer than levels 1 to 5
+- Level 9, Blight Colony: the Hollow appears. **Spore Pods** burst into Seekers when destroyed, mixed in with Vossari ships, and spore clouds drift down the screen
+- Level 10, Throne of Voss: **Tendrils** join in, blast doors slide across the screen, and **Emperor Voss, Possessed**. His flagship hides behind a shield that ion breaks fast; when the hull gives out, the Hollow parasite tears free, lunges at the ship and lays Spore Pods. Plasma burns it. It drops 400 credits
+- Level 11, The Rift: starts in normal space with Vex's raiders flying as wingmen. Where the vendor would arrive, the station stops above the ship, the rift tears open and pulls both in. A shorter segment inside alien space follows, then the vendor, then the final leg. **Broodlings** swarm, **Husks** split into Seekers, and gravity wells pull the ship and bend shots
+- Level 12, Hive Reef: coral walls cut across the screen (shots carve through them), and **Mimics** copy the ship's look
+- Level 13, Black Bloom: the screen is dark except a pool of light around the ship and glowing enemies, and the **Brood Queen** mini boss. She lays pods, fires fans, flickers and charges, and heals if you stop hitting her. Plasma hurts her most. It drops 150 credits
+- Level 14, Maw Gate: the Vossari fleet fights in the background, three wingmen fly with you, and tentacles sweep in from the sides
+- Level 15, Heart of the Hollow: one long run with no vendor, through arteries, tentacles, coral and gravity wells, to **The Hollow Mind**. Shoot its six eyes, then fly through the gaps in its tentacle walls while you break its membrane, then burn its bare core while it fires spirals. It ends the campaign
+- Levels 6 to 8 run about 50% longer than levels 1 to 5. Level 11's alien segment is a bit shorter than level 6's first segment and its final leg is 50% longer; levels 12 to 14 use that longer length for both segments, and level 15 is as long as two of them
+- **Damage types**: weapons do kinetic, laser, plasma, ion or explosive damage. Enemies and bosses take double from their weakness and half from what they resist (Target Scanner shows weaknesses as dots)
+- **Weapons**: Pulse, Spread, Twin, Homing, Plasma, Ion (breaks shields, stuns), Wave, Rail (pierces), Flak (bursts), Side Guns, Rear Gun and Bio Cannon (burns)
+- **Items**: Repair, Shield, Overdrive, Cluster Bomb, EMP, Decoy Flare, Credit Booster, Heal Drone, Full Repair, Nova, Time Warp and Rewind Beacon (restarts from the last checkpoint: the level start or the last vendor)
+- **Active gear** has its own buttons above the item bar (Q and E on a keyboard): Dodge, Blink, Afterburner, Barrel Roll (reflects shots) and Burst. **Augments** change your shots: Incendiary Ammo, Ion Coating, Shaped Charges, Overcharger and Target Scanner. Anti-Missile shoots down shots near the ship
+- **Upgrade kits** (Weapon Kit, Gear Kit) from vendors raise a weapon or gear a level; apply one on the spot or keep it and use it from the vendor's Sell tab or the Ship screen
 - **Gear** (from level 6): Hull Plating (+2 max health) and Credit Magnet at the Base vendor; Deflector (absorbs a hit, recharges) and Satellite (an orbiting drone that fires) as in-level vendor exclusives. Gear slots 1 and 2 and gear levels 1 to 5 are in the Base vendor's Upgrade tab
 - Item stacks show against their cap, like 1/3, in flight, on the vendor's slot strip and on the Ship screen
 - The vendor shows Storage as a compact row of icons with counts under the listed items (the station scrolls in under the ship as it rolls and sinks into it) and a shop with Buy and Sell tabs
@@ -67,7 +79,10 @@ Every push to `main` rebuilds the game and publishes it to the play link above (
 | `src/rockjaw.ts` | The level 3 mini boss |
 | `src/dreadnought.ts` | The level 5 boss |
 | `src/watcher.ts` | The level 8 mini boss |
+| `src/voss.ts`, `src/broodqueen.ts`, `src/hollowmind.ts` | The level 10 boss, level 13 mini boss and final boss |
+| `src/act3.ts` | Hollow hazards for levels 9 to 15 |
+| `src/data/enemies.ts` | Enemy health, speed, weaknesses and resistances |
 | `src/inventory.ts` | Slots, storage, selling and Base vendor upgrades |
 | `src/data/items.ts` | Weapons, gear and consumables, prices and stats |
-| `src/art.ts` | Pixel sprites as text grids |
+| `src/art.ts`, `src/art3.ts` | Pixel sprites as text grids (art3 holds levels 9 to 15) |
 | `src/save.ts` | Autosave to browser storage |

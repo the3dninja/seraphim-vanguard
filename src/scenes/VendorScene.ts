@@ -1,14 +1,15 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  GEAR, ITEMS, WEAPONS, defOf, isGear, isItem, isWeapon, stackLabel, type GearId, type ItemId, type WeaponId,
+  GEAR, ITEMS, KITS, WEAPONS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type ItemId, type KitId,
+  type WeaponId,
 } from '../data/items';
 import {
-  addConsumable, emptyGearSlot, emptyWeaponSlot, equipFromStorage, equipGear, equipWeapon, gearLevel, itemSlotFor,
-  sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
+  addConsumable, applyKit, emptyGearSlot, emptyWeaponSlot, equipFromStorage, equipGear, equipWeapon, gearLevel,
+  itemSlotFor, kitTargets, sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
-import { ask, button, text, toast } from '../ui';
+import { ask, button, choose, text, toast } from '../ui';
 
 interface VendorData {
   state: SaveData;
@@ -58,19 +59,35 @@ export class VendorScene extends Phaser.Scene {
     return (s.weapons as string[]).includes(id) || (s.gear as string[]).includes(id) || s.storage.includes(id);
   }
 
-  // In-level vendors roll a small random stock on arrival; Base always has the basics.
-  // Gear shows up from its first level on: Base gear always, in-level exclusives sometimes.
+  // The Base vendor always has its full stock: Base weapons and gear from
+  // their first level on, and the common consumables. In-level vendors roll
+  // 4 to 6 entries on arrival: 0 to 2 common consumables (Repair Kits most
+  // often), 2 to 3 exclusives (in-level weapons and gear, and rare
+  // consumables), and sometimes an Upgrade Kit, more often in later levels.
   private rollStock(): string[] {
     const s = this.d.state;
-    const items: string[] = [];
-    const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w));
-    const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && s.level >= GEAR[g].from);
-    if (this.d.mode === 'base') return [...weapons, ...gear.filter((g) => GEAR[g].where === 'base'), ...Object.keys(ITEMS)];
-    const exclusives = gear.filter((g) => GEAR[g].where === 'level' && Math.random() < 0.5);
-    const chance: Record<ItemId, number> = { repair: 0.85, shield: 0.45, overdrive: 0.55 };
-    for (const id of Object.keys(ITEMS) as ItemId[]) if (Math.random() < chance[id]) items.push(id);
-    if (items.length === 0) items.push('repair');
-    return [...weapons, ...exclusives, ...items];
+    const lv = s.level;
+    const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w) && lv >= WEAPONS[w].from);
+    const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
+    const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare);
+    if (this.d.mode === 'base') {
+      return [...weapons.filter((w) => WEAPONS[w].where === 'base'), ...gear.filter((g) => GEAR[g].where === 'base'), ...common];
+    }
+    const out: string[] = [];
+    const consumables = Phaser.Math.RND.weightedPick([0, 1, 1, 2, 2]);
+    for (let i = 0; i < consumables; i++) {
+      const id = Math.random() < 0.5 ? 'repair' : Phaser.Utils.Array.GetRandom(common);
+      if (!out.includes(id)) out.push(id);
+    }
+    const rare = (Object.keys(ITEMS) as ItemId[]).filter((i) => ITEMS[i].rare);
+    const pool = Phaser.Utils.Array.Shuffle([
+      ...weapons.filter((w) => WEAPONS[w].where === 'level'), ...gear.filter((g) => GEAR[g].where === 'level'), ...rare,
+    ]);
+    out.push(...pool.slice(0, Phaser.Math.Between(2, 3)));
+    if (Math.random() < 0.12 + lv * 0.03) out.push(Math.random() < 0.55 ? 'wkit' : 'gkit');
+    // Top up with common consumables so there are always at least four.
+    for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id)) out.push(id);
+    return out;
   }
 
   private render() {
@@ -133,10 +150,15 @@ export class VendorScene extends Phaser.Scene {
         add(button(this, W - 44, y + 7, 38, 16, 'BUY', () => this.buy(row.id)).setEnabled(s.credits >= def.price));
       } else {
         add(text(this, 22, y + 14, `${sellPrice(s, row.id)} CR`, COLOR.yellow));
-        add(button(this, W - 86, y + 11, 40, 14, 'EQUIP', () => {
-          equipFromStorage(s, s.storage.indexOf(row.id));
-          this.render();
-        }).setEnabled(this.canEquip(row.id)));
+        if (isKit(row.id)) {
+          const kit = row.id;
+          add(button(this, W - 86, y + 11, 40, 14, 'USE', () => this.useKit(kit, true)).setEnabled(kitTargets(s, kit).length > 0));
+        } else {
+          add(button(this, W - 86, y + 11, 40, 14, 'EQUIP', () => {
+            equipFromStorage(s, s.storage.indexOf(row.id));
+            this.render();
+          }).setEnabled(this.canEquip(row.id)));
+        }
         add(button(this, W - 42, y + 11, 36, 14, 'SELL', () => {
           sellFromStorage(s, s.storage.indexOf(row.id));
           this.render();
@@ -159,7 +181,7 @@ export class VendorScene extends Phaser.Scene {
     add(this.add.rectangle(4, INFO_Y - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
     const sel = this.selected;
     const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
-    const info = up ? up.desc : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel)) ? defOf(sel).desc : 'TAP AN ENTRY FOR INFO';
+    const info = up ? up.desc : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel) || isKit(sel)) ? defOf(sel).desc : 'TAP AN ENTRY FOR INFO';
     add(text(this, 6, INFO_Y, info, sel ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
 
     this.slotStrip(add, STRIP_Y);
@@ -276,6 +298,20 @@ export class VendorScene extends Phaser.Scene {
       this.render();
       return;
     }
+    if (isKit(id)) {
+      this.stock.splice(this.stock.indexOf(id), 1);
+      this.render();
+      if (kitTargets(s, id).length === 0) {
+        s.storage.push(id);
+        ask(this, `${def.name} STOWED.\nNOTHING TO UPGRADE YET.`, ['OK'], () => this.render());
+        return;
+      }
+      ask(this, `${def.name}\nAPPLY OR STOW?`, ['APPLY', 'STOW'], (a) => {
+        if (a === 1) { s.storage.push(id); this.render(); return; }
+        this.useKit(id, false);
+      });
+      return;
+    }
     if (!isWeapon(id) && !isGear(id)) return;
     this.stock = this.stock.filter((x) => x !== id);
     this.render();
@@ -333,6 +369,27 @@ export class VendorScene extends Phaser.Scene {
     }
     const list = s.weapons.map((w, i) => `${i + 1} ${WEAPONS[w!].name}`).join('\n');
     ask(this, `REPLACE WHICH?\n${list}`, ['1', '2', 'NO'], (a) => done(a < 2 ? a : null));
+  }
+
+  // Pick what an Upgrade Kit raises. A stored kit is taken out of storage once used;
+  // a kit that was just bought goes to storage if the pick is cancelled.
+  private useKit(kit: KitId, stored: boolean) {
+    const s = this.d.state;
+    const targets = kitTargets(s, kit);
+    const lvOf = (id: WeaponId | GearId) => (isWeapon(id) ? weaponLevel(s, id) : gearLevel(s, id as GearId));
+    choose(this, `${KITS[kit].name}: UPGRADE WHICH?`,
+      targets.map((id) => ({ label: `${defOf(id).name.slice(0, 11)} ${lvOf(id)}>${lvOf(id) + 1}`, icon: defOf(id).icon })), (i) => {
+        if (i < 0) {
+          if (!stored) s.storage.push(kit);
+          this.render();
+          return;
+        }
+        if (stored) s.storage.splice(s.storage.indexOf(kit), 1);
+        applyKit(s, targets[i]);
+        if (this.d.mode === 'base') writeSave(s);
+        toast(this, 'UPGRADED!', 228, 900);
+        this.render();
+      });
   }
 
   private buyUpgrade(up: Upgrade) {

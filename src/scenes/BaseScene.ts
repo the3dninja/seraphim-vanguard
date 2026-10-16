@@ -29,7 +29,8 @@ export class BaseScene extends Phaser.Scene {
     text(this, W / 2, 24, 'BASE', COLOR.white, 16).setOrigin(0.5);
     const next = LEVELS[this.state.level - 1];
     text(this, W / 2, 50, `NEXT: LEVEL ${this.state.level}`, COLOR.gray).setOrigin(0.5);
-    text(this, W / 2, 64, isBuilt(next) ? next.name : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
+    const done = this.state.level > LEVELS.length;
+    text(this, W / 2, 64, isBuilt(next) ? next.name : done ? 'CAMPAIGN COMPLETE' : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
 
     this.add.image(W / 2 - 34, 86, 'coinIcon').setOrigin(0, 0.5);
     this.creditsText = text(this, W / 2 - 26, 86, '', COLOR.yellow).setOrigin(0, 0.5);
@@ -58,7 +59,7 @@ export class BaseScene extends Phaser.Scene {
     });
     button(this, bx, 214, bw, bh, 'BEGIN MISSION', () => {
       if (!isBuilt(next)) {
-        toast(this, `LEVEL ${this.state.level}\nIS NOT BUILT YET`, 260);
+        toast(this, done ? 'THE HOLLOW IS GONE.\nTHE GALAXY IS SAFE.' : `LEVEL ${this.state.level}\nIS NOT BUILT YET`, 260);
         return;
       }
       this.cameras.main.fadeOut(300);

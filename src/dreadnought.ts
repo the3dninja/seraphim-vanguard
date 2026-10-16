@@ -189,7 +189,7 @@ export class Dreadnought {
         if (hit === this.bridge && !this.armed) g.flash(this.shieldImg);
         continue;
       }
-      hit.hp -= (o.getData('dmg') as number) ?? 1;
+      hit.hp -= g.shotDamage(o, ['ion', 'plasma'], []);
       g.flash(hit.img);
       if (hit.hp <= 0) {
         if (hit === this.bridge) this.defeat();

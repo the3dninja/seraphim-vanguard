@@ -122,7 +122,7 @@ export class Watcher {
         if (!this.warnedDecoy) { this.warnedDecoy = true; toast(g, 'DECOY!', 120, 600); }
         continue;
       }
-      this.hp -= (o.getData('dmg') as number) ?? 1;
+      this.hp -= g.shotDamage(o, ['ion'], []);
       g.flash(c.img);
       if (this.hp <= 0) this.defeat();
     }

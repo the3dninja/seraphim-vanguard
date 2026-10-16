@@ -126,7 +126,7 @@ export class Rockjaw {
         }
         continue;
       }
-      hitPart.hp -= (o.getData('dmg') as number) ?? 1;
+      hitPart.hp -= g.shotDamage(o, ['explosive'], []);
       g.flash(hitPart.img);
       if (hitPart.hp <= 0) {
         if (hitPart === this.core) this.defeat();
