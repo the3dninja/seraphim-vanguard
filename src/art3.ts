@@ -72,6 +72,40 @@ export const SPRITES3: Record<string, string[]> = {
     '..T.....N.....T..',
     '........T........',
   ],
+  // Level 15: eggs that hatch into larvae, and the Brood Wyrm and Sporeheart parts.
+  egg: ['..QQQQ..', '.QFFFFQ.', 'QFFMMFFQ', 'QFMTTMFQ', 'QFMTTMFQ', 'QFFMMFFQ', 'QFFFFFFQ', '.QFFFFQ.', '..QQQQ..'],
+  eggLit: ['..QQQQ..', '.QMMMMQ.', 'QMMFFMMQ', 'QMFWWFMQ', 'QMFWWFMQ', 'QMMFFMMQ', 'QMMMMMMQ', '.QMMMMQ.', '..QQQQ..'],
+  larva: ['.T...T.', '..TNT..', '.NTTTN.', 'NTRKRTN', '.NTTTN.', '..NTN..', '...N...'],
+  larvaLit: ['T.....T', '.T.N.T.', '.NTTTN.', 'NTRKRTN', '.NTTTN.', '.N.T.N.', '...N...'],
+  wyrmhead: [
+    '...QQQQQQQ...',
+    '..QFFFFFFFQ..',
+    '.QFMMMMMMMFQ.',
+    'QFMMTMMMTMMFQ',
+    'QFMWRMMMRWMFQ',
+    'QFMMMMMMMMMFQ',
+    '.QFMMMMMMMFQ.',
+    '.QFFMMMMMFFQ.',
+    '..QW.KKK.WQ..',
+    '..W..KKK..W..',
+    '.W.........W.',
+  ],
+  wyrmseg: ['..QQQQQ..', '.QFFFFFQ.', 'QFMMMMMFQ', 'QFMUMUMFQ', 'QFMMMMMFQ', 'QFMUMUMFQ', 'QFMMMMMFQ', '.QFFFFFQ.', '..QQQQQ..'],
+  petal: [
+    '....S....',
+    '...SNS...',
+    '..SNTNS..',
+    '..SNTNS..',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTHTNS.',
+    '.SNTTTNS.',
+    '..SNTNS..',
+    '..SNTNS..',
+    '...SNS...',
+    '....S....',
+  ],
   eye: ['..FFF..', '.FWWWF.', 'FWWKWWF', 'FWKRKWF', 'FWWKWWF', '.FWWWF.', '..FFF..'],
 
   // Wingmen in act 3: Vex the Raider, and freed Vossari pilots.
@@ -264,6 +298,87 @@ function makeMindCore(scene: Phaser.Scene) {
   });
 }
 
+// The Hollow Mind split open (phase 4): the folds peel back into a maw ringed
+// with teeth, and a huge slit-pupiled eye stares out of it.
+function makeMindMaw(scene: Phaser.Scene) {
+  const w = 44, h = 40;
+  canvas(scene, 'mindmaw', w, h, (px) => {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const nx = (x - w / 2 + 0.5) / (w / 2), ny = (y - h / 2 + 0.5) / (h / 2);
+        const d = Math.hypot(nx, ny);
+        if (d > 1) continue;
+        const maw = Math.hypot(nx / 0.78, ny / 0.9); // the opening
+        let c: string;
+        if (maw < 0.82) c = maw < 0.6 ? '#1c0004' : '#4c0010';
+        else if (maw < 0.95) {
+          // Teeth around the rim, pointing inward.
+          const a = Math.atan2(ny, nx);
+          const tooth = Math.abs(Math.sin(a * 9)) > 0.45 - (0.95 - maw) * 3;
+          c = tooth ? '#fcfcfc' : '#881400';
+        } else {
+          const fold = Math.sin(nx * 9 + Math.sin(ny * 6) * 2) + Math.sin(ny * 11 + nx * 3);
+          c = fold > 0.6 ? '#f878f8' : fold > -0.4 ? '#d82800' : '#881400';
+          if (d > 0.93) c = '#4c0010';
+        }
+        px(x, y, c);
+      }
+    }
+    // The eye.
+    const cx = w / 2 - 0.5, cy = h / 2 - 0.5;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const e = Math.hypot((x - cx) / 9, (y - cy) / 6.5);
+        if (e > 1) continue;
+        const iris = Math.hypot((x - cx) / 5, (y - cy) / 5.5);
+        let c = '#fce0a8';
+        if (iris < 1) c = iris < 0.75 ? '#f8b800' : '#d82800';
+        if (Math.abs(x - cx) < 1 && iris < 0.95) c = '#000000';
+        if (e > 0.85) c = '#881400';
+        px(x, y, c);
+      }
+    }
+  });
+}
+
+// The Sporeheart's core: a swollen, glowing pod veined with purple.
+function makeSporeheart(scene: Phaser.Scene) {
+  const w = 26, h = 24;
+  canvas(scene, 'sporeheart', w, h, (px) => {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const nx = (x - w / 2 + 0.5) / (w / 2), ny = (y - h / 2 + 0.5) / (h / 2);
+        const d = Math.hypot(nx, ny) + Math.sin(Math.atan2(ny, nx) * 7) * 0.05;
+        if (d > 1) continue;
+        const vein = Math.abs(Math.sin(nx * 8 + ny * 3) + Math.sin(ny * 7 - nx * 2)) < 0.18;
+        let c = d < 0.28 ? '#fcfcfc' : d < 0.45 ? '#b8f818' : d < 0.7 ? '#58d854' : '#00a800';
+        if (vein && d > 0.35) c = '#a40080';
+        if (d > 0.88) c = '#005800';
+        px(x, y, c);
+      }
+    }
+  });
+}
+
+// Level 15's haze: drifting veils of spores laid over the action.
+function makeFog(scene: Phaser.Scene) {
+  canvas(scene, 'fog', W, H, (px) => {
+    const rand = rng(29);
+    const blobs = Array.from({ length: 16 }, () => [rand() * W, rand() * H, 18 + rand() * 30]);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (const [bx, by, r] of blobs) {
+          const dy = Math.min(Math.abs(y - by), H - Math.abs(y - by)); // wraps top to bottom
+          v = Math.max(v, 1 - Math.hypot(x - bx, dy) / r);
+        }
+        if (v > 0.5 && (x + y) % 2 === 0) px(x, y, '#b8d8a8');
+        else if (v > 0.15 && (x + y * 3) % 4 === 0) px(x, y, '#88a878');
+      }
+    }
+  });
+}
+
 // A dotted ring: the Voss shield and the Hollow Mind's membrane.
 function makeRing3(scene: Phaser.Scene, key: string, rx: number, ry: number, colors: string[], thick = 1.2) {
   canvas(scene, key, rx * 2 + 1, ry * 2 + 1, (px) => {
@@ -397,6 +512,20 @@ function makeSceneries3(scene: Phaser.Scene) {
       }
     }
   });
+  // Past the tunnel: pale veils and floating spores.
+  makeScenery3(scene, 'scenery_mist', (px, rand) => {
+    for (let i = 0; i < 9; i++) {
+      const cx = rand() * W, cy = rand() * H, r = 20 + rand() * 30;
+      for (let y = -r; y < r; y++) {
+        for (let x = -r; x < r; x++) {
+          if (Math.hypot(x, y * 1.6) > r || (x + y) % 3 !== 0) continue;
+          const xx = Math.round(cx + x);
+          if (xx >= 0 && xx < W) px(xx, ((Math.round(cy + y) % H) + H) % H, '#16241a');
+        }
+      }
+    }
+    for (let i = 0; i < 70; i++) px(Math.floor(rand() * W), Math.floor(rand() * H), rand() < 0.3 ? '#3c5c3c' : '#24341c');
+  });
 }
 
 export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, rows: string[]) => void,
@@ -407,10 +536,27 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
   makeCreature(scene, 'parasite', 36, 26, ['#58d854', '#00a800', '#005800', '#d800cc'], 1, 3);
   makeCreature(scene, 'queen', 42, 28, ['#f878f8', '#d800cc', '#a40080', '#58d854'], 3, 9);
   makeMindCore(scene);
+  makeMindMaw(scene);
+  makeSporeheart(scene);
+  makeFog(scene);
   makeRing3(scene, 'vshield', 32, 18, ['#fcfcfc', '#9878f8']);
   makeRing3(scene, 'membrane', 23, 21, ['#f878f8', '#a40080'], 2.5);
   makeDarkness(scene);
   makeSporeCloud(scene);
   makeSceneries3(scene);
   makePlanet('blightworld', 26, ['#58d854', '#9878f8', '#00a800', '#6844fc'], '#1c1c3c');
+  // Side mission moons on the star map: small, each colored for its locale.
+  const moons: [string, string[], string][] = [
+    ['moon_rust', ['#fca044', '#c84c0c', '#7c2c00'], '#4c1800'],
+    ['moon_frost', ['#fcfcfc', '#a4e4fc', '#3cbcfc'], '#0058f8'],
+    ['moon_glacier', ['#a4e4fc', '#3cbcfc', '#bcbcbc'], '#3c3c7c'],
+    ['moon_storm', ['#f8b800', '#d82800', '#fc7460'], '#4c0010'],
+    ['moon_relay', ['#bcbcbc', '#7c7c7c', '#3cbcfc'], '#3c3c3c'],
+    ['moon_eclipse', ['#3c3c3c', '#7c7c7c', '#3c3c3c'], '#000000'],
+    ['moon_armory', ['#9878f8', '#6844fc', '#f8b800'], '#3c1c7c'],
+    ['moon_drift', ['#58d854', '#3cbcfc', '#00a800'], '#005800'],
+    ['moon_mirror', ['#fcfcfc', '#9878f8', '#3c1c7c'], '#1c1c3c'],
+    ['moon_nursery', ['#f878f8', '#d800cc', '#58d854'], '#4c0040'],
+  ];
+  for (const [key, bands, shadow] of moons) makePlanet(key, 6, bands, shadow);
 }
