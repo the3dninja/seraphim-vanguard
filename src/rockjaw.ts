@@ -46,7 +46,7 @@ export class Rockjaw {
       return img;
     };
     const hp = (n: number) => Math.round(n * (opts.hp ?? 1));
-    this.body = add('rockjaw');
+    this.body = add(opts.skin ?? 'rockjaw');
     this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: hp(65), max: hp(65), gun: false };
     this.plates = [
       { img: add('plateL'), dx: -19, dy: 5, w: 12, h: 11, hp: hp(24), max: hp(24), gun: true },

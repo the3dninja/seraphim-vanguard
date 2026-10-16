@@ -18,9 +18,12 @@ export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' |
 // edge, then sweeps across the screen. artery: a pulsing vessel that bursts
 // into shots. Level 15 (see heart.ts): barrier: a wall of fleshy cells across
 // the screen that has to be shot through. growth: a short piece of one.
+// Side missions (see sidehaz.ts): press, gust, ember, blackout, sweep.
 export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lightning' | 'flare' | 'fence'
-  | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery' | 'barrier' | 'growth';
-export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm';
+  | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery' | 'barrier' | 'growth'
+  | 'press' | 'gust' | 'ember' | 'blackout' | 'sweep';
+export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm'
+  | 'frostjaw' | 'hollowwatcher' | 'broodmother';
 export interface HazardSpec { kind: HazardKind; every: [number, number] }
 
 export interface Wave {
@@ -873,7 +876,7 @@ export const LEVELS: LevelDef[] = [
   // growths and eggs and the Brood Wyrm, and a last stretch to the Hollow Mind.
   {
     name: 'HEART OF THE HOLLOW',
-    desc: 'THE LONGEST RUN. NO VENDORS, NO ALLIES. A LIVING TUNNEL, SPORE HAZE AND TWO GUARDIANS BEFORE THE MIND.',
+    desc: 'THE LONGEST RUN. NO VENDORS. A LIVING TUNNEL, TWO GUARDIANS AND THE MIND.',
     node: 'node_heart',
     theme: 'heart',
     vendorless: true,
