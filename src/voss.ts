@@ -5,10 +5,10 @@ import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
 
 const ENTER_Y = 58;
-const SHIELD = 40; // shield health; ion breaks it fast
+const SHIELD = 100; // shield health; ion breaks it fast
 const SHIELD_BACK = 6500; // ms the shield stays down
-const HULL = 140;
-const PARASITE = 170;
+const HULL = 420;
+const PARASITE = 510;
 const REWARD = 400;
 
 // Emperor Voss, Possessed: the level 10 boss. Phase 1 is the Emperor's
