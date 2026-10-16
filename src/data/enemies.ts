@@ -38,6 +38,8 @@ export const ENEMY_STATS: Record<FoeKind, FoeDef> = {
   brood: { hp: 30, texture: 'brood', dropChance: 1, credits: [26, 40], weak: ['plasma', 'explosive'], resist: ['kinetic', 'ion'], organic: true },
   mimic: { hp: 9, texture: 'mimic', dropChance: 0.9, credits: [12, 20], weak: [], resist: [], organic: true },
   husk: { hp: 24, texture: 'husk', dropChance: 1, credits: [24, 38], weak: ['plasma'], resist: ['kinetic', 'laser'], organic: true },
+  egg: { hp: 8, texture: 'egg', dropChance: 0.5, credits: [3, 6], weak: ['plasma', 'explosive'], resist: ['kinetic'], organic: true },
+  larva: { hp: 2, texture: 'larva', dropChance: 0.25, credits: [1, 3], weak: ['plasma'], resist: [], organic: true, light: true },
   seeker: { hp: 1, texture: 'seeker', dropChance: 0.1, credits: [1, 2], weak: ['plasma'], resist: [], organic: true, light: true },
   mine: { hp: 1, texture: 'mine', dropChance: 0, credits: [0, 0], weak: [], resist: [] },
   pmine: { hp: 1, texture: 'pmine', dropChance: 0, credits: [0, 0], weak: [], resist: [] },

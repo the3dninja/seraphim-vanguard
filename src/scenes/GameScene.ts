@@ -4,7 +4,7 @@ import {
   DTYPE_COLOR, GEAR, ITEMS, WEAPONS, gearStats, stackLabel, type DType, type GearId, type WeaponId,
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
-import { LEVELS, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
+import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
 import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
@@ -13,6 +13,9 @@ import { Watcher } from '../watcher';
 import { Voss } from '../voss';
 import { BroodQueen } from '../broodqueen';
 import { HollowMind } from '../hollowmind';
+import { Sporeheart } from '../sporeheart';
+import { Wyrm } from '../wyrm';
+import { Barriers, Tunnel } from '../heart';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
 
@@ -64,7 +67,9 @@ const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
   voss: 'EMPEROR VOSS', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
+  sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRM',
 };
+const EGG_HATCH = 5500; // ms before an egg hatches into larvae
 const GEAR_KEYS = ['Q', 'E'];
 const ALL_TYPES: DType[] = ['kinetic', 'laser', 'plasma', 'ion', 'explosive'];
 const ARC_LIFE = 0.32; // s an Ion Arc bolt lasts, which sets its range
@@ -119,6 +124,12 @@ export class GameScene extends Phaser.Scene {
   private planet: Phaser.GameObjects.Image | null = null;
   private theme: Theme = 'outpost';
   private dark: Phaser.GameObjects.Image | null = null; // level 13: a black screen with a hole of light at the ship
+  // Level 15: the living tunnel, the walls of growth, and the spore haze.
+  private tunnel: Tunnel | null = null;
+  private barriers!: Barriers;
+  private fog: Phaser.GameObjects.TileSprite | null = null;
+  private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private segBossDone = false; // this segment's mini boss is beaten
 
   phase: Phase = 'action';
   private segment = 0;
@@ -236,13 +247,17 @@ export class GameScene extends Phaser.Scene {
     this.scenery = null;
     this.planet = null;
     this.dark = null;
+    this.tunnel = null;
+    this.fog = null;
+    this.motes = null;
+    this.segBossDone = false;
   }
 
   create() {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
     const inRift = this.level.riftAfter !== undefined && this.segment > this.level.riftAfter;
-    this.setTheme(inRift ? 'rift' : this.level.theme);
+    this.setTheme(inRift ? 'rift' : this.segmentTheme(this.segment));
     this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
@@ -252,6 +267,8 @@ export class GameScene extends Phaser.Scene {
     this.coins = this.physics.add.group();
     this.beams = this.add.graphics().setDepth(12);
     this.act3 = new Act3Hazards(this);
+    this.barriers = new Barriers(this);
+    this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
@@ -304,8 +321,20 @@ export class GameScene extends Phaser.Scene {
     this.theme = theme;
     this.scenery?.destroy();
     this.planet?.destroy();
+    this.fog?.destroy();
+    this.motes?.destroy();
     this.scenery = null;
     this.planet = null;
+    this.fog = null;
+    this.motes = null;
+    if (theme === 'mist') {
+      // A haze over the action (under shots and the ship), and spores drifting through it.
+      this.fog = this.add.tileSprite(0, 0, W, H, 'fog').setOrigin(0).setDepth(9.55).setAlpha(0.15);
+      this.motes = this.add.particles(0, 0, 'px', {
+        x: { min: 0, max: W }, y: -4, lifespan: 9000, speedY: { min: 14, max: 30 }, speedX: { min: -6, max: 6 },
+        alpha: { start: 0.8, end: 0.2 }, tint: [0xb8f818, 0x58d854, 0xfce0a8, 0x9878f8], frequency: 90,
+      }).setDepth(9.5);
+    }
     if (theme !== 'outpost' && theme !== 'deep') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
     if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
     if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
@@ -314,6 +343,21 @@ export class GameScene extends Phaser.Scene {
     // Just above the two star layers, under everything that flies.
     if (this.scenery) this.children.moveTo(this.scenery, 2);
     if (this.planet) this.children.moveTo(this.planet, this.scenery ? 3 : 2);
+  }
+
+  // The scenery for a segment: level 15 changes it as it goes.
+  private segmentTheme(seg: number): Theme {
+    return this.level.segmentThemes?.[seg] ?? this.level.theme;
+  }
+
+  // Level 15's living tunnel, when this segment flies through it.
+  private startTunnel() {
+    const t = this.level.tunnel;
+    this.tunnel?.destroy();
+    this.tunnel = null;
+    if (!t || t.segment !== this.segment) return;
+    this.tunnel = new Tunnel(this, t.len, t.chambers);
+    this.tunnel.sink(this.scenery ? 3 : 2);
   }
 
   // A line from an ally or Base, at the top of the screen.
@@ -644,7 +688,12 @@ export class GameScene extends Phaser.Scene {
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
-      if (this.enemies.countActive() === 0) this.endSegment();
+      // In the tunnel, fly on until it opens out again.
+      if (this.enemies.countActive() === 0 && (!this.tunnel || this.tunnel.done)) {
+        this.tunnel?.destroy();
+        this.tunnel = null;
+        this.endSegment();
+      }
       return;
     }
     if (wave.waitClear && this.enemies.countActive() > 0) return;
@@ -658,17 +707,19 @@ export class GameScene extends Phaser.Scene {
 
   private spawnWave(w: Wave) {
     const n = w.count ?? 1;
-    const cx = (w.x ?? 0.5) * W;
+    // In the tunnel, positions across the screen become positions across the tunnel.
+    const tx = (x: number) => (this.tunnel ? this.tunnel.mapX(x / W, 0) : x);
+    const cx = tx((w.x ?? 0.5) * W);
     switch (w.pattern) {
       case 'single':
         this.spawnEnemy(w.kind, cx, -10);
         break;
       case 'pair':
-        this.spawnEnemy(w.kind, W * 0.3, -10);
-        this.spawnEnemy(w.kind, W * 0.7, -10);
+        this.spawnEnemy(w.kind, tx(W * 0.3), -10);
+        this.spawnEnemy(w.kind, tx(W * 0.7), -10);
         break;
       case 'line':
-        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, ((i + 0.5) / n) * (W - 20) + 10, -10);
+        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, tx(((i + 0.5) / n) * (W - 20) + 10), -10);
         break;
       case 'column':
         for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, cx, -10 - i * 16);
@@ -786,6 +837,15 @@ export class GameScene extends Phaser.Scene {
         d.stopY = Phaser.Math.Between(50, 90);
         d.fireIn = 1500;
         break;
+      case 'egg':
+        d.aim = 26;
+        d.hold = EGG_HATCH;
+        break;
+      case 'larva':
+        d.aim = Math.PI / 2 + Phaser.Math.FloatBetween(-1.2, 1.2);
+        d.hold = 200;
+        e.body!.setCircle(3, 0.5, 0.5);
+        break;
     }
   }
 
@@ -862,6 +922,36 @@ export class GameScene extends Phaser.Scene {
           }
         }
         break;
+      case 'egg':
+        // Drifts down with the growth it was laid on, pulsing faster, then hatches.
+        e.y += d.aim * dt;
+        d.hold -= ms;
+        e.setTexture(Math.floor(d.t * (d.hold < 1500 ? 10 : 2)) % 2 ? 'eggLit' : 'egg');
+        e.setScale(d.hold < 1500 ? 1 + Math.sin(d.t * 30) * 0.08 : 1);
+        if (d.hold <= 0 && firing) {
+          for (let i = 0; i < 3; i++) this.spawnEnemy('larva', e.x + (i - 1) * 5, e.y);
+          this.goo.explode(10, e.x, e.y);
+          e.destroy();
+          return true;
+        }
+        break;
+      case 'larva': {
+        // Skitters toward the ship in jerky darts, then gives up and wanders off.
+        if (d.t < 8) {
+          d.hold -= ms;
+          if (d.hold <= 0) {
+            d.hold = Phaser.Math.Between(260, 520);
+            const tg = this.aimTarget(false);
+            d.aim = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y) + Phaser.Math.FloatBetween(-0.7, 0.7);
+          }
+        }
+        const sp = 40 + (d.hold % 260) / 3;
+        e.x += Math.cos(d.aim) * sp * dt;
+        e.y += Math.sin(d.aim) * sp * dt;
+        e.setTexture(Math.floor(d.t * 10) % 2 ? 'larvaLit' : 'larva');
+        if (d.t > 12) { e.destroy(); return true; }
+        break;
+      }
       case 'husk':
         // Lumbers in and fires bursts of three aimed shots.
         e.y += (e.y < d.stopY ? 24 : 6) * dt;
@@ -1021,6 +1111,8 @@ export class GameScene extends Phaser.Scene {
         case 'brood':
         case 'mimic':
         case 'husk':
+        case 'egg':
+        case 'larva':
           if (this.updateHollow(e, d, dt, firing)) continue;
           break;
         case 'bulwark':
@@ -1196,6 +1288,7 @@ export class GameScene extends Phaser.Scene {
       else if (hz.kind === 'flare') this.spawnFlare();
       else if (hz.kind === 'fence') this.spawnFence();
       else if (hz.kind === 'debris' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
+      else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier');
       else this.act3.spawn(hz.kind);
     });
   }
@@ -1379,6 +1472,7 @@ export class GameScene extends Phaser.Scene {
     this.fences = [];
     this.flareGlow.setFillStyle(0xf8b800, 0);
     this.act3.clear();
+    this.barriers.clear();
   }
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
@@ -1935,18 +2029,19 @@ export class GameScene extends Phaser.Scene {
 
   // --- Boss ------------------------------------------------------------------
 
-  private startBoss() {
+  private startBoss(kind: BossKind = this.level.boss!) {
     const warn = text(this, W / 2, H / 2 - 30, 'WARNING', COLOR.red, 16).setOrigin(0.5).setDepth(1000);
     this.tweens.add({ targets: warn, alpha: 0.1, yoyo: true, repeat: 4, duration: 250, onComplete: () => warn.destroy() });
-    const kind = this.level.boss!;
-    const done = () => this.bossDefeated();
-    const make: Record<typeof kind, () => Boss> = {
+    const done = () => this.bossDefeated(kind);
+    const make: Record<BossKind, () => Boss> = {
       rockjaw: () => new Rockjaw(this, done),
       dreadnought: () => new Dreadnought(this, done),
       watcher: () => new Watcher(this, done),
       voss: () => new Voss(this, done),
       queen: () => new BroodQueen(this, done),
       mind: () => new HollowMind(this, done),
+      sporeheart: () => new Sporeheart(this, done),
+      wyrm: () => new Wyrm(this, done),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
@@ -1965,17 +2060,18 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(0xd82800).fillRect(W / 2 - w / 2, 20, Math.ceil(w * this.boss.healthFraction()), 4);
   }
 
-  private bossDefeated() {
+  private bossDefeated(kind: BossKind) {
     this.bossBar?.destroy();
     this.bossName?.destroy();
     this.bossBar = null;
     this.bossPull = { x: 0, y: 0 };
     this.enemyBullets.clear(true, true);
-    const big = ['dreadnought', 'voss', 'mind'].includes(this.level.boss!);
+    const big = ['dreadnought', 'voss', 'mind'].includes(kind);
+    const midLevel = this.segment < this.level.segments.length - 1;
     // Wait for the gold to drop before gathering it up.
     this.time.delayedCall(big ? 3600 : 1800, () => {
       this.boss = null;
-      this.levelClear();
+      if (midLevel) { this.segBossDone = true; this.endSegment(); } else this.levelClear();
     });
   }
 
@@ -1984,13 +2080,49 @@ export class GameScene extends Phaser.Scene {
     return this.spawnEnemy(kind, x, y);
   }
 
+  // An egg drifting down at `speed` px/s, hatching into larvae unless it's burned first.
+  spawnEgg(x: number, y: number, speed: number) {
+    const e = this.spawnEnemy('egg', x, y);
+    const d = e.getData('e') as EnemyData;
+    d.aim = speed;
+    d.hold = EGG_HATCH;
+    this.tipOnce('egg', 'BURN THE EGGS\nBEFORE THEY HATCH');
+    return e;
+  }
+
   // --- Segments, vendor stops, level end ------------------------------------
 
   private endSegment() {
+    if (this.phase !== 'action') return;
+    const midBoss = this.level.segmentBoss?.[this.segment];
     if (this.level.riftAfter === this.segment) this.riftSequence();
-    else if (this.segment < this.level.segments.length - 1) this.vendorArrival();
-    else if (this.level.boss) this.startBoss();
+    else if (this.segment < this.level.segments.length - 1) {
+      if (midBoss && !this.segBossDone) this.startBoss(midBoss);
+      else if (this.level.vendorless) this.flowOn();
+      else this.vendorArrival();
+    } else if (this.level.boss) this.startBoss();
     else this.levelClear();
+  }
+
+  // Level 15: no vendor between segments. Gather up, maybe change scenery, go on.
+  private flowOn() {
+    this.phase = 'ready';
+    this.dragFrom = null;
+    this.enemyBullets.clear(true, true);
+    this.gatherCoins(() => {
+      this.clearForCutscene();
+      const next = this.segment + 1;
+      // A Rewind Beacon would restart from here.
+      this.checkpoint = { save: cloneSave(this.state), segment: next };
+      if (this.segmentTheme(next) !== this.theme) {
+        this.cameras.main.fadeOut(500);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+          this.setTheme(this.segmentTheme(next));
+          this.cameras.main.fadeIn(700);
+        });
+      }
+      this.startNextSegment();
+    });
   }
 
   private gatherCoins(then: () => void) {
@@ -2145,7 +2277,11 @@ export class GameScene extends Phaser.Scene {
       this.segment++;
       this.waveIndex = 0;
       this.waveTimer = 0;
+      this.segBossDone = false;
       this.resetHazardTimers(3000);
+      this.startTunnel();
+      const call = this.level.segmentRadio?.[this.segment];
+      if (call) this.radio(call);
       this.phase = 'action';
     });
   }
@@ -2233,6 +2369,7 @@ export class GameScene extends Phaser.Scene {
     this.scroll(dt, speed);
     if (this.scenery) this.scenery.tilePositionY -= 11 * speed * dt;
     if (this.planet) this.planet.y += 1.2 * dt;
+    if (this.fog) { this.fog.tilePositionY -= 6 * dt; this.fog.tilePositionX += 2 * dt; }
     for (const p of this.patches.slice()) {
       p.y += 30 * speed * dt;
       if (p.y > H + 30) { p.destroy(); this.patches.splice(this.patches.indexOf(p), 1); }
@@ -2253,6 +2390,16 @@ export class GameScene extends Phaser.Scene {
     this.updateFlares(edt);
     this.updateFences(edt);
     this.act3.update(edt);
+    if (this.tunnel) {
+      this.tunnel.update(edt, this.phase === 'action' || this.phase === 'ready');
+      // Enemies keep inside the tunnel too.
+      for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+        if (o.y < 0) continue;
+        const { l, r } = this.tunnel.at(o.y);
+        if (r - l > 16) o.x = Phaser.Math.Clamp(o.x, l + 7, r - 7);
+      }
+    }
+    this.barriers.update(edt);
     this.updateGear(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);
