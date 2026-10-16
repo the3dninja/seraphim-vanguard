@@ -27,3 +27,6 @@ export function shotsIn(g: GameScene, x: number, y: number, hw: number, hh: numb
 // Whether the ship is inside a box around (x, y).
 export const shipIn = (g: GameScene, x: number, y: number, hw: number, hh: number) =>
   Math.abs(g.player.x - x) < hw && Math.abs(g.player.y - y) < hh;
+
+// Side missions bring back a mini boss in a new color, with more or less health.
+export interface BossOpts { tint?: number; hp?: number; skin?: string } // skin: the body's texture

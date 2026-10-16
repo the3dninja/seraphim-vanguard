@@ -1,30 +1,45 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { LEVELS, commonEnemies, levelEnder, metEnemies } from '../data/levels';
+import { LEVELS, commonEnemies, isBuilt, levelEnder, metEnemies, type LevelDef } from '../data/levels';
+import { SIDES, systemOf, type SideDef } from '../data/sides';
 import type { SaveData } from '../save';
 import { button, starfield, text } from '../ui';
 
 interface MapData {
   state: SaveData;
   onLeave: () => void;
+  // Fly the next level (no side) or a side mission; Base takes it from there.
+  onLaunch?: (side?: string) => void;
 }
 
+// A stop on the map: a main level by index, or a side mission.
+type Stop = { i: number; side?: undefined } | { i: number; side: SideDef };
+
 // Node positions: one row per act of five levels, snaking up the screen.
-const ROWS = [168, 112, 56];
+const ROWS = [166, 110, 56];
 const COLS = [22, 56, 90, 124, 158];
 const nodePos = (i: number) => {
   const row = Math.floor(i / 5);
   const col = row % 2 === 0 ? i % 5 : 4 - (i % 5);
   return { x: COLS[col], y: ROWS[row] + ((i % 2) * 2 - 1) * 7 };
 };
-const INFO_Y = 188;
+// Side mission moons hang just below the level they sit beside, in pairs
+// side by side.
+const sidePos = (sd: SideDef) => {
+  const twins = SIDES.filter((o) => o.anchor === sd.anchor);
+  const k = twins.indexOf(sd);
+  const a = nodePos(sd.anchor - 1);
+  return { x: a.x + (twins.length === 2 ? (k ? 12 : -12) : 0), y: a.y + 19 };
+};
+const INFO_Y = 202;
 
-// The Base star map: a roadmap of all 15 levels. Info only. The next level
-// is picked by default, and the one after it can be read too, so purchases
-// can be planned. Cleared levels can be looked back on.
+// The Base star map: a roadmap of all 15 levels and the side missions beside
+// them. The next level is picked by default, and the one after it can be read
+// too, so purchases can be planned. Cleared levels can be looked back on.
+// The next level and any open side mission can be launched from here.
 export class MapScene extends Phaser.Scene {
   private d!: MapData;
-  private selected = 0;
+  private selected: Stop = { i: 0 };
   private content!: Phaser.GameObjects.Container;
   private scroll!: ReturnType<typeof starfield>;
 
@@ -32,7 +47,7 @@ export class MapScene extends Phaser.Scene {
 
   init(data: MapData) {
     this.d = data;
-    this.selected = Math.min(data.state.level, LEVELS.length) - 1;
+    this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
   }
 
   create() {
@@ -56,14 +71,32 @@ export class MapScene extends Phaser.Scene {
 
   private get next() { return Math.min(this.d.state.level, LEVELS.length) - 1; }
 
-  // Cleared levels, the next one and the one after it.
-  private selectable(i: number) {
+  // Cleared levels, the next one and the one after it, and side missions
+  // beside any of those.
+  private selectable(st: Stop) {
+    const i = st.side ? st.side.anchor - 1 : st.i;
     return i >= 0 && i <= Math.min(this.next + 1, LEVELS.length - 1);
   }
 
+  // Every stop in map order: each level, then the side missions beside it.
+  private stops(): Stop[] {
+    return LEVELS.flatMap((_l, i) => [{ i } as Stop, ...SIDES.filter((sd) => sd.anchor === i + 1).map((side) => ({ i, side }))]);
+  }
+
+  private same(a: Stop, b: Stop) { return a.i === b.i && a.side === b.side; }
+
   private step(dir: number) {
-    const i = this.selected + dir;
-    if (this.selectable(i)) { this.selected = i; this.render(); }
+    const all = this.stops().filter((st) => this.selectable(st));
+    const k = all.findIndex((st) => this.same(st, this.selected));
+    const to = all[k + dir];
+    if (to) { this.selected = to; this.render(); }
+  }
+
+  private sideState(sd: SideDef) {
+    const st = this.d.state;
+    if (st.sides.includes(sd.id)) return 'cleared';
+    if (sd.anchor > st.level) return 'coming';
+    return systemOf(sd.anchor) === systemOf(st.level) ? 'open' : 'missed';
   }
 
   // The path and the level pictures, drawn once.
@@ -85,9 +118,30 @@ export class MapScene extends Phaser.Scene {
       if (i < this.next) this.add.image(x + 8, y + 7, 'check');
       const hit = this.add.rectangle(x, y, 28, 28, 0x000000, 0).setInteractive();
       hit.on('pointerup', () => {
-        if (this.selectable(i)) { this.selected = i; this.render(); }
+        if (this.selectable({ i })) { this.selected = { i }; this.render(); }
       });
     });
+    // Side mission moons, joined to their level by a short dotted line.
+    for (const sd of SIDES) {
+      const { x, y } = sidePos(sd);
+      const a = nodePos(sd.anchor - 1);
+      const state = this.sideState(sd);
+      g.fillStyle(state === 'open' ? 0x3cbcfc : state === 'cleared' ? 0xf8b800 : 0x3c3c3c);
+      for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
+      const img = this.add.image(x, y, sd.node);
+      if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
+      if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
+      // An open one blinks a ring so it stands out.
+      if (state === 'open') {
+        const ring = this.add.circle(x, y, 8).setStrokeStyle(1, 0x3cbcfc);
+        this.tweens.add({ targets: ring, alpha: 0.15, yoyo: true, repeat: -1, duration: 600 });
+      }
+      const hit = this.add.rectangle(x, y, 20, 20, 0x000000, 0).setInteractive();
+      const stop: Stop = { i: sd.anchor - 1, side: sd };
+      hit.on('pointerup', () => {
+        if (this.selectable(stop)) { this.selected = stop; this.render(); }
+      });
+    }
     // The player's ship waits at the next level.
     const n = nodePos(this.next);
     const ship = this.add.image(n.x, n.y - 15, 'ship').setScale(0.7);
@@ -97,25 +151,37 @@ export class MapScene extends Phaser.Scene {
   private render() {
     this.content.removeAll(true);
     const add = <T extends Phaser.GameObjects.GameObject>(o: T) => { this.content.add(o); return o; };
-    const i = this.selected;
-    const l = LEVELS[i];
+    const { i, side } = this.selected;
+    const l: LevelDef = side ?? LEVELS[i];
 
-    add(text(this, W / 2, 6, `LEVEL ${i + 1}`, COLOR.gray).setOrigin(0.5, 0));
+    add(text(this, W / 2, 6, side ? 'SIDE MISSION' : `LEVEL ${i + 1}`, side ? COLOR.cyan : COLOR.gray).setOrigin(0.5, 0));
     add(text(this, W / 2, 18, l.name, COLOR.white).setOrigin(0.5, 0));
-    const status = i < this.next ? ['CLEARED', COLOR.green] : i === this.next ? ['NEXT', COLOR.yellow] : ['COMING UP', COLOR.cyan];
-    const ender = levelEnder(i + 1);
+    let status: [string, string];
+    let ender = '';
+    let launch = false;
+    if (side) {
+      const st = this.sideState(side);
+      status = st === 'cleared' ? ['CLEARED', COLOR.green] : st === 'open' ? ['OPEN', COLOR.yellow] : st === 'missed' ? ['CLOSED', COLOR.gray] : ['COMING UP', COLOR.cyan];
+      ender = side.boss ? 'MINI BOSS' : '';
+      launch = st === 'open';
+    } else {
+      status = i < this.next ? ['CLEARED', COLOR.green] : i === this.next ? ['NEXT', COLOR.yellow] : ['COMING UP', COLOR.cyan];
+      ender = levelEnder(i + 1);
+      launch = i === this.next && this.d.state.level <= LEVELS.length && isBuilt(l);
+    }
     add(text(this, W / 2, 30, ender ? `${status[0]} - ${ender}` : status[0], status[1]).setOrigin(0.5, 0));
 
     // Blinking brackets around the selected level.
-    const { x, y } = nodePos(i);
-    const sel = add(this.add.rectangle(x, y, 24, 24).setStrokeStyle(1, 0xf8b800));
+    const { x, y } = side ? sidePos(side) : nodePos(i);
+    const box = side ? 16 : 24;
+    const sel = add(this.add.rectangle(x, y, box, box).setStrokeStyle(1, 0xf8b800));
     this.tweens.add({ targets: sel, alpha: 0.2, yoyo: true, repeat: -1, duration: 350 });
 
     add(this.add.rectangle(4, INFO_Y, W - 8, 1, 0x3c3c3c).setOrigin(0));
     add(text(this, 6, INFO_Y + 5, l.desc, COLOR.white).setWordWrapWidth(W - 12));
 
     // Common enemies: the enemy's own sprite (or ? if not met yet) and 1 to 3 pips.
-    const ey = 254;
+    const ey = 258;
     add(text(this, 6, ey, 'COMMON ENEMIES', COLOR.gray));
     const met = metEnemies(this.d.state.level);
     commonEnemies(l).forEach(([kind, pips], k) => {
@@ -125,16 +191,21 @@ export class MapScene extends Phaser.Scene {
       for (let p = 0; p < 3; p++) add(this.add.image(cx - 4 + p * 4, ey + 32, p < pips ? 'pip' : 'pipEmpty'));
     });
 
-    add(button(this, 6, H - 22, W - 12, 18, 'BACK', () => this.leave(), COLOR.cyan));
+    if (launch && this.d.onLaunch) {
+      add(button(this, 6, H - 22, 84, 18, 'BACK', () => this.leave(), COLOR.cyan));
+      add(button(this, 94, H - 22, W - 100, 18, 'LAUNCH', () => this.leave(side ? side.id : null), COLOR.yellow));
+    } else add(button(this, 6, H - 22, W - 12, 18, 'BACK', () => this.leave(), COLOR.cyan));
   }
 
-  private leave() {
+  // `launch` is null for the next level, or a side mission's id.
+  private leave(launch?: string | null) {
     this.input.keyboard!.enabled = false;
     this.cameras.main.fadeOut(250);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop();
       this.scene.resume('Base');
       this.d.onLeave();
+      if (launch !== undefined) this.d.onLaunch?.(launch ?? undefined);
     });
   }
 

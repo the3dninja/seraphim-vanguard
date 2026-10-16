@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  GEAR, ITEMS, KITS, WEAPONS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type ItemId, type KitId,
+  GEAR, ITEMS, KITS, WEAPONS, defOf, isGear, isItem, isKit, isWeapon, kindOf, scoreOf, stackLabel, type GearId, type ItemId, type KitId,
   type WeaponId,
 } from '../data/items';
 import {
@@ -16,15 +16,52 @@ interface VendorData {
   mode: 'level' | 'base';
   from: string; // scene to resume on Leave
   onLeave: () => void;
+  repair?: Repair; // in-level vendors fix the hull for credits
 }
 
-type Tab = 'buy' | 'sell' | 'upgrade';
+// The ship's health as the level knows it, for the in-level Repair tab.
+export interface Repair { health: () => number; max: number; heal: (n: number) => void }
 
-const ROW_H = 28;
-const LIST_Y = 46;
-const LIST_END = 228; // the list, storage strip and pager share the space down to here
-const INFO_Y = 234;
-const STRIP_Y = 270; // equipped slots: weapons and gear, then items on the line below
+// What one heart of repair costs at an in-level vendor: more later in the campaign.
+export const repairPrice = (level: number) => 6 + level * 2;
+
+// The score in-level vendors favor at a level: 1 at level 1, up to 9 at level 15.
+const targetScore = (level: number) => 1 + ((level - 1) * 8) / 14;
+
+// How likely something is to be stocked: things near the target score are
+// most likely, weaker things a bit less, and stronger things fall off fast
+// (a little under 1 in 7 for 3 points above, never 7 or more above).
+function stockWeight(id: string, level: number) {
+  const d = scoreOf(id) - targetScore(level);
+  if (d >= 7) return 0;
+  return d > 0 ? Math.max(0.03, Math.exp(-(d * d) / 4.5)) : Math.max(0.3, 1 + d * 0.12);
+}
+
+// `n` different picks from the pool, each weighted by stockWeight.
+function pickByStrength(pool: string[], level: number, n: number) {
+  const left = pool.map((id) => ({ id, w: stockWeight(id, level) })).filter((e) => e.w > 0);
+  const out: string[] = [];
+  while (out.length < n && left.length) {
+    let r = Math.random() * left.reduce((sum, e) => sum + e.w, 0);
+    const i = left.findIndex((e) => (r -= e.w) <= 0);
+    out.push(left.splice(i < 0 ? left.length - 1 : i, 1)[0].id);
+  }
+  return out;
+}
+
+type Tab = 'buy' | 'sell' | 'upgrade' | 'repair';
+
+// Everything sits at a fixed height, so nothing shifts as lists grow or shrink:
+// three rows per page, the page arrows, Storage, the info box, the equipped
+// slots and the Leave button.
+const ROW_H = 34;
+const PER_PAGE = 3;
+const LIST_Y = 44;
+const PAGER_Y = LIST_Y + PER_PAGE * ROW_H + 2;
+const STORE_Y = PAGER_Y + 18;
+const STORE_LINES = 3;
+const INFO_Y = STORE_Y + 4 + STORE_LINES * 13 + 6;
+const STRIP_Y = 272; // equipped slots: weapons and gear, then items on the line below
 const STORE_X = 64; // where storage icons start, after the label
 // The shop, used both at in-level vendor stops and at Base. The Base vendor
 // adds an Upgrade tab for hull, extra slots and weapon levels.
@@ -64,13 +101,16 @@ export class VendorScene extends Phaser.Scene {
   // 4 to 6 entries on arrival: 0 to 2 common consumables (Repair Kits most
   // often), 2 to 3 exclusives (in-level weapons and gear, and rare
   // consumables), and sometimes an Upgrade Kit, more often in later levels.
+  // Exclusives are picked by strength: each has a score from 1 to 9, and the
+  // further into the campaign, the higher the score vendors favor. Stronger
+  // things still turn up early now and then, just rarely.
   private rollStock(): string[] {
     const s = this.d.state;
     const lv = s.level;
-    const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w) && lv >= WEAPONS[w].from);
-    const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
     const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare);
     if (this.d.mode === 'base') {
+      const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w) && lv >= WEAPONS[w].from);
+      const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
       return [...weapons.filter((w) => WEAPONS[w].where === 'base'), ...gear.filter((g) => GEAR[g].where === 'base'), ...common];
     }
     const out: string[] = [];
@@ -79,11 +119,14 @@ export class VendorScene extends Phaser.Scene {
       const id = Math.random() < 0.5 ? 'repair' : Phaser.Utils.Array.GetRandom(common);
       if (!out.includes(id)) out.push(id);
     }
-    const rare = (Object.keys(ITEMS) as ItemId[]).filter((i) => ITEMS[i].rare);
-    const pool = Phaser.Utils.Array.Shuffle([
-      ...weapons.filter((w) => WEAPONS[w].where === 'level'), ...gear.filter((g) => GEAR[g].where === 'level'), ...rare,
-    ]);
-    out.push(...pool.slice(0, Phaser.Math.Between(2, 3)));
+    // Gear only shows up once gear slots can be bought (level 6 on).
+    const gearOk = lv >= 6 || s.gear.length > 0;
+    const pool = [
+      ...(Object.keys(WEAPONS) as WeaponId[]).filter((w) => WEAPONS[w].where === 'level' && !this.owns(w)),
+      ...(gearOk ? (Object.keys(GEAR) as GearId[]).filter((g) => GEAR[g].where === 'level' && !this.owns(g)) : []),
+      ...(Object.keys(ITEMS) as ItemId[]).filter((i) => ITEMS[i].rare),
+    ];
+    out.push(...pickByStrength(pool, lv, Phaser.Math.Between(2, 3)));
     if (Math.random() < 0.12 + lv * 0.03) out.push(Math.random() < 0.55 ? 'wkit' : 'gkit');
     // Top up with common consumables so there are always at least four.
     for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id)) out.push(id);
@@ -99,10 +142,10 @@ export class VendorScene extends Phaser.Scene {
     add(this.add.image(W - 6, 10, 'coinIcon').setOrigin(1, 0.5));
     add(text(this, W - 16, 7, `${s.credits}`, COLOR.yellow).setOrigin(1, 0));
 
-    const tabs: [Tab, string][] = this.d.mode === 'base'
-      ? [['buy', 'BUY'], ['sell', 'SELL'], ['upgrade', 'UPGRADE']]
+    const tabs: [Tab, string][] = this.d.mode === 'base' ? [['buy', 'BUY'], ['sell', 'SELL'], ['upgrade', 'UPGRADE']]
+      : this.d.repair ? [['buy', 'BUY'], ['sell', 'SELL'], ['repair', 'REPAIR']]
       : [['buy', 'BUY'], ['sell', 'SELL']];
-    // UPGRADE is the longest label, so it gets the widest tab.
+    // UPGRADE and REPAIR are the longest labels, so they get the widest tab.
     const widths = tabs.length === 3 ? [48, 48, 64] : [82, 82];
     let tx = 6;
     tabs.forEach(([tab, label], i) => {
@@ -112,23 +155,40 @@ export class VendorScene extends Phaser.Scene {
       tx += widths[i] + 4;
     });
 
-    const rows: { id: string; count: number; up?: Upgrade }[] = this.tab === 'buy' ? this.stock.map((id) => ({ id, count: 1 }))
+    if (this.tab === 'repair') this.repairPanel(add);
+    else this.listRows(add);
+
+    // Storage, at a fixed spot under the page arrows. The Sell tab lists storage already.
+    if (this.tab !== 'sell') this.storageStrip(add, STORE_Y);
+
+    // Info box for the tapped entry.
+    add(this.add.rectangle(4, INFO_Y - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
+    const sel = this.selected;
+    const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
+    const info = up ? up.desc
+      : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel) || isKit(sel)) ? defOf(sel).desc
+      : this.tab === 'repair' ? `REPAIRS COST ${repairPrice(s.level)} CR A HEART AT THIS VENDOR.`
+      : 'TAP AN ENTRY FOR INFO';
+    add(text(this, 6, INFO_Y, info, sel || this.tab === 'repair' ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+
+    this.slotStrip(add, STRIP_Y);
+
+    add(button(this, 6, H - 22, W - 12, 18, this.d.mode === 'base' ? 'BACK' : 'LEAVE', () => this.leave(), COLOR.cyan));
+  }
+
+  // The Buy, Sell or Upgrade list: three rows a page, each with what kind of
+  // thing it is under its name, and the page arrows under the rows.
+  private listRows(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T) {
+    const s = this.d.state;
+    const rows: { id: string; count: number; up?: Upgrade }[] = this.tab === 'buy' ? this.sortedStock().map((id) => ({ id, count: 1 }))
       : this.tab === 'sell' ? this.groupedStorage()
       : upgradesFor(s).map((u) => ({ id: u.key, count: 1, up: u }));
-
-    // Storage sits in the space under the list as a compact strip of icons and
-    // counts. The Sell tab lists storage already, so it leaves the strip out.
-    const stored = this.tab === 'sell' ? [] : this.storageLayout();
-    const storeLines = this.tab === 'sell' ? 0 : Math.max(1, ...stored.map((e) => e.line + 1));
-    const storeH = storeLines ? storeLines * 13 + 4 : 0;
-    let maxRows = Math.floor((LIST_END - LIST_Y - storeH) / ROW_H);
-    if (rows.length > maxRows) maxRows = Math.floor((LIST_END - LIST_Y - storeH - 18) / ROW_H);
-    const pages = Math.max(1, Math.ceil(rows.length / maxRows));
+    const pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
     this.page = Math.min(this.page, pages - 1);
-    const shown = rows.slice(this.page * maxRows, (this.page + 1) * maxRows);
+    const shown = rows.slice(this.page * PER_PAGE, (this.page + 1) * PER_PAGE);
 
     if (rows.length === 0) {
-      const empty = { buy: 'SOLD OUT', sell: 'STORAGE IS EMPTY', upgrade: 'FULLY UPGRADED' }[this.tab];
+      const empty = { buy: 'SOLD OUT', sell: 'STORAGE IS EMPTY', upgrade: 'FULLY UPGRADED', repair: '' }[this.tab];
       add(text(this, W / 2, LIST_Y + 20, empty, COLOR.gray).setOrigin(0.5));
     }
 
@@ -142,51 +202,72 @@ export class VendorScene extends Phaser.Scene {
         return;
       }
       const def = defOf(row.id);
-      add(this.add.image(12, y + 9, def.icon));
+      const kind = kindOf(row.id);
+      add(this.add.image(12, y + 11, def.icon));
       const lv = this.tab !== 'sell' ? 1 : isWeapon(row.id) ? weaponLevel(s, row.id) : isGear(row.id) ? gearLevel(s, row.id) : 1;
       add(text(this, 22, y + 3, row.count > 1 ? `${def.name} X${row.count}` : lv > 1 ? `${def.name} L${lv}` : def.name));
+      add(text(this, 22, y + 13, kind.label, kind.color));
       if (this.tab === 'buy') {
-        add(text(this, 22, y + 14, `${def.price} CR`, COLOR.yellow));
-        add(button(this, W - 44, y + 7, 38, 16, 'BUY', () => this.buy(row.id)).setEnabled(s.credits >= def.price));
+        add(text(this, 22, y + 23, `${def.price} CR`, COLOR.yellow));
+        add(button(this, W - 44, y + 12, 38, 16, 'BUY', () => this.buy(row.id)).setEnabled(s.credits >= def.price));
       } else {
-        add(text(this, 22, y + 14, `${sellPrice(s, row.id)} CR`, COLOR.yellow));
+        add(text(this, 22, y + 23, `${sellPrice(s, row.id)} CR`, COLOR.yellow));
+        const by = y + 14;
         if (isKit(row.id)) {
           const kit = row.id;
-          add(button(this, W - 86, y + 11, 40, 14, 'USE', () => this.useKit(kit, true)).setEnabled(kitTargets(s, kit).length > 0));
+          add(button(this, W - 86, by, 40, 14, 'USE', () => this.useKit(kit, true)).setEnabled(kitTargets(s, kit).length > 0));
         } else {
-          add(button(this, W - 86, y + 11, 40, 14, 'EQUIP', () => {
+          add(button(this, W - 86, by, 40, 14, 'EQUIP', () => {
             equipFromStorage(s, s.storage.indexOf(row.id));
             this.render();
           }).setEnabled(this.canEquip(row.id)));
         }
-        add(button(this, W - 42, y + 11, 36, 14, 'SELL', () => {
+        add(button(this, W - 42, by, 36, 14, 'SELL', () => {
           sellFromStorage(s, s.storage.indexOf(row.id));
           this.render();
         }));
       }
     });
 
-    let y = LIST_Y + Math.max(shown.length, rows.length === 0 ? 1 : 0) * ROW_H + 2;
-    if (storeLines) {
-      this.storageStrip(add, stored, y);
-      y += storeH;
-    }
     if (pages > 1) {
-      add(button(this, 6, y, 40, 14, '<', () => { this.page = (this.page + pages - 1) % pages; this.render(); }));
-      add(text(this, W / 2, y + 7, `${this.page + 1}/${pages}`, COLOR.gray).setOrigin(0.5));
-      add(button(this, W - 46, y, 40, 14, '>', () => { this.page = (this.page + 1) % pages; this.render(); }));
+      add(button(this, 6, PAGER_Y, 40, 14, '<', () => { this.page = (this.page + pages - 1) % pages; this.render(); }));
+      add(text(this, W / 2, PAGER_Y + 7, `${this.page + 1}/${pages}`, COLOR.gray).setOrigin(0.5));
+      add(button(this, W - 46, PAGER_Y, 40, 14, '>', () => { this.page = (this.page + 1) % pages; this.render(); }));
     }
+  }
 
-    // Info box for the tapped entry.
-    add(this.add.rectangle(4, INFO_Y - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
-    const sel = this.selected;
-    const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
-    const info = up ? up.desc : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel) || isKit(sel)) ? defOf(sel).desc : 'TAP AN ENTRY FOR INFO';
-    add(text(this, 6, INFO_Y, info, sel ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+  // The Buy list grouped by kind: weapons, then gear, then kits, then items.
+  private sortedStock() {
+    const order = (id: string) => (isWeapon(id) ? 0 : isGear(id) ? 1 : isKit(id) ? 2 : ITEMS[id as ItemId]?.rare ? 3 : 4);
+    return [...this.stock].sort((a, b) => order(a) - order(b));
+  }
 
-    this.slotStrip(add, STRIP_Y);
-
-    add(button(this, 6, H - 22, W - 12, 18, this.d.mode === 'base' ? 'BACK' : 'LEAVE', () => this.leave(), COLOR.cyan));
+  // In-level vendors fix the hull, a heart at a time or all at once.
+  private repairPanel(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T) {
+    const r = this.d.repair!;
+    const s = this.d.state;
+    const hp = r.health();
+    const price = repairPrice(s.level);
+    const missing = r.max - hp;
+    add(text(this, 6, LIST_Y + 4, 'HULL', COLOR.gray));
+    for (let i = 0; i < r.max; i++) {
+      add(this.add.image(44 + (i % 10) * 9, LIST_Y + 8 + Math.floor(i / 10) * 8, i < hp ? 'heart' : 'heartEmpty'));
+    }
+    if (missing <= 0) {
+      add(text(this, W / 2, LIST_Y + 44, 'HULL IS FULL', COLOR.green).setOrigin(0.5));
+      return;
+    }
+    const all = Math.min(missing, Math.floor(s.credits / price));
+    const fix = (n: number) => {
+      if (n <= 0 || s.credits < n * price) return;
+      s.credits -= n * price;
+      r.heal(n);
+      toast(this, n > 1 ? `+${n} HEALTH` : '+1 HEALTH', LIST_Y + 96, 700);
+      this.render();
+    };
+    add(button(this, 6, LIST_Y + 30, W - 12, 20, `REPAIR 1   ${price} CR`, () => fix(1)).setEnabled(s.credits >= price));
+    const label = all >= missing ? `REPAIR ALL   ${missing * price} CR` : `REPAIR ${Math.max(all, 1)}   ${Math.max(all, 1) * price} CR`;
+    add(button(this, 6, LIST_Y + 56, W - 12, 20, label, () => fix(Math.max(all, 1))).setEnabled(all > 1));
   }
 
   // Storage entries flowed into lines after the label: icon, count, small gap.
@@ -203,11 +284,13 @@ export class VendorScene extends Phaser.Scene {
   }
 
   // What's in storage, as icons with a count, so it takes little room. Tap one for its info.
-  private storageStrip(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T,
-    stored: { id: string; count: number; x: number; line: number; w: number }[], y: number) {
+  private storageStrip(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T, y: number) {
+    const all = this.storageLayout();
+    const stored = all.filter((e) => e.line < STORE_LINES);
     add(this.add.rectangle(4, y, W - 8, 1, 0x1c1c3c).setOrigin(0));
     add(text(this, 6, y + 4, 'STORAGE', COLOR.gray));
-    if (stored.length === 0) add(text(this, STORE_X, y + 4, 'EMPTY', COLOR.dim));
+    if (all.length === 0) add(text(this, STORE_X, y + 4, 'EMPTY', COLOR.dim));
+    if (stored.length < all.length) add(text(this, 6, y + 17, `+${all.length - stored.length}`, COLOR.gray));
     for (const e of stored) {
       const ly = y + 4 + e.line * 13;
       const picked = this.selected === e.id;
@@ -221,12 +304,14 @@ export class VendorScene extends Phaser.Scene {
 
   private upgradeRow(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T, up: Upgrade, y: number) {
     const s = this.d.state;
-    add(this.add.image(12, y + 9, up.icon));
+    add(this.add.image(12, y + 11, up.icon));
     add(text(this, 22, y + 3, up.name));
+    const kind = up.key.startsWith('wlv:') ? ['WEAPON LEVEL', '#fc7460'] : up.key.startsWith('glv:') ? ['GEAR LEVEL', '#9878f8'] : ['SHIP UPGRADE', '#3cbcfc'];
+    add(text(this, 22, y + 13, kind[0], kind[1]));
     const price = `${up.price} CR`;
-    add(text(this, 22, y + 14, price, COLOR.yellow));
-    add(text(this, 22 + (price.length + 1) * 8, y + 14, up.detail, COLOR.gray));
-    add(button(this, W - 44, y + 7, 38, 16, 'BUY', () => this.buyUpgrade(up)).setEnabled(s.credits >= up.price));
+    add(text(this, 22, y + 23, price, COLOR.yellow));
+    add(text(this, 22 + (price.length + 1) * 8, y + 23, up.detail, COLOR.gray));
+    add(button(this, W - 44, y + 12, 38, 16, 'BUY', () => this.buyUpgrade(up)).setEnabled(s.credits >= up.price));
   }
 
   // What's equipped right now, so purchases can be compared: weapons and gear

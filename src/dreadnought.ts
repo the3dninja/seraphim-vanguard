@@ -51,9 +51,9 @@ export class Dreadnought {
       img: g.add.image(0, -100, key).setDepth(9),
       dx, dy: dreadBottom(dx) - DREAD_H / 2 - dyUp, w: 10, hp, max: hp, spread, fireIn: 1000 + Math.abs(dx) * 12,
     });
-    this.turrets = [part('kturret', -66, 14, false, 7), part('kturret', -34, 18, true, 7),
-      part('kturret', 34, 18, true, 7), part('kturret', 66, 14, false, 7)];
-    this.bridge = { ...part('kbridge', 0, 50, false, 9), w: 16 };
+    this.turrets = [part('kturret', -66, 25, false, 7), part('kturret', -34, 32, true, 7),
+      part('kturret', 34, 32, true, 7), part('kturret', 66, 25, false, 7)];
+    this.bridge = { ...part('kbridge', 0, 90, false, 9), w: 16 };
     this.shieldImg = g.add.image(0, -100, 'kshield').setDepth(10);
     this.place();
     g.tweens.add({

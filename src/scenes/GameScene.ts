@@ -4,7 +4,7 @@ import {
   DTYPE_COLOR, GEAR, ITEMS, WEAPONS, gearStats, stackLabel, type DType, type GearId, type WeaponId,
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
-import { LEVELS, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
+import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
 import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
@@ -13,6 +13,11 @@ import { Watcher } from '../watcher';
 import { Voss } from '../voss';
 import { BroodQueen } from '../broodqueen';
 import { HollowMind } from '../hollowmind';
+import { Sporeheart } from '../sporeheart';
+import { Wyrm } from '../wyrm';
+import { Barriers, Tunnel } from '../heart';
+import { SideHazards } from '../sidehaz';
+import { sideById } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
 
@@ -64,7 +69,10 @@ const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
   voss: 'EMPEROR VOSS', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
+  sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRM',
+  frostjaw: 'FROSTJAW', hollowwatcher: 'HOLLOW WATCHER', broodmother: 'BROOD MATRIARCH',
 };
+const EGG_HATCH = 5500; // ms before an egg hatches into larvae
 const GEAR_KEYS = ['Q', 'E'];
 const ALL_TYPES: DType[] = ['kinetic', 'laser', 'plasma', 'ion', 'explosive'];
 const ARC_LIFE = 0.32; // s an Ion Arc bolt lasts, which sets its range
@@ -109,11 +117,24 @@ export class GameScene extends Phaser.Scene {
   private slide = { x: 0, y: 0 }; // ship velocity, which lags behind the controls on ice
   beams!: Phaser.GameObjects.Graphics; // Lancer and boss lasers, redrawn every frame
   sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private goo!: Phaser.GameObjects.Particles.ParticleEmitter; // Plasma Lobber splashes
+  private blobHitAt = -1; // when a boss last took a Plasma Lobber hit, so its flash shows it
+  // Each player shot's damage, type and look, kept outside the shot itself:
+  // bosses read it after destroying the shot, when its data is already gone.
+  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean }>();
   private scroll!: ReturnType<typeof starfield>;
   private scenery: Phaser.GameObjects.TileSprite | null = null;
   private planet: Phaser.GameObjects.Image | null = null;
   private theme: Theme = 'outpost';
   private dark: Phaser.GameObjects.Image | null = null; // level 13: a black screen with a hole of light at the ship
+  // Level 15: the living tunnel, the walls of growth, and the spore haze.
+  private tunnel: Tunnel | null = null;
+  private barriers!: Barriers;
+  private fog: Phaser.GameObjects.TileSprite | null = null;
+  private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private segBossDone = false; // this segment's mini boss is beaten
+  private side: string | null = null; // the side mission being flown, if any
+  private sideHaz!: SideHazards;
 
   phase: Phase = 'action';
   private segment = 0;
@@ -129,6 +150,7 @@ export class GameScene extends Phaser.Scene {
   private zaps: Zap[] = [];
   private allies: Ally[] = [];
   private riftOpen = 0; // 0 to 1: how far the rift has torn open (level 11 cutscene)
+  bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
 
   // Gear
   private maxHp = 5;
@@ -173,10 +195,12 @@ export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   // `resume` comes from a Rewind Beacon: restart at a checkpoint instead of the level start.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number } }) {
+  // `side` names a side mission to fly instead of the next level.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
-    this.level = LEVELS[this.state.level - 1];
+    this.side = data.side ?? null;
+    this.level = (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
     this.checkpoint = data.resume ? { save: cloneSave(data.resume.save), segment: data.resume.segment } : { save: cloneSave(data.state), segment: 0 };
     this.rewound = !!data.resume;
     this.maxHp = totalMaxHealth(this.state);
@@ -188,6 +212,7 @@ export class GameScene extends Phaser.Scene {
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
+    this.bossPull = { x: 0, y: 0 };
     this.sats = [];
     this.satTimer = 0;
     this.deflect = 0;
@@ -229,13 +254,17 @@ export class GameScene extends Phaser.Scene {
     this.scenery = null;
     this.planet = null;
     this.dark = null;
+    this.tunnel = null;
+    this.fog = null;
+    this.motes = null;
+    this.segBossDone = false;
   }
 
   create() {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
     const inRift = this.level.riftAfter !== undefined && this.segment > this.level.riftAfter;
-    this.setTheme(inRift ? 'rift' : this.level.theme);
+    this.setTheme(inRift ? 'rift' : this.segmentTheme(this.segment));
     this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
@@ -245,6 +274,9 @@ export class GameScene extends Phaser.Scene {
     this.coins = this.physics.add.group();
     this.beams = this.add.graphics().setDepth(12);
     this.act3 = new Act3Hazards(this);
+    this.barriers = new Barriers(this);
+    this.sideHaz = new SideHazards(this);
+    this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
@@ -258,6 +290,10 @@ export class GameScene extends Phaser.Scene {
     this.sparks = this.add.particles(0, 0, 'px', {
       speed: { min: 20, max: 90 }, lifespan: { min: 200, max: 500 }, scale: { start: 1, end: 0 },
       tint: [0xfcfcfc, 0xf8b800, 0xd82800], emitting: false,
+    }).setDepth(20);
+    this.goo = this.add.particles(0, 0, 'px', {
+      speed: { min: 30, max: 110 }, lifespan: { min: 250, max: 520 }, scale: { start: 1, end: 0.3 }, gravityY: 60,
+      tint: [0xfcfcfc, 0x58d854, 0x58d854, 0x00a800], emitting: false,
     }).setDepth(20);
 
     const img = (o: unknown) => o as Phaser.Physics.Arcade.Image;
@@ -274,13 +310,13 @@ export class GameScene extends Phaser.Scene {
     this.createHud();
 
     const intro = [
-      text(this, W / 2, H / 2 - 40, `LEVEL ${this.state.level}`, COLOR.gray),
+      text(this, W / 2, H / 2 - 40, this.side ? 'SIDE MISSION' : `LEVEL ${this.state.level}`, this.side ? COLOR.cyan : COLOR.gray),
       text(this, W / 2, H / 2 - 26, this.level.name, COLOR.white),
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
     this.tweens.add({ targets: intro, alpha: 0, delay: 1800, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
-    const call = RADIO[this.state.level];
+    const call = this.side ? undefined : RADIO[this.state.level];
     if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
     if (equippedGear(this.state).some((g) => GEAR[g].active)) this.time.delayedCall(3000, () => this.tipOnce('gearbtn', 'TAP A GEAR BUTTON\nTO USE IT'));
 
@@ -293,8 +329,20 @@ export class GameScene extends Phaser.Scene {
     this.theme = theme;
     this.scenery?.destroy();
     this.planet?.destroy();
+    this.fog?.destroy();
+    this.motes?.destroy();
     this.scenery = null;
     this.planet = null;
+    this.fog = null;
+    this.motes = null;
+    if (theme === 'mist') {
+      // A haze over the action (under shots and the ship), and spores drifting through it.
+      this.fog = this.add.tileSprite(0, 0, W, H, 'fog').setOrigin(0).setDepth(9.55).setAlpha(0.15);
+      this.motes = this.add.particles(0, 0, 'px', {
+        x: { min: 0, max: W }, y: -4, lifespan: 9000, speedY: { min: 14, max: 30 }, speedX: { min: -6, max: 6 },
+        alpha: { start: 0.8, end: 0.2 }, tint: [0xb8f818, 0x58d854, 0xfce0a8, 0x9878f8], frequency: 90,
+      }).setDepth(9.5);
+    }
     if (theme !== 'outpost' && theme !== 'deep') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
     if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
     if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
@@ -303,6 +351,21 @@ export class GameScene extends Phaser.Scene {
     // Just above the two star layers, under everything that flies.
     if (this.scenery) this.children.moveTo(this.scenery, 2);
     if (this.planet) this.children.moveTo(this.planet, this.scenery ? 3 : 2);
+  }
+
+  // The scenery for a segment: level 15 changes it as it goes.
+  private segmentTheme(seg: number): Theme {
+    return this.level.segmentThemes?.[seg] ?? this.level.theme;
+  }
+
+  // Level 15's living tunnel, when this segment flies through it.
+  private startTunnel() {
+    const t = this.level.tunnel;
+    this.tunnel?.destroy();
+    this.tunnel = null;
+    if (!t || t.segment !== this.segment) return;
+    this.tunnel = new Tunnel(this, t.len, t.chambers);
+    this.tunnel.sink(this.scenery ? 3 : 2);
   }
 
   // A line from an ally or Base, at the top of the screen.
@@ -385,8 +448,9 @@ export class GameScene extends Phaser.Scene {
     }
     // Gravity wells drag the ship toward them.
     const pull = this.act3.pull(dt);
-    mx += pull.x;
-    my += pull.y;
+    const wind = this.sideHaz.pull(dt);
+    mx += pull.x + wind.x + this.bossPull.x * dt;
+    my += pull.y + this.bossPull.y * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
     const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
     // Sliding into the edge of the screen stops the slide that way.
@@ -633,7 +697,12 @@ export class GameScene extends Phaser.Scene {
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
-      if (this.enemies.countActive() === 0) this.endSegment();
+      // In the tunnel, fly on until it opens out again.
+      if (this.enemies.countActive() === 0 && (!this.tunnel || this.tunnel.done)) {
+        this.tunnel?.destroy();
+        this.tunnel = null;
+        this.endSegment();
+      }
       return;
     }
     if (wave.waitClear && this.enemies.countActive() > 0) return;
@@ -647,17 +716,19 @@ export class GameScene extends Phaser.Scene {
 
   private spawnWave(w: Wave) {
     const n = w.count ?? 1;
-    const cx = (w.x ?? 0.5) * W;
+    // In the tunnel, positions across the screen become positions across the tunnel.
+    const tx = (x: number) => (this.tunnel ? this.tunnel.mapX(x / W, 0) : x);
+    const cx = tx((w.x ?? 0.5) * W);
     switch (w.pattern) {
       case 'single':
         this.spawnEnemy(w.kind, cx, -10);
         break;
       case 'pair':
-        this.spawnEnemy(w.kind, W * 0.3, -10);
-        this.spawnEnemy(w.kind, W * 0.7, -10);
+        this.spawnEnemy(w.kind, tx(W * 0.3), -10);
+        this.spawnEnemy(w.kind, tx(W * 0.7), -10);
         break;
       case 'line':
-        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, ((i + 0.5) / n) * (W - 20) + 10, -10);
+        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, tx(((i + 0.5) / n) * (W - 20) + 10), -10);
         break;
       case 'column':
         for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, cx, -10 - i * 16);
@@ -775,6 +846,15 @@ export class GameScene extends Phaser.Scene {
         d.stopY = Phaser.Math.Between(50, 90);
         d.fireIn = 1500;
         break;
+      case 'egg':
+        d.aim = 26;
+        d.hold = EGG_HATCH;
+        break;
+      case 'larva':
+        d.aim = Math.PI / 2 + Phaser.Math.FloatBetween(-1.2, 1.2);
+        d.hold = 200;
+        e.body!.setCircle(3, 0.5, 0.5);
+        break;
     }
   }
 
@@ -851,6 +931,36 @@ export class GameScene extends Phaser.Scene {
           }
         }
         break;
+      case 'egg':
+        // Drifts down with the growth it was laid on, pulsing faster, then hatches.
+        e.y += d.aim * dt;
+        d.hold -= ms;
+        e.setTexture(Math.floor(d.t * (d.hold < 1500 ? 10 : 2)) % 2 ? 'eggLit' : 'egg');
+        e.setScale(d.hold < 1500 ? 1 + Math.sin(d.t * 30) * 0.08 : 1);
+        if (d.hold <= 0 && firing) {
+          for (let i = 0; i < 3; i++) this.spawnEnemy('larva', e.x + (i - 1) * 5, e.y);
+          this.goo.explode(10, e.x, e.y);
+          e.destroy();
+          return true;
+        }
+        break;
+      case 'larva': {
+        // Skitters toward the ship in jerky darts, then gives up and wanders off.
+        if (d.t < 8) {
+          d.hold -= ms;
+          if (d.hold <= 0) {
+            d.hold = Phaser.Math.Between(260, 520);
+            const tg = this.aimTarget(false);
+            d.aim = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y) + Phaser.Math.FloatBetween(-0.7, 0.7);
+          }
+        }
+        const sp = 40 + (d.hold % 260) / 3;
+        e.x += Math.cos(d.aim) * sp * dt;
+        e.y += Math.sin(d.aim) * sp * dt;
+        e.setTexture(Math.floor(d.t * 10) % 2 ? 'larvaLit' : 'larva');
+        if (d.t > 12) { e.destroy(); return true; }
+        break;
+      }
       case 'husk':
         // Lumbers in and fires bursts of three aimed shots.
         e.y += (e.y < d.stopY ? 24 : 6) * dt;
@@ -1010,6 +1120,8 @@ export class GameScene extends Phaser.Scene {
         case 'brood':
         case 'mimic':
         case 'husk':
+        case 'egg':
+        case 'larva':
           if (this.updateHollow(e, d, dt, firing)) continue;
           break;
         case 'bulwark':
@@ -1185,6 +1297,8 @@ export class GameScene extends Phaser.Scene {
       else if (hz.kind === 'flare') this.spawnFlare();
       else if (hz.kind === 'fence') this.spawnFence();
       else if (hz.kind === 'debris' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
+      else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier');
+      else if (['press', 'gust', 'ember', 'blackout', 'sweep'].includes(hz.kind)) this.sideHaz.spawn(hz.kind);
       else this.act3.spawn(hz.kind);
     });
   }
@@ -1368,13 +1482,17 @@ export class GameScene extends Phaser.Scene {
     this.fences = [];
     this.flareGlow.setFillStyle(0xf8b800, 0);
     this.act3.clear();
+    this.barriers.clear();
+    this.sideHaz.clear();
   }
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
     if (!b.active || !h.active || b.getData('fx') === 'wave') return; // the Wave Beam passes through cover
+    const dmg = (b.getData('dmg') as number) ?? 1;
     b.destroy();
+    this.plasmaSplash(b);
     if (h.getData('kind') === 'debris' || h.getData('kind') === 'shelter') { this.tink(b.x, b.y); return; }
-    const hp = (h.getData('hp') as number) - ((b.getData('dmg') as number) ?? 1);
+    const hp = (h.getData('hp') as number) - dmg;
     h.setData('hp', hp);
     if (hp > 0) { this.flash(h); return; }
     this.sparks.explode(8, h.x, h.y);
@@ -1535,6 +1653,7 @@ export class GameScene extends Phaser.Scene {
   private shot(x: number, y: number, texture: string, deg: number, speed: number, dmg: number, dtype: DType) {
     const b = this.playerBullets.create(x, y, texture) as Phaser.Physics.Arcade.Image;
     b.setData('dmg', dmg).setData('dtype', dtype).setData('t', 0);
+    this.shotInfo.set(b, { dmg, dtype, blob: texture === 'blob' });
     const rad = Phaser.Math.DegToRad(deg - 90);
     b.setVelocity(Math.cos(rad) * speed, Math.sin(rad) * speed);
     b.setRotation(Phaser.Math.DegToRad(deg));
@@ -1643,8 +1762,29 @@ export class GameScene extends Phaser.Scene {
   }
 
   flash(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    if (this.blobHitAt === this.time.now) { this.plasmaFlash(o); return; }
     o.setTintFill(0xffffff);
-    this.time.delayedCall(50, () => o.active && o.clearTint());
+    this.time.delayedCall(50, () => o.active && this.restTint(o));
+  }
+
+  // Back to normal after a flash: no tint, or a side mission boss's own color.
+  restTint(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    const base = o.getData('baseTint') as number | undefined;
+    if (base) o.setTint(base);
+    else o.clearTint();
+  }
+
+  // A Plasma Lobber hit: the target flashes white and green a few times.
+  private plasmaFlash(o: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite) {
+    [0xffffff, 0x58d854, 0xffffff, 0x58d854].forEach((c, i) => this.time.delayedCall(i * 45, () => o.active && o.setTintFill(c)));
+    this.time.delayedCall(180, () => o.active && this.restTint(o));
+  }
+
+  // Green goo spraying off whatever a Plasma Lobber blob hits.
+  private plasmaSplash(b: Phaser.GameObjects.Image, x = b.x, y = b.y) {
+    if (!this.shotInfo.get(b)?.blob) return false;
+    this.goo.explode(9, x, y);
+    return true;
   }
 
   // A shot that can't hurt what it hit: a small gray spark.
@@ -1663,7 +1803,9 @@ export class GameScene extends Phaser.Scene {
 
   // What a player shot does to a boss part with these weaknesses.
   shotDamage(b: Phaser.GameObjects.Image, weak: DType[], resist: DType[]) {
-    return this.typedDamage((b.getData('dmg') as number) ?? 1, (b.getData('dtype') as DType) ?? 'kinetic', weak, resist);
+    if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
+    const info = this.shotInfo.get(b);
+    return this.typedDamage(info?.dmg ?? 1, info?.dtype ?? 'kinetic', weak, resist);
   }
 
   private hitEnemy(b: Phaser.Physics.Arcade.Image, e: Phaser.Physics.Arcade.Sprite) {
@@ -1695,6 +1837,7 @@ export class GameScene extends Phaser.Scene {
     const burn = b.getData('burn') as number | undefined;
     if (burn) { d.burn = 2000; d.burnDmg = burn; d.burnTick = Math.min(d.burnTick || 400, 400); }
     const dead = this.damageEnemy(e, dmg, dtype);
+    if (this.plasmaSplash(b, (b.x + e.x) / 2, (b.y + e.y) / 2) && !dead) this.plasmaFlash(e);
     if (b.getData('fx') === 'arc') this.chainArc(e, dmg, dtype);
     if (b.getData('splash')) this.splash(e.x, e.y, b.getData('splash') as number, dmg / 2, dtype, dead ? null : e);
   }
@@ -1883,7 +2026,7 @@ export class GameScene extends Phaser.Scene {
       });
       this.time.delayedCall(2600, () => {
         this.cameras.main.fadeOut(400);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment } }));
+        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment }, side: this.side ?? undefined }));
       });
       return;
     }
@@ -1897,18 +2040,22 @@ export class GameScene extends Phaser.Scene {
 
   // --- Boss ------------------------------------------------------------------
 
-  private startBoss() {
+  private startBoss(kind: BossKind = this.level.boss!) {
     const warn = text(this, W / 2, H / 2 - 30, 'WARNING', COLOR.red, 16).setOrigin(0.5).setDepth(1000);
     this.tweens.add({ targets: warn, alpha: 0.1, yoyo: true, repeat: 4, duration: 250, onComplete: () => warn.destroy() });
-    const kind = this.level.boss!;
-    const done = () => this.bossDefeated();
-    const make: Record<typeof kind, () => Boss> = {
+    const done = () => this.bossDefeated(kind);
+    const make: Record<BossKind, () => Boss> = {
       rockjaw: () => new Rockjaw(this, done),
       dreadnought: () => new Dreadnought(this, done),
       watcher: () => new Watcher(this, done),
       voss: () => new Voss(this, done),
       queen: () => new BroodQueen(this, done),
       mind: () => new HollowMind(this, done),
+      sporeheart: () => new Sporeheart(this, done),
+      wyrm: () => new Wyrm(this, done),
+      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.4 }),
+      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 1.3 }),
+      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 1.1 }),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
@@ -1927,16 +2074,18 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(0xd82800).fillRect(W / 2 - w / 2, 20, Math.ceil(w * this.boss.healthFraction()), 4);
   }
 
-  private bossDefeated() {
+  private bossDefeated(kind: BossKind) {
     this.bossBar?.destroy();
     this.bossName?.destroy();
     this.bossBar = null;
+    this.bossPull = { x: 0, y: 0 };
     this.enemyBullets.clear(true, true);
-    const big = ['dreadnought', 'voss', 'mind'].includes(this.level.boss!);
+    const big = ['dreadnought', 'voss', 'mind'].includes(kind);
+    const midLevel = this.segment < this.level.segments.length - 1;
     // Wait for the gold to drop before gathering it up.
     this.time.delayedCall(big ? 3600 : 1800, () => {
       this.boss = null;
-      this.levelClear();
+      if (midLevel) { this.segBossDone = true; this.endSegment(); } else this.levelClear();
     });
   }
 
@@ -1945,13 +2094,49 @@ export class GameScene extends Phaser.Scene {
     return this.spawnEnemy(kind, x, y);
   }
 
+  // An egg drifting down at `speed` px/s, hatching into larvae unless it's burned first.
+  spawnEgg(x: number, y: number, speed: number) {
+    const e = this.spawnEnemy('egg', x, y);
+    const d = e.getData('e') as EnemyData;
+    d.aim = speed;
+    d.hold = EGG_HATCH;
+    this.tipOnce('egg', 'BURN THE EGGS\nBEFORE THEY HATCH');
+    return e;
+  }
+
   // --- Segments, vendor stops, level end ------------------------------------
 
   private endSegment() {
+    if (this.phase !== 'action') return;
+    const midBoss = this.level.segmentBoss?.[this.segment];
     if (this.level.riftAfter === this.segment) this.riftSequence();
-    else if (this.segment < this.level.segments.length - 1) this.vendorArrival();
-    else if (this.level.boss) this.startBoss();
+    else if (this.segment < this.level.segments.length - 1) {
+      if (midBoss && !this.segBossDone) this.startBoss(midBoss);
+      else if (this.level.vendorless) this.flowOn();
+      else this.vendorArrival();
+    } else if (this.level.boss) this.startBoss();
     else this.levelClear();
+  }
+
+  // Level 15: no vendor between segments. Gather up, maybe change scenery, go on.
+  private flowOn() {
+    this.phase = 'ready';
+    this.dragFrom = null;
+    this.enemyBullets.clear(true, true);
+    this.gatherCoins(() => {
+      this.clearForCutscene();
+      const next = this.segment + 1;
+      // A Rewind Beacon would restart from here.
+      this.checkpoint = { save: cloneSave(this.state), segment: next };
+      if (this.segmentTheme(next) !== this.theme) {
+        this.cameras.main.fadeOut(500);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+          this.setTheme(this.segmentTheme(next));
+          this.cameras.main.fadeIn(700);
+        });
+      }
+      this.startNextSegment();
+    });
   }
 
   private gatherCoins(then: () => void) {
@@ -2012,7 +2197,12 @@ export class GameScene extends Phaser.Scene {
               this.clearForCutscene();
               this.phase = 'vendor';
               this.scene.pause();
-              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {} });
+              const repair = {
+                health: () => this.health,
+                max: this.maxHp,
+                heal: (n: number) => { this.health = Math.min(this.maxHp, this.health + n); },
+              };
+              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair });
             });
           },
         });
@@ -2101,7 +2291,11 @@ export class GameScene extends Phaser.Scene {
       this.segment++;
       this.waveIndex = 0;
       this.waveTimer = 0;
+      this.segBossDone = false;
       this.resetHazardTimers(3000);
+      this.startTunnel();
+      const call = this.level.segmentRadio?.[this.segment];
+      if (call) this.radio(call);
       this.phase = 'action';
     });
   }
@@ -2126,9 +2320,18 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'clear';
     this.enemyBullets.clear(true, true);
     this.clearTimedHazards();
-    const last = this.state.level === LEVELS.length;
+    const last = !this.side && this.state.level === LEVELS.length;
     this.gatherCoins(() => {
       if (last) { this.ending(); return; }
+      if (this.side) {
+        // Side missions don't move the ship on: back to Base, one more beaten.
+        text(this, W / 2, H / 2 - 16, 'SIDE MISSION CLEAR', COLOR.yellow).setOrigin(0.5).setDepth(1000);
+        text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
+        this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+        if (!this.state.sides.includes(this.side)) this.state.sides.push(this.side);
+        this.time.delayedCall(2800, () => this.leaveTo('Base', this.state));
+        return;
+      }
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
       this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
@@ -2189,6 +2392,7 @@ export class GameScene extends Phaser.Scene {
     this.scroll(dt, speed);
     if (this.scenery) this.scenery.tilePositionY -= 11 * speed * dt;
     if (this.planet) this.planet.y += 1.2 * dt;
+    if (this.fog) { this.fog.tilePositionY -= 6 * dt; this.fog.tilePositionX += 2 * dt; }
     for (const p of this.patches.slice()) {
       p.y += 30 * speed * dt;
       if (p.y > H + 30) { p.destroy(); this.patches.splice(this.patches.indexOf(p), 1); }
@@ -2209,6 +2413,17 @@ export class GameScene extends Phaser.Scene {
     this.updateFlares(edt);
     this.updateFences(edt);
     this.act3.update(edt);
+    if (this.tunnel) {
+      this.tunnel.update(edt, this.phase === 'action' || this.phase === 'ready');
+      // Enemies keep inside the tunnel too.
+      for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+        if (o.y < 0) continue;
+        const { l, r } = this.tunnel.at(o.y);
+        if (r - l > 16) o.x = Phaser.Math.Clamp(o.x, l + 7, r - 7);
+      }
+    }
+    this.barriers.update(edt);
+    this.sideHaz.update(edt);
     this.updateGear(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);

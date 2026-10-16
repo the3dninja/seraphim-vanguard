@@ -33,6 +33,7 @@ export interface WeaponDef {
   dtype: DType;
   where: 'start' | 'base' | 'level'; // Base vendor stock, or an in-level vendor exclusive
   from: number; // first level whose vendors stock it
+  score: number; // how strong it is, 1 to 9: in-level vendors stock stronger things as the campaign goes on
   speed?: number; // px per second, 300 if not given
   fx?: WeaponFx;
   splash?: number; // explosive splash radius in px
@@ -52,11 +53,12 @@ export interface ItemDef {
   icon: string;
   cap: number; // max stack in one item slot
   rare?: boolean; // only in-level vendors stock it, and only sometimes
+  score?: number; // rare items: how strong, like weapons and gear
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pulse: {
-    name: 'PULSE BLASTER', price: 40, icon: 'icon_pulse', texture: 'bullet', dtype: 'kinetic', where: 'start', from: 1,
+    name: 'PULSE BLASTER', price: 40, score: 1, icon: 'icon_pulse', texture: 'bullet', dtype: 'kinetic', where: 'start', from: 1,
     desc: 'KINETIC. FAST STRAIGHT SHOTS. RELIABLE BUT NARROW.',
     stats: (lv) => ({
       interval: lv >= 3 ? 115 : 140,
@@ -65,7 +67,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   spread: {
-    name: 'SPREAD GUN', price: 60, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
+    name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN.',
     stats: (lv) => ({
       interval: lv >= 3 ? 220 : 260,
@@ -74,7 +76,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   twin: {
-    name: 'TWIN LASER', price: 180, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
+    name: 'TWIN LASER', price: 180, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
     speed: 440, desc: 'LASER. TWO FAST PARALLEL BEAMS. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 140 : 170,
@@ -84,7 +86,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   homing: {
-    name: 'HOMING MISSILES', price: 260, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
+    name: 'HOMING MISSILES', price: 260, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
     speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND SPLASH. LOW FIRE RATE.',
     stats: (lv) => ({
       interval: lv >= 3 ? 620 : 720,
@@ -93,7 +95,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   plasma: {
-    name: 'PLASMA LOBBER', price: 340, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
+    name: 'PLASMA LOBBER', price: 340, score: 5, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
     speed: 110, fx: 'pierce', desc: 'PLASMA. BIG SLOW BLOBS THAT PIERCE. MELTS ARMOR AND THE HOLLOW.',
     stats: (lv) => ({
       interval: lv >= 3 ? 760 : 900,
@@ -102,7 +104,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   ion: {
-    name: 'ION ARC', price: 380, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
+    name: 'ION ARC', price: 380, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
     speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 240 : 300,
@@ -111,7 +113,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   wave: {
-    name: 'WAVE BEAM', price: 300, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
+    name: 'WAVE BEAM', price: 300, score: 5, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
     speed: 240, fx: 'wave', desc: 'LASER. A WEAVING BEAM THAT PASSES THROUGH COVER AND WALLS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 210 : 260,
@@ -120,7 +122,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   rail: {
-    name: 'RAIL LANCE', price: 480, icon: 'icon_rail', texture: 'rail', dtype: 'kinetic', where: 'base', from: 7,
+    name: 'RAIL LANCE', price: 480, score: 8, icon: 'icon_rail', texture: 'rail', dtype: 'kinetic', where: 'base', from: 7,
     speed: 900, fx: 'rail', desc: 'KINETIC. CHARGES, THEN FIRES A LANCE THAT PIERCES EVERYTHING. HUGE HIT.',
     stats: (lv) => ({
       interval: lv >= 3 ? 1100 : 1300,
@@ -129,7 +131,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   flak: {
-    name: 'FLAK CANNON', price: 320, icon: 'icon_flak', texture: 'flak', dtype: 'explosive', where: 'level', from: 8,
+    name: 'FLAK CANNON', price: 320, score: 7, icon: 'icon_flak', texture: 'flak', dtype: 'explosive', where: 'level', from: 8,
     speed: 220, fx: 'flak', desc: 'EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 560 : 650,
@@ -138,7 +140,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   side: {
-    name: 'SIDE WINDERS', price: 200, icon: 'icon_side', texture: 'sidebolt', dtype: 'kinetic', where: 'level', from: 4,
+    name: 'SIDE WINDERS', price: 200, score: 3, icon: 'icon_side', texture: 'sidebolt', dtype: 'kinetic', where: 'level', from: 4,
     desc: 'KINETIC. FIRES LEFT AND RIGHT, NOT FORWARD. HITS FLANKERS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 165 : 200,
@@ -147,7 +149,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   rear: {
-    name: 'REAR GUARD', price: 220, icon: 'icon_rear', texture: 'laser', dtype: 'laser', where: 'level', from: 6,
+    name: 'REAR GUARD', price: 220, score: 4, icon: 'icon_rear', texture: 'laser', dtype: 'laser', where: 'level', from: 6,
     speed: 360, desc: 'LASER. FIRES BACKWARD AT ENEMIES BELOW. PAIRS WITH ANOTHER WEAPON.',
     stats: (lv) => ({
       interval: lv >= 3 ? 150 : 180,
@@ -156,7 +158,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   bio: {
-    name: 'BIO SEEKER', price: 450, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
+    name: 'BIO SEEKER', price: 450, score: 9, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
     speed: 160, fx: 'burn', desc: 'PLASMA. SPORES THAT LATCH ON AND BURN. GREAT VS THE HOLLOW.',
     stats: (lv) => ({
       interval: lv >= 3 ? 440 : 520,
@@ -175,12 +177,12 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   decoy: { name: 'DECOY FLARE', price: 25, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.' },
   booster: { name: 'CREDIT BOOSTER', price: 60, icon: 'icon_booster', cap: 1, desc: 'DOUBLE CREDIT DROPS FOR THE REST OF THE SEGMENT.' },
   drone: { name: 'REPAIR DRONE', price: 55, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.' },
-  fullrepair: { name: 'FULL REPAIR', price: 90, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
-  nova: { name: 'NOVA BOMB', price: 120, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.' },
-  warp: { name: 'TIME WARP', price: 100, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 4 SECONDS.' },
+  fullrepair: { name: 'FULL REPAIR', price: 90, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
+  nova: { name: 'NOVA BOMB', price: 120, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.' },
+  warp: { name: 'TIME WARP', price: 100, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 4 SECONDS.' },
   rewind: {
-    name: 'REWIND BEACON', price: 400, icon: 'icon_rewind', cap: 1, rare: true,
-    desc: 'USED BY ITSELF IF YOUR SHIP IS DESTROYED: RESTART FROM THE LAST VENDOR WITH FULL HEALTH.',
+    name: 'REWIND BEACON', price: 400, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
+    desc: 'IF YOUR SHIP IS DESTROYED, RESTART AT THE LAST VENDOR WITH FULL HEALTH.',
   },
 };
 
@@ -189,10 +191,10 @@ export const stackLabel = (it: { id: ItemId; count: number }) => `${it.count}/${
 
 // Upgrade Kits: sold only by in-level vendors. Each raises one weapon or one
 // gear by a level. Apply right away or keep it in storage for later.
-export interface KitDef { name: string; price: number; desc: string; icon: string; target: 'weapon' | 'gear' }
+export interface KitDef { name: string; price: number; score: number; desc: string; icon: string; target: 'weapon' | 'gear' }
 export const KITS: Record<KitId, KitDef> = {
-  wkit: { name: 'WEAPON KIT', price: 220, icon: 'icon_wkit', target: 'weapon', desc: 'RAISES ANY ONE WEAPON BY 1 LEVEL, UP TO 5.' },
-  gkit: { name: 'GEAR KIT', price: 260, icon: 'icon_gkit', target: 'gear', desc: 'RAISES ANY ONE GEAR BY 1 LEVEL, UP TO 5.' },
+  wkit: { name: 'WEAPON KIT', price: 220, score: 5, icon: 'icon_wkit', target: 'weapon', desc: 'RAISES ANY ONE WEAPON BY 1 LEVEL, UP TO 5.' },
+  gkit: { name: 'GEAR KIT', price: 260, score: 6, icon: 'icon_gkit', target: 'gear', desc: 'RAISES ANY ONE GEAR BY 1 LEVEL, UP TO 5.' },
 };
 
 // Special gear sits in gear slots. Passive gear works on its own; movement and
@@ -207,69 +209,70 @@ export interface GearDef {
   icon: string;
   from: number; // first level whose vendors stock it
   where: 'base' | 'level'; // Base vendor stock, or an in-level vendor exclusive
+  score: number; // how strong it is, 1 to 9 (see WeaponDef)
   levelUp: string; // what each upgrade level adds, for the Upgrade tab
   active?: boolean; // has a button in flight
 }
 
 export const GEAR: Record<GearId, GearDef> = {
   plating: {
-    name: 'HULL PLATING', price: 400, icon: 'icon_plating', from: 6, where: 'base',
+    name: 'HULL PLATING', price: 400, score: 4, icon: 'icon_plating', from: 6, where: 'base',
     desc: '+2 MAX HEALTH ON TOP OF HULL UPGRADES.', levelUp: '+1 MAX HEALTH.',
   },
   magnet: {
-    name: 'CREDIT MAGNET', price: 300, icon: 'icon_magnet', from: 6, where: 'base',
+    name: 'CREDIT MAGNET', price: 300, score: 3, icon: 'icon_magnet', from: 6, where: 'base',
     desc: 'PULLS IN CREDITS FROM A WIDE RADIUS.', levelUp: 'A WIDER, STRONGER PULL.',
   },
   deflector: {
-    name: 'DEFLECTOR', price: 450, icon: 'icon_deflector', from: 6, where: 'level',
+    name: 'DEFLECTOR', price: 450, score: 6, icon: 'icon_deflector', from: 6, where: 'level',
     desc: 'ABSORBS 1 HIT, THEN RECHARGES IN 8 SECONDS.', levelUp: 'FASTER RECHARGE. 2 HITS AT LV 3.',
   },
   satellite: {
-    name: 'SATELLITE', price: 600, icon: 'icon_satellite', from: 6, where: 'level',
+    name: 'SATELLITE', price: 600, score: 7, icon: 'icon_satellite', from: 6, where: 'level',
     desc: 'A MINI DRONE CIRCLES YOU AND FIRES SMALL SHOTS.', levelUp: 'FASTER FIRE. 2 DRONES AT LV 5.',
   },
   dodge: {
-    name: 'DODGE THRUSTERS', price: 350, icon: 'icon_dodge', from: 9, where: 'base', active: true,
+    name: 'DODGE THRUSTERS', price: 350, score: 5, icon: 'icon_dodge', from: 9, where: 'base', active: true,
     desc: 'TAP: A QUICK DASH THE WAY YOU ARE MOVING, UNTOUCHABLE FOR A MOMENT.', levelUp: 'SHORTER COOLDOWN, LONGER SAFE TIME.',
   },
   blink: {
-    name: 'BLINK DRIVE', price: 500, icon: 'icon_blink', from: 9, where: 'level', active: true,
+    name: 'BLINK DRIVE', price: 500, score: 7, icon: 'icon_blink', from: 9, where: 'level', active: true,
     desc: 'TAP: TELEPORT A SHORT WAY THE WAY YOU ARE MOVING. PASSES THROUGH WALLS.', levelUp: 'LONGER JUMP, SHORTER COOLDOWN.',
   },
   afterburner: {
-    name: 'AFTERBURNER', price: 380, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
+    name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
     desc: 'TAP: A SPEED BOOST. RAMMING LIGHT ENEMIES WHILE IT BURNS DESTROYS THEM.', levelUp: 'LONGER BURN, HARDER RAM.',
   },
   roll: {
-    name: 'BARREL ROLL', price: 420, icon: 'icon_roll', from: 10, where: 'level', active: true,
+    name: 'BARREL ROLL', price: 420, score: 7, icon: 'icon_roll', from: 10, where: 'level', active: true,
     desc: 'TAP: A SPIN THAT SENDS ENEMY SHOTS BACK THE WAY THEY CAME.', levelUp: 'LONGER SPIN, SHORTER COOLDOWN.',
   },
   burst: {
-    name: '360 BURST', price: 450, icon: 'icon_burst', from: 10, where: 'level', active: true,
+    name: '360 BURST', price: 450, score: 7, icon: 'icon_burst', from: 10, where: 'level', active: true,
     desc: 'TAP: FIRES A RING OF SHOTS IN EVERY DIRECTION.', levelUp: 'MORE SHOTS, SHORTER COOLDOWN.',
   },
   antimissile: {
-    name: 'ANTI-MISSILE', price: 500, icon: 'icon_antimissile', from: 9, where: 'base',
+    name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
     desc: 'A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU.', levelUp: 'FASTER, WIDER. 2 TARGETS AT LV 5.',
   },
   incendiary: {
-    name: 'INCENDIARY AMMO', price: 400, icon: 'icon_incendiary', from: 9, where: 'base',
+    name: 'INCENDIARY AMMO', price: 400, score: 6, icon: 'icon_incendiary', from: 9, where: 'base',
     desc: 'AUGMENT. KINETIC WEAPONS ALSO SET TARGETS BURNING (PLASMA).', levelUp: 'HOTTER BURN.',
   },
   ioncoat: {
-    name: 'ION COATING', price: 450, icon: 'icon_ioncoat', from: 9, where: 'level',
+    name: 'ION COATING', price: 450, score: 7, icon: 'icon_ioncoat', from: 9, where: 'level',
     desc: 'AUGMENT. LASER WEAPONS DEAL ION DAMAGE, SO THEY BREAK SHIELDS.', levelUp: 'ADDS A BRIEF STUN, LONGER EACH LEVEL.',
   },
   shaped: {
-    name: 'SHAPED CHARGES', price: 420, icon: 'icon_shaped', from: 10, where: 'base',
+    name: 'SHAPED CHARGES', price: 420, score: 6, icon: 'icon_shaped', from: 10, where: 'base',
     desc: 'AUGMENT. EXPLOSIVE WEAPONS IGNORE RESISTANCE.', levelUp: 'BIGGER SPLASH.',
   },
   overcharge: {
-    name: 'OVERCHARGER', price: 550, icon: 'icon_overcharge', from: 11, where: 'level',
+    name: 'OVERCHARGER', price: 550, score: 9, icon: 'icon_overcharge', from: 11, where: 'level',
     desc: 'AUGMENT. EVERY 5TH VOLLEY IS A CHARGED SHOT WITH TRIPLE DAMAGE.', levelUp: 'EVERY 4TH AT LV 3, EVERY 3RD AT LV 5.',
   },
   scanner: {
-    name: 'TARGET SCANNER', price: 300, icon: 'icon_scanner', from: 9, where: 'base',
+    name: 'TARGET SCANNER', price: 300, score: 5, icon: 'icon_scanner', from: 9, where: 'base',
     desc: 'AUGMENT. SHOWS WHAT EACH ENEMY IS WEAK TO, AND +15% DAMAGE VS WEAKNESSES.', levelUp: 'A BIGGER BONUS.',
   },
 };
@@ -301,4 +304,21 @@ export const isKit = (id: string): id is KitId => id in KITS;
 
 export function defOf(id: string): { name: string; price: number; desc: string; icon: string } {
   return isWeapon(id) ? WEAPONS[id] : isGear(id) ? GEAR[id] : isKit(id) ? KITS[id] : ITEMS[id as ItemId];
+}
+
+// What kind of thing an id is, for the vendor's list: a word (9 letters at
+// most, to clear the Sell tab's buttons) and its color.
+export function kindOf(id: string): { label: string; color: string } {
+  if (isWeapon(id)) return { label: 'WEAPON', color: '#fc7460' };
+  if (isGear(id)) return { label: GEAR[id].desc.startsWith('AUGMENT') ? 'AUGMENT' : 'GEAR', color: '#9878f8' };
+  if (isKit(id)) return { label: 'UPGRADE', color: '#f8b800' };
+  return { label: ITEMS[id as ItemId]?.rare ? 'RARE ITEM' : 'ITEM', color: '#58d854' };
+}
+
+// How strong an id is, 1 to 9. Common consumables count as 1.
+export function scoreOf(id: string) {
+  if (isWeapon(id)) return WEAPONS[id].score;
+  if (isGear(id)) return GEAR[id].score;
+  if (isKit(id)) return KITS[id].score;
+  return ITEMS[id as ItemId]?.score ?? 1;
 }

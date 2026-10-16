@@ -1,54 +1,93 @@
 import Phaser from 'phaser';
 import { W } from './config';
+import { bossDeath, type BossOpts } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
 
 const ENTER_Y = 66;
-const MAX_HP = 120;
+const MAX_HP = 420;
 const REWARD = 150; // credits, dropped as a shower of gold
 const CLOAKED = 1500; // ms spent cloaked and moving between reveals
 const SHOWN = 2600; // ms visible after each reveal
 const HIT_W = 15; // half sizes of the hit box
 const HIT_H = 8;
+// Phase 3, the hall of mirrors.
+const MIRRORS = 4; // the real one and three decoys, in a row
+const SHUFFLE_EVERY = 3400; // ms between shuffles
+const SHUFFLE_BLINK = 350; // ms the row is cloaked while it shuffles
+const LOCK_EVERY = 520; // ms between beams, taking turns down the row
+const LOCK_WARN = 620; // ms a beam's warning line shows
+const BEAM_ON = 240;
 
-interface Copy { img: Phaser.GameObjects.Image; x: number; real: boolean }
+interface Copy {
+  img: Phaser.GameObjects.Image;
+  x: number;
+  real: boolean;
+  slot: number; // phase 3: place in the row
+  aim: number; // phase 3: the beam's angle, locked when its warning starts
+  warn: number; // ms of warning left
+  beam: number; // ms of beam left
+}
 
 // The Watcher, the level 8 mini boss: a cloaking Vossari spy frigate. It
 // cloaks (shots pass through), moves, then decloaks alongside decoy
 // afterimages. Only the real one takes damage and fires its spreads; a shot
-// pops a decoy. Decoys look a shade fainter. Below half health it brings
+// pops a decoy. Decoys look a shade fainter. Below two thirds health it brings
 // three decoys instead of two, the decoys fire too, and it seeds mines.
+// Below a third it stops hiding: the hall of mirrors. Four copies hang in a
+// row that sways across the screen, taking turns to lock a beam onto the ship,
+// and every few seconds they blink out and swap places.
 export class Watcher {
   private y = -30;
   private t = 0; // ms into the current cloak or reveal
   private entering = true;
   private dead = false;
   private shown = true;
-  private hp = MAX_HP;
+  private max: number;
+  private hp: number;
   private copies: Copy[] = [];
   private real: Copy;
   private fired = 0; // volleys fired this reveal
   private warnedDecoy = false;
+  private mirror = false; // phase 3
+  private lockIn = 0;
+  private nextLock = 0;
+  private spreadIn = 1600;
 
-  constructor(private g: GameScene, private onDefeated: () => void) {
-    this.real = { img: g.add.image(W / 2, this.y, 'watcher').setDepth(8), x: W / 2, real: true };
-    this.copies = [this.real];
+  constructor(private g: GameScene, private onDefeated: () => void, private opts: BossOpts = {}) {
+    this.max = MAX_HP * (opts.hp ?? 1);
+    this.hp = this.max;
+    this.real = this.copy(W / 2, true);
     g.tweens.add({
       targets: this, y: ENTER_Y, duration: 2200, ease: 'Sine.easeOut', delay: 600,
       onComplete: () => { this.entering = false; this.cloak(); },
     });
   }
 
-  private get angry() { return this.hp <= MAX_HP / 2; }
+  private copy(x: number, real: boolean, alpha = 1) {
+    const img = this.g.add.image(x, this.y, 'watcher').setDepth(8).setAlpha(alpha);
+    if (this.opts.tint) img.setTint(this.opts.tint);
+    const c: Copy = { img, x, real, slot: 0, aim: 0, warn: 0, beam: 0 };
+    this.copies.push(c);
+    return c;
+  }
 
-  healthFraction() { return Math.max(0, this.hp) / MAX_HP; }
+  private get angry() { return this.hp <= (this.max * 2) / 3; }
+
+  healthFraction() { return Math.max(0, this.hp) / this.max; }
+
+  aimPoint() { return this.dead || !this.shown ? null : { x: this.real.img.x, y: this.real.img.y }; }
+
+  private clearDecoys() {
+    for (const c of this.copies) if (!c.real) this.g.tweens.add({ targets: c.img, alpha: 0, duration: 250, onComplete: () => c.img.destroy() });
+    this.copies = [this.real];
+  }
 
   private cloak() {
     this.shown = false;
     this.t = 0;
     // Decoys fade out for good; the real one keeps a faint shimmer while it moves.
-    for (const c of this.copies) if (!c.real) this.g.tweens.add({ targets: c.img, alpha: 0, duration: 250, onComplete: () => c.img.destroy() });
-    this.copies = [this.real];
+    this.clearDecoys();
     this.real.x = this.real.img.x;
   }
 
@@ -63,13 +102,39 @@ export class Watcher {
     this.real.x = spots[0];
     this.real.img.setPosition(spots[0], this.y).setAlpha(1);
     g.flash(this.real.img);
-    for (const x of spots.slice(1)) {
-      const img = g.add.image(x, this.y, 'watcher').setDepth(8).setAlpha(0.78);
-      g.flash(img);
-      this.copies.push({ img, x, real: false });
-    }
+    for (const x of spots.slice(1)) g.flash(this.copy(x, false, 0.78).img);
     if (this.angry) for (let i = 0; i < 2; i++) g.spawnEnemy('pmine', Phaser.Math.Between(20, W - 20), this.y + 10);
     g.tipOnce('watcher', 'FIND THE REAL ONE');
+  }
+
+  // Phase 3 begins: the row of mirrors forms.
+  private startMirror() {
+    const g = this.g;
+    this.mirror = true;
+    this.shown = true;
+    g.enemyBullets.clear(true, true);
+    g.cameras.main.flash(250, 160, 200, 252);
+    toast(g, 'HALL OF MIRRORS', 120, 1000);
+    this.clearDecoys();
+    for (let i = 1; i < MIRRORS; i++) this.copy(this.real.img.x, false, 0.78);
+    this.shuffle();
+    this.lockIn = 900;
+  }
+
+  // Every copy blinks out and comes back in a new place in the row. Popped
+  // decoys come back too.
+  private shuffle() {
+    const g = this.g;
+    this.t = 0;
+    while (this.copies.length < MIRRORS) this.copy(this.real.img.x, false, 0.78);
+    const slots = Phaser.Utils.Array.Shuffle([...Array(MIRRORS).keys()]);
+    this.copies.forEach((c, i) => { c.slot = slots[i]; c.warn = 0; c.beam = 0; });
+    g.spawnEnemy('pmine', Phaser.Math.Between(20, W - 20), this.y + 10);
+  }
+
+  private rowX(slot: number) {
+    const sway = Math.sin(this.g.time.now / 900) * 18;
+    return ((slot + 0.5) / MIRRORS) * (W - 24) + 12 + sway;
   }
 
   update(dt: number) {
@@ -81,6 +146,7 @@ export class Watcher {
     if (this.entering) return;
 
     this.t += dt * 1000;
+    if (this.mirror) { this.updateMirror(dt); return; }
     if (!this.shown) {
       // Cloaked: slide toward the ship's side of the screen, barely visible.
       this.real.x += Phaser.Math.Clamp(g.player.x - this.real.x, -40 * dt, 40 * dt);
@@ -104,6 +170,53 @@ export class Watcher {
     if (this.t >= SHOWN) this.cloak();
   }
 
+  private updateMirror(dt: number) {
+    const g = this.g;
+    const ms = dt * 1000;
+    const live = g.phase === 'action';
+    const blinking = this.t < SHUFFLE_BLINK;
+    this.shown = !blinking;
+    for (const c of this.copies) {
+      // Glide to its place in the swaying row.
+      c.x += Phaser.Math.Clamp(this.rowX(c.slot) - c.x, -160 * dt, 160 * dt);
+      if (blinking) c.img.setAlpha(Math.floor(this.t / 50) % 3 === 0 ? 0.3 : 0.05);
+      else if (c.real) c.img.setAlpha(1);
+      else c.img.setAlpha(Math.floor((this.t + c.slot * 300) / 90) % 9 === 0 ? 0.4 : 0.78);
+      // Beams: a blinking line locked on the ship, then the beam itself.
+      const nose = { x: c.img.x, y: c.img.y + 8 };
+      if (c.warn > 0) {
+        c.warn -= ms;
+        if (Math.floor(c.warn / 90) % 2 === 0) g.drawBeam(nose.x, nose.y, c.aim, 1, 0x3cbcfc, 0.7);
+        if (c.warn <= 0) c.beam = BEAM_ON;
+      } else if (c.beam > 0) {
+        c.beam -= ms;
+        g.drawBeam(nose.x, nose.y, c.aim, 3, 0x0058f8);
+        if (live && g.beamHits(nose.x, nose.y, c.aim, 2.5)) g.hurt();
+      }
+    }
+    if (blinking) return;
+    this.checkRam();
+    // Copies take turns to lock on, down the row and back.
+    this.lockIn -= ms;
+    if (live && this.lockIn <= 0) {
+      this.lockIn = LOCK_EVERY;
+      const order = [...this.copies].sort((a, b) => a.slot - b.slot);
+      const c = order[this.nextLock++ % order.length];
+      if (c.warn <= 0 && c.beam <= 0) {
+        const tg = g.aimTarget(false);
+        c.aim = Phaser.Math.Angle.Between(c.img.x, c.img.y + 8, tg.x, tg.y);
+        c.warn = LOCK_WARN;
+      }
+    }
+    this.spreadIn -= ms;
+    if (live && this.spreadIn <= 0) {
+      this.spreadIn = 1700;
+      const a = Phaser.Math.Angle.Between(this.real.x, this.y, g.player.x, g.player.y);
+      for (const off of [-0.3, 0, 0.3]) g.enemyShoot(this.real.x, this.y + 8, a + off);
+    }
+    if (this.t >= SHUFFLE_EVERY) this.shuffle();
+  }
+
   // Shots pass through while it's cloaked. Visible: the real one takes damage
   // and a decoy pops.
   private checkShots() {
@@ -124,7 +237,8 @@ export class Watcher {
       }
       this.hp -= g.shotDamage(o, ['ion'], []);
       g.flash(c.img);
-      if (this.hp <= 0) this.defeat();
+      if (this.hp <= 0) { this.defeat(); return; }
+      if (!this.mirror && this.hp <= this.max / 3) { this.startMirror(); return; }
     }
   }
 
@@ -139,18 +253,7 @@ export class Watcher {
     this.dead = true;
     for (const c of this.copies) if (!c.real) c.img.destroy();
     const { x, y } = this.real.img;
-    let n = 0;
-    g.time.addEvent({
-      delay: 140, repeat: 8, callback: () => {
-        g.sparks.explode(12, x + Phaser.Math.Between(-16, 16), y + Phaser.Math.Between(-8, 8));
-        g.cameras.main.shake(80, 0.008);
-        if (++n === 9) {
-          for (let i = 0; i < REWARD / 25; i++) g.dropCoin(x, y, 25, Phaser.Math.Between(-30, 30), Phaser.Math.Between(10, 45));
-          g.sparks.explode(40, x, y);
-          this.real.img.destroy();
-        }
-      },
-    });
+    bossDeath(g, x, y, 16, 8, REWARD, () => this.real.img.destroy());
     this.onDefeated();
   }
 }

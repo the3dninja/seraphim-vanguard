@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { W } from './config';
 import type { GameScene } from './scenes/GameScene';
+import type { BossOpts } from './bossfx';
 import { toast } from './ui';
 
 // A piece of the boss that can be shot: three armor plates and the core under them.
@@ -38,14 +39,19 @@ export class Rockjaw {
   private spreadIn = 1500;
   private warnedArmor = false;
 
-  constructor(private g: GameScene, private onDefeated: () => void) {
-    const add = (key: string) => g.add.image(0, -100, key).setDepth(8);
-    this.body = add('rockjaw');
-    this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: 45, max: 45, gun: false };
+  constructor(private g: GameScene, private onDefeated: () => void, opts: BossOpts = {}) {
+    const add = (key: string) => {
+      const img = g.add.image(0, -100, key).setDepth(8);
+      if (opts.tint) img.setData('baseTint', opts.tint).setTint(opts.tint);
+      return img;
+    };
+    const hp = (n: number) => Math.round(n * (opts.hp ?? 1));
+    this.body = add(opts.skin ?? 'rockjaw');
+    this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: hp(65), max: hp(65), gun: false };
     this.plates = [
-      { img: add('plateL'), dx: -19, dy: 5, w: 12, h: 11, hp: 16, max: 16, gun: true },
-      { img: add('plateL').setFlipX(true), dx: 19, dy: 5, w: 12, h: 11, hp: 16, max: 16, gun: true },
-      { img: add('plateC'), dx: 0, dy: 2, w: 14, h: 9, hp: 20, max: 20, gun: false },
+      { img: add('plateL'), dx: -19, dy: 5, w: 12, h: 11, hp: hp(24), max: hp(24), gun: true },
+      { img: add('plateL').setFlipX(true), dx: 19, dy: 5, w: 12, h: 11, hp: hp(24), max: hp(24), gun: true },
+      { img: add('plateC'), dx: 0, dy: 2, w: 14, h: 9, hp: hp(30), max: hp(30), gun: false },
     ];
     this.plates.forEach((p) => p.img.setDepth(9));
     this.place();
