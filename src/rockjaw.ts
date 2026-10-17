@@ -17,7 +17,7 @@ interface Part {
 }
 
 const ENTER_Y = 74;
-const REWARD = 150; // credits, dropped as a shower of gold
+const REWARD = 225; // credits, dropped as a shower of gold
 const BODY_RX = 30; // contact ellipse
 const BODY_RY = 18;
 

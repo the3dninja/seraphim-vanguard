@@ -17,7 +17,7 @@ interface Part {
 }
 
 const ENTER_Y = 62; // hull center once it has moved in, below the boss bar
-const REWARD = 400; // credits, dropped as a shower of gold
+const REWARD = 600; // credits, dropped as a shower of gold
 const SWEEP_WARN = 900; // ms the beam paths show before the lasers fire
 const BEAM_REACH = 3;
 // The two lasers start pointing at the screen sides and close in toward the
@@ -228,8 +228,8 @@ export class Dreadnought {
           // Kade's last transmission, strangely distorted.
           const msg = text(g, W / 2, 112, 'KADE: THE VOICE...\nIT WILL NOT STOP...', COLOR.red).setOrigin(0.5).setDepth(1000);
           msg.setAlign('center');
-          g.tweens.add({ targets: msg, x: { from: W / 2 - 1, to: W / 2 + 1 }, duration: 60, yoyo: true, repeat: 20 });
-          g.tweens.add({ targets: msg, alpha: 0, delay: 2000, duration: 400, onComplete: () => msg.destroy() });
+          g.tweens.add({ targets: msg, x: { from: W / 2 - 1, to: W / 2 + 1 }, duration: 60, yoyo: true, repeat: 30 });
+          g.tweens.add({ targets: msg, alpha: 0, delay: 3200, duration: 400, onComplete: () => msg.destroy() });
         }
       },
     });

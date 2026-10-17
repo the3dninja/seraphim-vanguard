@@ -76,7 +76,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   twin: {
-    name: 'TWIN LASER', price: 180, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
+    name: 'TWIN LASER', price: 150, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
     speed: 440, desc: 'LASER. TWO FAST PARALLEL BEAMS. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 140 : 170,
@@ -86,7 +86,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   homing: {
-    name: 'HOMING MISSILES', price: 260, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
+    name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
     speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND SPLASH. LOW FIRE RATE.',
     stats: (lv) => ({
       interval: lv >= 3 ? 620 : 720,
@@ -95,7 +95,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   plasma: {
-    name: 'PLASMA LOBBER', price: 340, score: 5, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
+    name: 'PLASMA LOBBER', price: 280, score: 5, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
     speed: 110, fx: 'pierce', desc: 'PLASMA. BIG SLOW BLOBS THAT PIERCE. MELTS ARMOR AND THE HOLLOW.',
     stats: (lv) => ({
       interval: lv >= 3 ? 760 : 900,
@@ -104,7 +104,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   ion: {
-    name: 'ION ARC', price: 380, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
+    name: 'ION ARC', price: 320, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
     speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 240 : 300,
@@ -113,7 +113,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   wave: {
-    name: 'WAVE BEAM', price: 300, score: 5, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
+    name: 'WAVE BEAM', price: 250, score: 5, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
     speed: 240, fx: 'wave', desc: 'LASER. A WEAVING BEAM THAT PASSES THROUGH COVER AND WALLS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 210 : 260,
@@ -122,7 +122,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   rail: {
-    name: 'RAIL LANCE', price: 480, score: 8, icon: 'icon_rail', texture: 'rail', dtype: 'kinetic', where: 'base', from: 7,
+    name: 'RAIL LANCE', price: 400, score: 8, icon: 'icon_rail', texture: 'rail', dtype: 'kinetic', where: 'base', from: 7,
     speed: 900, fx: 'rail', desc: 'KINETIC. CHARGES, THEN FIRES A LANCE THAT PIERCES EVERYTHING. HUGE HIT.',
     stats: (lv) => ({
       interval: lv >= 3 ? 1100 : 1300,
@@ -131,7 +131,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   flak: {
-    name: 'FLAK CANNON', price: 320, score: 7, icon: 'icon_flak', texture: 'flak', dtype: 'explosive', where: 'level', from: 8,
+    name: 'FLAK CANNON', price: 270, score: 7, icon: 'icon_flak', texture: 'flak', dtype: 'explosive', where: 'level', from: 8,
     speed: 220, fx: 'flak', desc: 'EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 560 : 650,
@@ -140,7 +140,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   side: {
-    name: 'SIDE WINDERS', price: 200, score: 3, icon: 'icon_side', texture: 'sidebolt', dtype: 'kinetic', where: 'level', from: 4,
+    name: 'SIDE WINDERS', price: 170, score: 3, icon: 'icon_side', texture: 'sidebolt', dtype: 'kinetic', where: 'level', from: 4,
     desc: 'KINETIC. FIRES LEFT AND RIGHT, NOT FORWARD. HITS FLANKERS.',
     stats: (lv) => ({
       interval: lv >= 3 ? 165 : 200,
@@ -149,7 +149,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   rear: {
-    name: 'REAR GUARD', price: 220, score: 4, icon: 'icon_rear', texture: 'laser', dtype: 'laser', where: 'level', from: 6,
+    name: 'REAR GUARD', price: 180, score: 4, icon: 'icon_rear', texture: 'laser', dtype: 'laser', where: 'level', from: 6,
     speed: 360, desc: 'LASER. FIRES BACKWARD AT ENEMIES BELOW. PAIRS WITH ANOTHER WEAPON.',
     stats: (lv) => ({
       interval: lv >= 3 ? 150 : 180,
@@ -158,7 +158,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   bio: {
-    name: 'BIO SEEKER', price: 450, score: 9, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
+    name: 'BIO SEEKER', price: 380, score: 9, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
     speed: 160, fx: 'burn', desc: 'PLASMA. SPORES THAT LATCH ON AND BURN. GREAT VS THE HOLLOW.',
     stats: (lv) => ({
       interval: lv >= 3 ? 440 : 520,
@@ -175,7 +175,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   cluster: { name: 'CLUSTER BOMB', price: 45, icon: 'icon_cluster', cap: 2, desc: 'DROPS 5 BOMBLETS IN A CONE AHEAD.' },
   emp: { name: 'EMP PULSE', price: 50, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 3 SECONDS.' },
   decoy: { name: 'DECOY FLARE', price: 25, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.' },
-  booster: { name: 'CREDIT BOOSTER', price: 60, icon: 'icon_booster', cap: 1, desc: 'DOUBLE CREDIT DROPS FOR THE REST OF THE SEGMENT.' },
+  booster: { name: 'CREDIT BOOSTER', price: 60, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.' },
   drone: { name: 'REPAIR DRONE', price: 55, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.' },
   fullrepair: { name: 'FULL REPAIR', price: 90, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
   nova: { name: 'NOVA BOMB', price: 120, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.' },

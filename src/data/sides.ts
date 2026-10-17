@@ -79,7 +79,7 @@ export const SIDES: SideDef[] = [
   {
     id: 's6', anchor: 6, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
     desc: 'A LONG RUN INTO THE STORM. LIGHTNING AND RED-HOT EMBERS RAIN DOWN.',
-    hazards: [{ kind: 'lightning', every: [6000, 9000] }, { kind: 'ember', every: [5000, 7500] }],
+    hazards: [{ kind: 'lightning', every: [6000, 9000] }, { kind: 'ember', every: [2000, 6000] }],
     segments: [
       [
         w(2500, 'minelayer', 'single', { x: 0.3 }), w(2500, 'dart', 'vee', { count: 7, x: 0.7 }),
@@ -113,8 +113,8 @@ export const SIDES: SideDef[] = [
   // Beside level 8: a dead satellite whose searchlights still sweep.
   {
     id: 's8a', anchor: 8, name: 'DEAD SATELLITE', node: 'moon_relay', theme: 'relay',
-    desc: 'A MEDIUM RUN PAST A DEAD SATELLITE. ITS SEARCHLIGHTS STILL SWEEP FOR INTRUDERS.',
-    hazards: [{ kind: 'sweep', every: [6500, 9000] }, { kind: 'fence', every: [9000, 12000] }],
+    desc: 'A MEDIUM RUN PAST A DEAD SATELLITE. HIDE BEHIND ITS DEBRIS FROM THE SEARCHLIGHTS.',
+    hazards: [{ kind: 'satchunk', every: [2500, 3800] }, { kind: 'sweep', every: [6500, 9000] }, { kind: 'fence', every: [9000, 12000] }],
     segments: [
       [
         w(2500, 'phantom', 'pair'), w(3000, 'carrier', 'single', { x: 0.5 }),
