@@ -826,13 +826,13 @@ export class GameScene extends Phaser.Scene {
       data.baseX = Phaser.Math.Clamp(x, 44, W - 44);
       data.stopY = Phaser.Math.Between(40, 90);
       data.fireIn = 1100;
-      if (this.state.level === 6) this.tipOnce('pmine', 'MINES BURST WHEN\nYOU GET CLOSE');
+      if (this.state.level === 7) this.tipOnce('pmine', 'MINES BURST WHEN\nYOU GET CLOSE');
     }
     if (kind === 'carrier') {
       data.stopY = Phaser.Math.Between(38, 58);
       data.fireIn = 500;
       data.hold = 1400;
-      if (this.state.level === 7) this.tipOnce('carrier', 'CARRIERS LAUNCH DARTS');
+      if (this.state.level === 6) this.tipOnce('carrier', 'CARRIERS LAUNCH DARTS');
     }
     if (kind === 'phantom') {
       data.cloaked = true;
@@ -1505,7 +1505,7 @@ export class GameScene extends Phaser.Scene {
     const near = Math.random() < 0.6;
     const x = near ? Phaser.Math.Clamp(this.player.x + Phaser.Math.Between(-12, 12), 10, W - 10) : Phaser.Math.Between(10, W - 10);
     this.strikes.push({ x, t: 0 });
-    if (this.state.level === 6) this.tipOnce('lightning', 'MOVE WHEN A\nCOLUMN FLASHES');
+    if (this.state.level === 7) this.tipOnce('lightning', 'MOVE WHEN A\nCOLUMN FLASHES');
   }
 
   private updateStrikes(dt: number) {
@@ -1556,7 +1556,7 @@ export class GameScene extends Phaser.Scene {
       if (f.t < FLARE_WARN) {
         if (f.t > 900) {
           glow = Math.max(glow, 0.06 + 0.06 * Math.sin(f.t / 70));
-          if (this.state.level === 7) this.tipOnce('flare', 'FLARE COMING!\nHIDE UNDER THE ROCK');
+          if (this.state.level === 6) this.tipOnce('flare', 'FLARE COMING!\nHIDE UNDER THE ROCK');
         }
         continue;
       }

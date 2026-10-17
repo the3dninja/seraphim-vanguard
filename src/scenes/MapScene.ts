@@ -134,10 +134,9 @@ export class MapScene extends Phaser.Scene {
       for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
       const img = this.add.image(x, y, sd.node);
       if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
-      // A treasure mission shows a chest in the corner, opened once cleared
-      // (in place of the check mark).
-      if (sd.treasure) this.add.image(x + 7, y + 6, state === 'cleared' ? 'chestOpen' : 'chest').setDepth(5);
-      else if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
+      // A treasure mission shows a pile of gold in the corner until it's cleared.
+      if (sd.treasure && state !== 'cleared') this.add.image(x + 7, y + 5, 'goldPile').setDepth(5);
+      if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
       // An open one blinks a ring so it stands out.
       if (state === 'open') {
         const ring = this.add.circle(x, y, 8).setStrokeStyle(1, 0x3cbcfc);
