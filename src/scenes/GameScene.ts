@@ -17,6 +17,8 @@ import { Sporeheart } from '../sporeheart';
 import { Wyrm } from '../wyrm';
 import { Barriers, Tunnel } from '../heart';
 import { SideHazards } from '../sidehaz';
+import { Storm, stormPlan } from '../storm';
+import { Treasure } from '../treasure';
 import { sideById } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
@@ -143,6 +145,9 @@ export class GameScene extends Phaser.Scene {
   private waveTimer = 0;
   private hazardIn: number[] = [];
   private boss: Boss | null = null;
+  private storm: Storm | null = null; // Storm Eye's scripted storm
+  private treasure: Treasure | null = null; // the cargo hauler at a treasure ending
+  private treasureDone = false;
   private strikes: Strike[] = [];
   private flares: Flare[] = [];
   private fences: Fence[] = [];
@@ -261,6 +266,9 @@ export class GameScene extends Phaser.Scene {
     this.fog = null;
     this.motes = null;
     this.segBossDone = false;
+    this.storm = null;
+    this.treasure = null;
+    this.treasureDone = false;
   }
 
   create() {
@@ -268,6 +276,7 @@ export class GameScene extends Phaser.Scene {
     this.scroll = starfield(this);
     const inRift = this.level.riftAfter !== undefined && this.segment > this.level.riftAfter;
     this.setTheme(inRift ? 'rift' : this.segmentTheme(this.segment));
+    if (this.level.storm) this.storm = new Storm(this, this.scenery ? 3 : 2);
     this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
@@ -696,7 +705,7 @@ export class GameScene extends Phaser.Scene {
   // --- Waves -----------------------------------------------------------------
 
   private runWaves(dt: number) {
-    if (this.boss) return;
+    if (this.boss || this.treasure) return;
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
@@ -1304,6 +1313,20 @@ export class GameScene extends Phaser.Scene {
     return this.level.segmentHazards?.[this.segment] ?? this.level.hazards ?? [];
   }
 
+  // How far through this segment's waves the level is, 0..1, by their delays.
+  private segProgress() {
+    const waves = this.level.segments[this.segment] ?? [];
+    const total = waves.reduce((n, w) => n + w.delay, 0);
+    if (this.waveIndex >= waves.length || total <= 0) return 1;
+    let done = Math.min(this.waveTimer, waves[this.waveIndex].delay);
+    for (let i = 0; i < this.waveIndex; i++) done += waves[i].delay;
+    return done / total;
+  }
+
+  // Storm Eye's storm sets off the same lightning and embers as the hazard timers.
+  stormStrike() { this.spawnStrike(); }
+  stormEmber() { this.sideHaz.spawn('ember'); }
+
   hasHazard(kind: string) {
     return this.hazardList().some((hz) => hz.kind === kind);
   }
@@ -1314,6 +1337,7 @@ export class GameScene extends Phaser.Scene {
 
   private runHazards(dt: number) {
     if (this.boss) return;
+    if (this.storm) { this.storm.run(dt, stormPlan(this.segment, this.segProgress())); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
       if (this.hazardIn[i] > 0) return;
@@ -2148,7 +2172,19 @@ export class GameScene extends Phaser.Scene {
       else if (this.level.vendorless) this.flowOn();
       else this.vendorArrival();
     } else if (this.level.boss) this.startBoss();
+    else if (this.level.treasure && !this.treasureDone) this.startTreasure();
     else this.levelClear();
+  }
+
+  // A treasure ending: a cargo hauler drifts in to be broken open. Left alone,
+  // it breaks up on its own and the credits are gathered in at once.
+  private startTreasure() {
+    this.treasureDone = true;
+    this.blinkTip('BREAK OPEN THE\nCARGO FOR TREASURE');
+    this.treasure = new Treasure(this, this.level.treasure!, (byShip) => {
+      this.treasure = null;
+      this.levelClear(!byShip);
+    });
   }
 
   // Level 15: no vendor between segments. Gather up, maybe change scenery, go on.
@@ -2350,7 +2386,7 @@ export class GameScene extends Phaser.Scene {
     this.startNextSegment();
   }
 
-  private levelClear() {
+  private levelClear(skipLinger = false) {
     if (this.phase !== 'action') return;
     this.phase = 'clear';
     this.player.setVisible(true);
@@ -2360,6 +2396,7 @@ export class GameScene extends Phaser.Scene {
     // Loose credits stop where they are, and the ship gets a few seconds to
     // fly around and pick them up before the rest are gathered in.
     for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) c.setVelocity(0, 0);
+    if (skipLinger) { this.endLevel(last); return; }
     this.lingering = true;
     this.time.delayedCall(LINGER, () => {
       this.lingering = false;
@@ -2456,6 +2493,8 @@ export class GameScene extends Phaser.Scene {
     this.updateShots(dt);
     this.updateEnemies(edt);
     this.boss?.update(edt);
+    this.treasure?.update(edt);
+    this.storm?.draw(dt, stormPlan(this.segment, this.segProgress()));
     this.drawBossBar();
     this.updateStrikes(edt);
     this.updateFlares(edt);
