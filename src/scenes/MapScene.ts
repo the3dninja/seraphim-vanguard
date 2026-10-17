@@ -7,6 +7,7 @@ import { button, starfield, text } from '../ui';
 
 interface MapData {
   state: SaveData;
+  unlocked?: string[]; // side missions that just unlocked, flagged on the map
   onLeave: () => void;
   // Fly the next level (no side) or a side mission; Base takes it from there.
   onLaunch?: (side?: string) => void;
@@ -48,6 +49,9 @@ export class MapScene extends Phaser.Scene {
   init(data: MapData) {
     this.d = data;
     this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
+    // Newly unlocked side missions are picked first, so their briefing shows.
+    const fresh = SIDES.find((sd) => data.unlocked?.includes(sd.id));
+    if (fresh) this.selected = { i: fresh.anchor - 1, side: fresh };
   }
 
   create() {
@@ -95,7 +99,7 @@ export class MapScene extends Phaser.Scene {
   private sideState(sd: SideDef) {
     const st = this.d.state;
     if (st.sides.includes(sd.id)) return 'cleared';
-    if (sd.anchor > st.level) return 'coming';
+    if (sd.anchor >= st.level) return 'coming';
     return systemOf(sd.anchor) === systemOf(st.level) ? 'open' : 'missed';
   }
 
@@ -130,6 +134,8 @@ export class MapScene extends Phaser.Scene {
       for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
       const img = this.add.image(x, y, sd.node);
       if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
+      // A treasure mission shows a pile of gold in the corner until it's cleared.
+      if (sd.treasure && state !== 'cleared') this.add.image(x + 7, y + 5, 'goldPile').setDepth(5);
       if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
       // An open one blinks a ring so it stands out.
       if (state === 'open') {
@@ -142,10 +148,29 @@ export class MapScene extends Phaser.Scene {
         if (this.selectable(stop)) { this.selected = stop; this.render(); }
       });
     }
+    this.announce();
     // The player's ship waits at the next level.
     const n = nodePos(this.next);
     const ship = this.add.image(n.x, n.y - 15, 'ship').setScale(0.7);
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
+  }
+
+  // Side missions that just unlocked: a banner near them that flashes a few
+  // times and fades. Their moons already blink a ring while open.
+  private announce() {
+    const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
+    if (!fresh.length) return;
+    const { y } = sidePos(fresh[0]);
+    const msg = fresh.length > 1 ? `${fresh.length} SIDE MISSIONS\nUNLOCKED` : 'SIDE MISSION\nUNLOCKED';
+    // Under the moons, or above them on the bottom row, out of the info panel.
+    const by = y + 38 < INFO_Y ? y + 23 : y - 30;
+    const banner = this.add.container(0, 0).setDepth(10);
+    banner.add(this.add.rectangle(W / 2, by, 140, 26, 0x000000).setStrokeStyle(1, 0xf8b800));
+    banner.add(text(this, W / 2, by, msg, COLOR.yellow).setOrigin(0.5).setAlign('center'));
+    this.tweens.add({
+      targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
+      onComplete: () => this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 400, onComplete: () => banner.destroy() }),
+    });
   }
 
   private render() {
@@ -180,9 +205,9 @@ export class MapScene extends Phaser.Scene {
     add(this.add.rectangle(4, INFO_Y, W - 8, 1, 0x3c3c3c).setOrigin(0));
     add(text(this, 6, INFO_Y + 5, l.desc, COLOR.white).setWordWrapWidth(W - 12));
 
-    // Common enemies: the enemy's own sprite (or ? if not met yet) and 1 to 3 pips.
-    const ey = 258;
-    add(text(this, 6, ey, 'COMMON ENEMIES', COLOR.gray));
+    // Common enemies, unlabeled: the enemy's own sprite (or ? if not met yet)
+    // and 1 to 3 pips.
+    const ey = 256;
     const met = metEnemies(this.d.state.level);
     commonEnemies(l).forEach(([kind, pips], k) => {
       const cx = 18 + k * 40;
