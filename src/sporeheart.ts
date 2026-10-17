@@ -8,7 +8,7 @@ const HOME_Y = 66;
 const CORE_HP = 520;
 const PETAL_HP = 70;
 const PETALS = 4;
-const REWARD = 300;
+const REWARD = 225;
 const CLOSED = 3400; // ms the petals stay shut
 const OPENING = 450;
 const OPEN = 2600; // ms the core is bare
@@ -52,9 +52,10 @@ export class Sporeheart {
 
   private get bare() { return this.petals.every((p) => p.hp <= 0); }
 
-  healthFraction() {
-    return (Math.max(0, this.hp) + this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0)) / (CORE_HP + PETALS * PETAL_HP);
-  }
+  // The health bar is the core; the petals have their own armor bar under it.
+  healthFraction() { return Math.max(0, this.hp) / CORE_HP; }
+
+  armorFraction() { return this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0) / (PETALS * PETAL_HP); }
 
   aimPoint() { return this.dead ? null : { x: this.x, y: this.y }; }
 

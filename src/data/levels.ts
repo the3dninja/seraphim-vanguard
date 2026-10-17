@@ -25,7 +25,17 @@ export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lig
   | 'press' | 'gust' | 'ember' | 'blackout' | 'sweep' | 'satchunk';
 export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm'
   | 'frostjaw' | 'hollowwatcher' | 'broodmother';
-export interface HazardSpec { kind: HazardKind; every: [number, number] }
+// ramp: how many times as often it comes by the end of the segment as at the start.
+export interface HazardSpec { kind: HazardKind; every: [number, number]; ramp?: number }
+
+// Enemies warping into the top half of the screen (level 14): one-off warp-ins
+// at points `p` (0..1) through a segment, `big` ones with twice the enemies;
+// and in `every`'s segment, a warp-in every `start` ms at first, closing to
+// every `end` ms, until `until` through it.
+export interface WarpPlan {
+  at: { seg: number; p: number; big?: boolean }[];
+  every?: { seg: number; until: number; start: [number, number]; end: [number, number] };
+}
 
 export interface Wave {
   delay: number; // ms after the previous wave spawned (or cleared, with waitClear)
@@ -44,6 +54,7 @@ export interface LevelDef {
   hazards?: HazardSpec[]; // ms between each hazard during action
   segmentHazards?: HazardSpec[][]; // per segment, in place of `hazards`
   boss?: BossKind; // fought after the last segment
+  bossHazards?: boolean; // hazards keep coming during the boss fight
   treasure?: number; // credits in a cargo hauler that drifts in after the last segment
   storm?: boolean; // Storm Eye: lightning and embers follow a script that builds over the level (storm.ts)
   // Usually two segments with a vendor stop between; empty = not built yet.
@@ -62,10 +73,14 @@ export interface LevelDef {
   // The living tunnel: which segment flies through it, how long its narrow
   // part runs (px) and where its chambers start.
   tunnel?: { segment: number; len: number; chambers: number[] };
+  warps?: WarpPlan;
   // Star map "common enemies" for levels that aren't built yet. Built levels
   // count their own wave scripts instead.
   enemies?: [string, number][];
 }
+
+// Wave scripts with every delay scaled by `k`, to the nearest 50 ms.
+const shorten = (k: number, segs: Wave[][]) => segs.map((seg) => seg.map((w) => ({ ...w, delay: Math.round((w.delay * k) / 50) * 50 })));
 
 export const isBuilt = (l: LevelDef | undefined): l is LevelDef => !!l && l.segments.length > 0;
 
@@ -805,6 +820,13 @@ export const LEVELS: LevelDef[] = [
     theme: 'gate',
     allies: 3,
     hazards: [{ kind: 'tentacle', every: [5000, 8000] }],
+    // A third of the way in and just before the vendor; then after the vendor
+    // every 15 to 25 s, closing to 10 to 15 s, until two thirds of the way,
+    // and a last big warp-in at seven eighths.
+    warps: {
+      at: [{ seg: 0, p: 0.33 }, { seg: 0, p: 0.9 }, { seg: 1, p: 0.875, big: true }],
+      every: { seg: 1, until: 2 / 3, start: [15000, 25000], end: [10000, 15000] },
+    },
     segments: [
       [
         { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.2 },
@@ -892,7 +914,7 @@ export const LEVELS: LevelDef[] = [
       'VEX: EGGS IN THE\nGROWTH. BURN THEM.',
       'REYES: THE MIND IS\nRIGHT AHEAD. GO!',
     ],
-    tunnel: { segment: 1, len: 2400, chambers: [560, 1220, 1880] },
+    tunnel: { segment: 1, len: 2040, chambers: [480, 1040, 1600] },
     segmentHazards: [
       [
         { kind: 'artery', every: [6000, 9000] }, { kind: 'tentacle', every: [9000, 13000] },
@@ -904,7 +926,8 @@ export const LEVELS: LevelDef[] = [
       [{ kind: 'artery', every: [5000, 8000] }, { kind: 'tentacle', every: [8000, 12000] }, { kind: 'wall', every: [10000, 14000] }],
     ],
     boss: 'mind',
-    segments: [
+    // Each leg runs 15% shorter than its waves as written.
+    segments: shorten(0.85, [
       [
         { delay: 2500, kind: 'tendril', pattern: 'pair' },
         { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.75 },
@@ -1007,7 +1030,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 3000, kind: 'spore', pattern: 'vee', count: 7, x: 0.25 },
       ],
-    ],
+    ]),
   },
 ];
 

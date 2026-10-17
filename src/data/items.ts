@@ -159,11 +159,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   bio: {
     name: 'BIO SEEKER', price: 380, score: 9, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
-    speed: 160, fx: 'burn', desc: 'PLASMA. SPORES THAT LATCH ON AND BURN. GREAT VS THE HOLLOW.',
+    speed: 160, fx: 'burn', desc: 'PLASMA. BURNING SPORES. MORE AS IT LEVELS. GREAT VS THE HOLLOW.',
+    // Grows faster than other weapons: 35% more damage a level, a second spore
+    // at level 3 and a third at level 5.
     stats: (lv) => ({
-      interval: lv >= 3 ? 440 : 520,
-      shots: lv >= 5 ? fan(-12, 12) : fan(0),
-      damage: levelDamage(0.7, lv),
+      interval: lv >= 4 ? 400 : lv >= 3 ? 440 : 500,
+      shots: lv >= 5 ? fan(-16, 0, 16) : lv >= 3 ? fan(-10, 10) : fan(0),
+      damage: 1.1 * (1 + 0.35 * (lv - 1)),
     }),
   },
 };
