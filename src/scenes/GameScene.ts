@@ -95,6 +95,7 @@ const STRIKE_HIT = 260; // ms the bolt stays
 const FLARE_WARN = 3000; // ms from the shelter rock appearing to the flare sweeping down
 const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
+const TREASURE_WAIT = 3500; // ms of calm before the cargo hauler drifts in
 const LINGER = 3000; // ms after a level is cleared to pick up credits by hand
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
@@ -1323,6 +1324,11 @@ export class GameScene extends Phaser.Scene {
     return done / total;
   }
 
+  private stormNow() {
+    const total = (this.level.segments[this.segment] ?? []).reduce((n, w) => n + w.delay, 0);
+    return stormPlan(this.segment, this.segProgress(), total);
+  }
+
   // Storm Eye's storm sets off the same lightning and embers as the hazard timers.
   stormStrike() { this.spawnStrike(); }
   stormEmber() { this.sideHaz.spawn('ember'); }
@@ -1337,7 +1343,7 @@ export class GameScene extends Phaser.Scene {
 
   private runHazards(dt: number) {
     if (this.boss) return;
-    if (this.storm) { this.storm.run(dt, stormPlan(this.segment, this.segProgress())); return; }
+    if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
       if (this.hazardIn[i] > 0) return;
@@ -2180,8 +2186,8 @@ export class GameScene extends Phaser.Scene {
   // it breaks up on its own and the credits are gathered in at once.
   private startTreasure() {
     this.treasureDone = true;
-    this.blinkTip('BREAK OPEN THE\nCARGO FOR TREASURE');
-    this.treasure = new Treasure(this, this.level.treasure!, (byShip) => {
+    this.time.delayedCall(TREASURE_WAIT, () => this.blinkTip('BREAK OPEN THE\nCARGO FOR TREASURE'));
+    this.treasure = new Treasure(this, this.level.treasure!, TREASURE_WAIT, (byShip) => {
       this.treasure = null;
       this.levelClear(!byShip);
     });
@@ -2494,7 +2500,7 @@ export class GameScene extends Phaser.Scene {
     this.updateEnemies(edt);
     this.boss?.update(edt);
     this.treasure?.update(edt);
-    this.storm?.draw(dt, stormPlan(this.segment, this.segProgress()));
+    this.storm?.draw(dt, this.stormNow());
     this.drawBossBar();
     this.updateStrikes(edt);
     this.updateFlares(edt);

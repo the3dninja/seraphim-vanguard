@@ -5,8 +5,8 @@ import type { GameScene } from './scenes/GameScene';
 // Storm Eye's storm, scripted over the level instead of fixed hazard timers.
 // Lightning from the start; halfway to the vendor the sky warms and harmless
 // embers drift past, then real embers start falling. After the vendor it
-// builds up, peaks with a second ember timer and hot wind, and dies away just
-// before the end.
+// builds up, peaks with a second ember timer and hot wind, and dies down as
+// the last waves come in, leaving a little red in the sky.
 export interface StormPlan {
   lightning: [number, number] | null; // ms between strikes, null = off
   embers: [number, number][]; // one timer per entry
@@ -21,21 +21,37 @@ const CALM_LIGHTNING: [number, number] = [6000, 9000];
 const EMBERS: [number, number] = [2000, 6000];
 const WARM = 0.35;
 
-// What the storm does at `p` (0..1) through segment `seg`.
-export function stormPlan(seg: number, p: number): StormPlan {
+// After the vendor, in ms along the segment's wave delays: the build-up, the
+// heavy storm, then the ramp down to the last wave.
+const BUILD_FROM = 7300;
+const PEAK_FROM = 38900;
+const PEAK_TO = 58800;
+const AFTERGLOW = 0.15; // the bit of red sky and drifting embers left at the end
+
+// What the storm does at `p` (0..1) through segment `seg`, whose waves add up
+// to `total` ms.
+export function stormPlan(seg: number, p: number, total: number): StormPlan {
   if (seg === 0) {
     if (p < 0.4) return { lightning: CALM_LIGHTNING, embers: [], heat: 0, wind: false };
     // A warning first: the sky warms and embers drift by, then they start to fall.
     return { lightning: CALM_LIGHTNING, embers: p < 0.5 ? [] : [EMBERS], heat: WARM, wind: false };
   }
-  if (p < 0.125) return { lightning: CALM_LIGHTNING, embers: [EMBERS], heat: WARM, wind: false };
-  if (p < 0.75) {
-    const k = (p - 0.125) / 0.625;
+  const t = p * total;
+  if (t < BUILD_FROM) return { lightning: CALM_LIGHTNING, embers: [EMBERS], heat: WARM, wind: false };
+  if (t < PEAK_FROM) {
+    const k = (t - BUILD_FROM) / (PEAK_FROM - BUILD_FROM);
     return { lightning: range(CALM_LIGHTNING, [3000, 5000], k), embers: [range(EMBERS, [1000, 4000], k)], heat: WARM + 0.2 * k, wind: false };
   }
-  if (p < 0.92) return { lightning: [2000, 4000], embers: [[1000, 4000], [1000, 4000]], heat: 1, wind: true };
-  // The storm breaks just before the end: a moment of relief.
-  return { lightning: null, embers: [], heat: 0, wind: false };
+  if (t < PEAK_TO) return { lightning: [2000, 4000], embers: [[1000, 4000], [1000, 4000]], heat: 1, wind: true };
+  // The storm dies down as the last waves come in, leaving a little glow.
+  if (p >= 1) return { lightning: null, embers: [], heat: AFTERGLOW, wind: false };
+  const k = Math.min(1, (t - PEAK_TO) / Math.max(1, total - PEAK_TO));
+  return {
+    lightning: range([2000, 4000], [6000, 9000], k),
+    embers: k < 0.5 ? [range([1000, 4000], [3000, 7000], k), range([1000, 4000], [3000, 7000], k)] : [range([1000, 4000], [3000, 7000], k)],
+    heat: 1 + (AFTERGLOW - 1) * k,
+    wind: k < 0.4,
+  };
 }
 
 interface Mote { x: number; y: number; vx: number; vy: number; big: boolean }

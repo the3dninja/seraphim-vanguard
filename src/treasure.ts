@@ -15,13 +15,14 @@ export class Treasure {
   private hp = HP;
   private done = false;
 
-  // `onBroken(byShip)` runs once the credits have dropped.
-  constructor(private g: GameScene, private reward: number, private onBroken: (byShip: boolean) => void) {
+  // It shows up after `wait` ms. `onBroken(byShip)` runs once the credits have dropped.
+  constructor(private g: GameScene, private reward: number, private wait: number, private onBroken: (byShip: boolean) => void) {
     this.img = g.add.image(90, -20, 'cargoship').setScale(1.5).setDepth(8);
   }
 
   update(dt: number) {
     if (this.done) return;
+    if (this.wait > 0) { this.wait -= dt * 1000; return; } // still out of sight above
     const g = this.g;
     this.img.y += SPEED * dt;
     for (const o of g.playerBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {

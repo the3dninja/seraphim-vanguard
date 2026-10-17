@@ -107,7 +107,10 @@ export const SIDES: SideDef[] = [
         w(3000, 'lancer', 'line', { count: 3 }), w(2500, 'drone', 'swarm', { count: 12, x: 0.1 }),
         w(3000, 'minelayer', 'pair'), w(3000, 'bulwark', 'line', { count: 3 }),
         w(2500, 'weaver', 'vee', { count: 7, x: 0.5 }), w(2500, 'bomber', 'pair'),
-        w(3000, 'lancer', 'pair', { waitClear: true }),
+        w(3000, 'lancer', 'pair'),
+        // As the storm dies down: a last few light waves.
+        w(3000, 'weaver', 'line', { count: 4 }), w(3000, 'dart', 'vee', { count: 5, x: 0.5 }),
+        w(2700, 'drone', 'swarm', { count: 8, x: 0.5, waitClear: true }),
       ],
     ],
   },
