@@ -15,7 +15,8 @@ const ROWS = 3;
 const TILE = 38; // tile size; tiles sit 40 px apart
 const GRID_X = (W - COLS * 40) / 2 + 1;
 const GRID_Y = 20;
-const ICON = 30; // icons are scaled to fit this box
+const ICON = TILE - 4; // bigger sprites shrink to fit the tile; smaller ones show at their in-game size
+const SWIPE = 24; // px of sideways drag that turns the page
 const INFO_Y = 164;
 const TAG: Record<DType, string> = { kinetic: 'KIN', laser: 'LAS', plasma: 'PLA', ion: 'ION', explosive: 'EXP' };
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -69,6 +70,11 @@ export class BestiaryScene extends Phaser.Scene {
       else if (['arrowdown', 's'].includes(k)) this.select(this.pick + COLS);
       else if (['escape', 'backspace'].includes(k)) this.leave();
     });
+    // Swipe left or right anywhere to turn the page.
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const dx = p.upX - p.downX;
+      if (Math.abs(dx) >= SWIPE && Math.abs(dx) > Math.abs(p.upY - p.downY)) this.turn(dx < 0 ? 1 : -1);
+    });
     this.render();
   }
 
@@ -100,12 +106,13 @@ export class BestiaryScene extends Phaser.Scene {
       const border = i === this.pick ? 0xf8b800 : en.boss && known ? 0x881400 : 0x3c3c3c;
       const tile = add(this.add.rectangle(x, y, TILE, TILE, border).setOrigin(0));
       add(this.add.rectangle(x + 1, y + 1, TILE - 2, TILE - 2, 0x000000).setOrigin(0));
-      tile.setInteractive({ useHandCursor: true }).on('pointerup', () => this.select(i));
+      tile.setInteractive({ useHandCursor: true }).on('pointerup', (p: Phaser.Input.Pointer) => {
+        if (Math.abs(p.upX - p.downX) < SWIPE) this.select(i);
+      });
       const key = known && this.textures.exists(en.texture) ? en.texture : 'qmark';
       const img = add(this.add.image(x + TILE / 2, y + TILE / 2, key));
-      const big = Math.max(img.width, img.height);
-      // Small sprites grow by whole steps so the pixels stay square.
-      img.setScale(big * 2 <= ICON ? Math.floor(ICON / big) : Math.min(1, ICON / big));
+      // Question marks show at double size, about half the old tile-filling size.
+      img.setScale(key === 'qmark' ? 2 : Math.min(1, ICON / Math.max(img.width, img.height)));
       if (known && en.tint) img.setTint(en.tint);
     });
 
