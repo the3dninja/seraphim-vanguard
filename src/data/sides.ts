@@ -79,7 +79,7 @@ export const SIDES: SideDef[] = [
   {
     id: 's6', anchor: 6, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
     desc: 'A LONG RUN INTO THE STORM. LIGHTNING AND RED-HOT EMBERS RAIN DOWN.',
-    hazards: [{ kind: 'lightning', every: [6000, 9000] }, { kind: 'ember', every: [2000, 6000] }],
+    hazards: [{ kind: 'lightning', every: [6000, 9000] }, { kind: 'ember', every: [1000, 5000] }],
     segments: [
       [
         w(2500, 'minelayer', 'single', { x: 0.3 }), w(2500, 'dart', 'vee', { count: 7, x: 0.7 }),
