@@ -75,11 +75,12 @@ export const SIDES: SideDef[] = [
       w(3000, 'gunboat', 'pair'), w(2500, 'weaver', 'line', { count: 4, waitClear: true }),
     ]],
   },
-  // Beside level 6: the longest side mission, embers raining through a storm.
+  // Beside level 6: the longest side mission, a storm that builds to a peak,
+  // then a derelict cargo hauler to break open.
   {
     id: 's6', anchor: 6, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
-    desc: 'A LONG RUN INTO THE STORM. LIGHTNING AND RED-HOT EMBERS RAIN DOWN.',
-    hazards: [{ kind: 'lightning', every: [6000, 9000] }, { kind: 'ember', every: [5000, 7500] }],
+    desc: 'A LONG RUN INTO A BUILDING STORM. LIGHTNING AND RED-HOT EMBERS. TREASURE AT THE END.',
+    storm: true, treasure: 300,
     segments: [
       [
         w(2500, 'minelayer', 'single', { x: 0.3 }), w(2500, 'dart', 'vee', { count: 7, x: 0.7 }),
@@ -106,15 +107,18 @@ export const SIDES: SideDef[] = [
         w(3000, 'lancer', 'line', { count: 3 }), w(2500, 'drone', 'swarm', { count: 12, x: 0.1 }),
         w(3000, 'minelayer', 'pair'), w(3000, 'bulwark', 'line', { count: 3 }),
         w(2500, 'weaver', 'vee', { count: 7, x: 0.5 }), w(2500, 'bomber', 'pair'),
-        w(3000, 'lancer', 'pair', { waitClear: true }),
+        w(3000, 'lancer', 'pair'),
+        // As the storm dies down: a last few light waves.
+        w(3000, 'weaver', 'line', { count: 4 }), w(3000, 'dart', 'vee', { count: 5, x: 0.5 }),
+        w(2700, 'drone', 'swarm', { count: 8, x: 0.5, waitClear: true }),
       ],
     ],
   },
   // Beside level 8: a dead satellite whose searchlights still sweep.
   {
     id: 's8a', anchor: 8, name: 'DEAD SATELLITE', node: 'moon_relay', theme: 'relay',
-    desc: 'A MEDIUM RUN PAST A DEAD SATELLITE. ITS SEARCHLIGHTS STILL SWEEP FOR INTRUDERS.',
-    hazards: [{ kind: 'sweep', every: [6500, 9000] }, { kind: 'fence', every: [9000, 12000] }],
+    desc: 'A MEDIUM RUN PAST A DEAD SATELLITE. HIDE BEHIND ITS DEBRIS FROM THE SEARCHLIGHTS.',
+    hazards: [{ kind: 'satchunk', every: [2500, 3800] }, { kind: 'sweep', every: [6500, 9000] }, { kind: 'fence', every: [9000, 12000] }],
     segments: [
       [
         w(2500, 'phantom', 'pair'), w(3000, 'carrier', 'single', { x: 0.5 }),

@@ -6,7 +6,7 @@ import { toast } from './ui';
 
 const ENTER_Y = 66;
 const MAX_HP = 420;
-const REWARD = 150; // credits, dropped as a shower of gold
+const REWARD = 225; // credits, dropped as a shower of gold
 const CLOAKED = 1500; // ms spent cloaked and moving between reveals
 const SHOWN = 2600; // ms visible after each reveal
 const HIT_W = 15; // half sizes of the hit box

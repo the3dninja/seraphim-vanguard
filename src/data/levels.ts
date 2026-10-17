@@ -18,10 +18,11 @@ export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' |
 // edge, then sweeps across the screen. artery: a pulsing vessel that bursts
 // into shots. Level 15 (see heart.ts): barrier: a wall of fleshy cells across
 // the screen that has to be shot through. growth: a short piece of one.
-// Side missions (see sidehaz.ts): press, gust, ember, blackout, sweep.
+// Side missions (see sidehaz.ts): press, gust, ember, blackout, sweep. satchunk:
+// broken satellite pieces that drift down slowly and block shots and searchlights.
 export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lightning' | 'flare' | 'fence'
   | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery' | 'barrier' | 'growth'
-  | 'press' | 'gust' | 'ember' | 'blackout' | 'sweep';
+  | 'press' | 'gust' | 'ember' | 'blackout' | 'sweep' | 'satchunk';
 export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm'
   | 'frostjaw' | 'hollowwatcher' | 'broodmother';
 export interface HazardSpec { kind: HazardKind; every: [number, number] }
@@ -43,6 +44,8 @@ export interface LevelDef {
   hazards?: HazardSpec[]; // ms between each hazard during action
   segmentHazards?: HazardSpec[][]; // per segment, in place of `hazards`
   boss?: BossKind; // fought after the last segment
+  treasure?: number; // credits in a cargo hauler that drifts in after the last segment
+  storm?: boolean; // Storm Eye: lightning and embers follow a script that builds over the level (storm.ts)
   // Usually two segments with a vendor stop between; empty = not built yet.
   // One segment means no vendor (the last level).
   segments: Wave[][];

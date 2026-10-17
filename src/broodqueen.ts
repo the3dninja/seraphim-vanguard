@@ -7,7 +7,7 @@ const HOME_Y = 62;
 const MAX_HP = 600;
 const REGEN = 20; // health a second while she isn't being hit
 const REGEN_AFTER = 1500; // ms without a hit before she starts healing
-const REWARD = 150;
+const REWARD = 225;
 
 type Mode = 'spawn' | 'shoot' | 'warn' | 'charge' | 'return';
 

@@ -167,6 +167,55 @@ const SPRITES: Record<string, string[]> = {
     '.......GGG....',
   ],
 
+  // Broken satellite: a torn solar panel and a chunk of the hull with its dish.
+  satchunk1: [
+    '..GGGGGGGGGGGGG.....',
+    '.GLDBDBDBDBDBDLG....',
+    '.GLBCBDBCBDBCBLG....',
+    '.GLDBDBDBDBDBDLGGG..',
+    '.GLBCBDBCBDBCBLLLLG.',
+    '.GLDBDBDBDBDBDLGGG..',
+    '.GLBCBDBCBDB.GLG....',
+    '.GLDBDBDBD...G......',
+    '.GLLLLLL.....G......',
+    '..GGGGG.............',
+  ],
+  satchunk2: [
+    '....GGGGGGGGGGGG....',
+    '..GGLLLLLLLLLLLLG...',
+    '.GLLDDDDDDDDDDDDLG..',
+    'GLDDDGGGDDDDKKDDDLG.',
+    'GLDDGYYGDDDDKKDDDLGG',
+    'GLDDDGGGDDDDDDDDDLLG',
+    'GLDBDBDBDBDDRRDDDDLG',
+    'GLDCBCBCBCDDDDDDDLG.',
+    '.GLDDDDDDDDDDKDDLG..',
+    '..GLLDDDKKDDDDDLG...',
+    '...GGLLLDDDDLLGG....',
+    '.....GG.GLLLGG......',
+    '.........GGG........',
+  ],
+
+  // A derelict cargo hauler, stacked with containers: the treasure at the end of some levels.
+  cargoship: [
+    '..........GGGGGGGGGGGGGGGGGGGGGGGGG.........',
+    '........GGLLLLLLLLLLLLLLLLLLLLLLLLLGG.......',
+    '......GGLLDDDDDDDDDDDDDDDDDDDDDDDDDLLGG.....',
+    '.....GLLDDRRRRRDBBBBBDYYYYYDNNNNNDDDDLLG....',
+    '....GLDDDDROORRDBCCBBDYqqYYDNTTNNDGGDDDLG...',
+    '...GLDDGGDRRRRRDBBBBBDYYYYYDNNNNNDGKGDDDLGG.',
+    'GGGLDDGKKGDDDDDDDDDDDDDDDDDDDDDDDDGGDDDDLLLG',
+    'GWLDDDGKKGDBBBBBDRRRRRDNNNNNDYYYYYDDDDDDDDLG',
+    'GWLDDDDGGDDBCCBBDROORRDNTTNNDYqqYYDDKKDDDDLG',
+    'GGGLDDDDDDDBBBBBDRRRRRDNNNNNDYYYYYDDKKDDDLLG',
+    '...GLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDLGG.',
+    '....GLLDDDDYYYYYDNNNNNDBBBBBDDDDDDDDDDDLG...',
+    '.....GGLLDDYqqYYDNTTNNDBCCBBDDKDDDDDLLGG....',
+    '.......GGLLLLLLLLLLLLLLLLLLLLLLLLLLLLGG.....',
+    '.........GGGGGG..GGGGGGGG..GGGGGGGGG.......',
+    '..........ROY......ROY.......ROY...........',
+  ],
+
   // Rockjaw, the level 3 mini boss: armor plates bolted over an asteroid, a core underneath.
   plateL: [
     '..GGGGGGGGGG',

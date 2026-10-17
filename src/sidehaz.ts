@@ -9,6 +9,7 @@ import type { GameScene } from './scenes/GameScene';
 // ember: a cluster of red-hot rocks that rain down fast (they can be shot).
 // blackout: the lights go out, leaving a pool of light around the ship.
 // sweep: a searchlight on the edge of the screen that swings a laser across.
+// Wrecks and satellite chunks block it, so the ship can hide behind one.
 interface Press { y: number; t: number; gap: number } // gap: where the slabs meet
 interface Gust { dir: number; t: number }
 interface Ember { x: number; y: number; vy: number; hp: number; warn: number }
@@ -68,7 +69,7 @@ export class SideHazards {
       case 'sweep': {
         const left = Math.random() < 0.5;
         this.sweeps.push({ left, y: Phaser.Math.Between(30, 90), t: 0 });
-        g.tipOnce('sweep', 'DODGE THE\nSEARCHLIGHT');
+        g.tipOnce('sweep', g.hasHazard('satchunk') ? 'HIDE BEHIND DEBRIS\nFROM THE SEARCHLIGHT' : 'DODGE THE\nSEARCHLIGHT');
         break;
       }
     }
@@ -188,11 +189,13 @@ export class SideHazards {
       const a = base + (sw.left ? 1 : -1) * SWEEP_ARC * Phaser.Math.Easing.Sine.InOut(k);
       gfx.fillStyle(0x7c7c7c, 1).fillRect(sw.left ? 0 : W - 6, sw.y - 5, 6, 10);
       gfx.fillStyle(0xf8b800, 1).fillRect(sw.left ? 2 : W - 4, sw.y - 2, 2, 4);
+      const len = g.beamStop(x, sw.y, a);
       if (sw.t < SWEEP_WARN) {
-        if (Math.floor(sw.t / 100) % 2 === 0) g.drawBeam(x, sw.y, a, 1, 0xf8b800, 0.6);
+        if (Math.floor(sw.t / 100) % 2 === 0) g.drawBeam(x, sw.y, a, 1, 0xf8b800, 0.6, len);
       } else {
-        g.drawBeam(x, sw.y, a, 3, 0xfcfcfc, 0.9);
-        if (live && g.beamHits(x, sw.y, a, 3)) g.hurt();
+        g.drawBeam(x, sw.y, a, 3, 0xfcfcfc, 0.9, len);
+        if (len < 420 && Math.random() < 0.4) g.sparks.explode(1, x + Math.cos(a) * len, sw.y + Math.sin(a) * len);
+        if (live && g.beamHits(x, sw.y, a, 3, len)) g.hurt();
       }
     }
 

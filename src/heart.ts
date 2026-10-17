@@ -180,7 +180,7 @@ export class Barriers {
         s.destroy();
         if (c.hp <= 0) {
           g.sparks.explode(10, (c.x0 + c.x1) / 2, b.y);
-          if (Math.random() < 0.3) g.dropCoin((c.x0 + c.x1) / 2, b.y, Phaser.Math.Between(3, 8));
+          if (Math.random() < 0.3) g.dropCoin((c.x0 + c.x1) / 2, b.y, Phaser.Math.Between(5, 12));
         }
       }
       for (const s of g.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) if (cellAt(s.x, s.y)) s.destroy();

@@ -17,6 +17,8 @@ import { Sporeheart } from '../sporeheart';
 import { Wyrm } from '../wyrm';
 import { Barriers, Tunnel } from '../heart';
 import { SideHazards } from '../sidehaz';
+import { Storm, stormPlan } from '../storm';
+import { Treasure } from '../treasure';
 import { sideById } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
@@ -93,6 +95,8 @@ const STRIKE_HIT = 260; // ms the bolt stays
 const FLARE_WARN = 3000; // ms from the shelter rock appearing to the flare sweeping down
 const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
+const TREASURE_WAIT = 3500; // ms of calm before the cargo hauler drifts in
+const LINGER = 3000; // ms after a level is cleared to pick up credits by hand
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
 const godMode = () => new URLSearchParams(location.search).has('god');
@@ -142,6 +146,9 @@ export class GameScene extends Phaser.Scene {
   private waveTimer = 0;
   private hazardIn: number[] = [];
   private boss: Boss | null = null;
+  private storm: Storm | null = null; // Storm Eye's scripted storm
+  private treasure: Treasure | null = null; // the cargo hauler at a treasure ending
+  private treasureDone = false;
   private strikes: Strike[] = [];
   private flares: Flare[] = [];
   private fences: Fence[] = [];
@@ -176,7 +183,8 @@ export class GameScene extends Phaser.Scene {
   private warpUntil = 0; // Time Warp
   private flare: Phaser.GameObjects.Image | null = null; // Decoy Flare
   private flareUntil = 0;
-  private boostSegment = -1; // Credit Booster: the segment it doubles drops for
+  private lingering = false; // level cleared: a few seconds to pick up credits
+  private boostSegment = -1; // Credit Booster: the segment it boosts drops for
   private healUntil = 0; // Repair Drone
   private healAt = 0;
   private healDrone: Phaser.GameObjects.Image | null = null;
@@ -241,6 +249,7 @@ export class GameScene extends Phaser.Scene {
     this.flare = null;
     this.flareUntil = 0;
     this.boostSegment = -1;
+    this.lingering = false;
     this.healUntil = 0;
     this.healAt = 0;
     this.healDrone = null;
@@ -258,6 +267,9 @@ export class GameScene extends Phaser.Scene {
     this.fog = null;
     this.motes = null;
     this.segBossDone = false;
+    this.storm = null;
+    this.treasure = null;
+    this.treasureDone = false;
   }
 
   create() {
@@ -265,6 +277,7 @@ export class GameScene extends Phaser.Scene {
     this.scroll = starfield(this);
     const inRift = this.level.riftAfter !== undefined && this.segment > this.level.riftAfter;
     this.setTheme(inRift ? 'rift' : this.segmentTheme(this.segment));
+    if (this.level.storm) this.storm = new Storm(this, this.scenery ? 3 : 2);
     this.resetHazardTimers(4000);
 
     this.playerBullets = this.physics.add.group();
@@ -314,7 +327,7 @@ export class GameScene extends Phaser.Scene {
       text(this, W / 2, H / 2 - 26, this.level.name, COLOR.white),
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
-    this.tweens.add({ targets: intro, alpha: 0, delay: 1800, duration: 400 });
+    this.tweens.add({ targets: intro, alpha: 0, delay: 2700, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
     const call = this.side ? undefined : RADIO[this.state.level];
     if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
@@ -371,7 +384,7 @@ export class GameScene extends Phaser.Scene {
   // A line from an ally or Base, at the top of the screen.
   radio(msg: string) {
     const t = text(this, W / 2, 34, msg, COLOR.cyan).setOrigin(0.5, 0).setAlign('center').setDepth(1000);
-    this.tweens.add({ targets: t, alpha: 0, delay: 2600, duration: 400, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, alpha: 0, delay: 4100, duration: 400, onComplete: () => t.destroy() });
   }
 
   // --- Input -------------------------------------------------------------
@@ -386,7 +399,7 @@ export class GameScene extends Phaser.Scene {
       this.dragFrom = { px: p.x, py: p.y, sx: x, sy: y, tx: x, ty: y };
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!this.dragFrom || !p.isDown || this.phase !== 'action') return;
+      if (!this.dragFrom || !p.isDown || (this.phase !== 'action' && !this.lingering)) return;
       this.dragFrom.tx = Phaser.Math.Clamp(this.dragFrom.sx + (p.x - this.dragFrom.px), 6, W - 6);
       this.dragFrom.ty = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, H - 30);
     });
@@ -541,18 +554,18 @@ export class GameScene extends Phaser.Scene {
   private blinkTip(msg: string) {
     const wait = this.tipFreeAt - this.time.now;
     if (wait > 0) {
-      this.tipFreeAt += 2500;
+      this.tipFreeAt += 3750;
       this.time.delayedCall(wait, () => this.showTip(msg));
       return;
     }
-    this.tipFreeAt = this.time.now + 2500;
+    this.tipFreeAt = this.time.now + 3750;
     this.showTip(msg);
   }
 
   private showTip(msg: string) {
     const t = text(this, W / 2, H / 2 + 30, msg, COLOR.yellow).setOrigin(0.5).setDepth(1000);
     t.setAlign('center');
-    this.tweens.add({ targets: t, alpha: 0.2, yoyo: true, repeat: 3, duration: 300, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, alpha: 0.2, yoyo: true, repeat: 3, duration: 450, onComplete: () => t.destroy() });
   }
 
   // Show a tip the first time something happens in a level.
@@ -693,7 +706,7 @@ export class GameScene extends Phaser.Scene {
   // --- Waves -----------------------------------------------------------------
 
   private runWaves(dt: number) {
-    if (this.boss) return;
+    if (this.boss || this.treasure) return;
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
@@ -1227,9 +1240,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // A straight laser from (x, y) at `angle` to the edge of the screen.
-  drawBeam(x: number, y: number, angle: number, width: number, color: number, alpha = 1) {
-    const len = 420;
+  // A straight laser from (x, y) at `angle`, to the edge of the screen unless
+  // `len` cuts it short.
+  drawBeam(x: number, y: number, angle: number, width: number, color: number, alpha = 1, len = 420) {
     const g = this.beams;
     g.lineStyle(width, color, alpha);
     g.lineBetween(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
@@ -1240,11 +1253,31 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Whether the ship is within `reach` px of a beam's center line.
-  beamHits(x: number, y: number, angle: number, reach: number) {
+  beamHits(x: number, y: number, angle: number, reach: number, len = Infinity) {
     const px = this.player.x - x, py = this.player.y - y;
     const along = px * Math.cos(angle) + py * Math.sin(angle);
-    if (along < 0) return false;
+    if (along < 0 || along > len) return false;
     return Math.abs(-px * Math.sin(angle) + py * Math.cos(angle)) <= reach;
+  }
+
+  // How far a beam from (x, y) at `angle` gets before a wreck stops it.
+  beamStop(x: number, y: number, angle: number) {
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    let best = 420;
+    for (const h of this.hazards.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (!h.active || h.getData('kind') !== 'debris' || !h.body) continue;
+      // Ray against the wreck's box (slab method).
+      const b = h.body;
+      let t0 = 0, t1 = best;
+      for (const [o, d, lo, hi] of [[x, dx, b.x, b.x + b.width], [y, dy, b.y, b.y + b.height]]) {
+        if (Math.abs(d) < 1e-6) { if (o < lo || o > hi) { t0 = Infinity; break; } continue; }
+        const a = (lo - o) / d, c = (hi - o) / d;
+        t0 = Math.max(t0, Math.min(a, c));
+        t1 = Math.min(t1, Math.max(a, c));
+      }
+      if (t0 <= t1 && t0 < best) best = t0;
+    }
+    return best;
   }
 
   // What aimed enemy shots go for: a Decoy Flare while one burns, sometimes
@@ -1281,12 +1314,36 @@ export class GameScene extends Phaser.Scene {
     return this.level.segmentHazards?.[this.segment] ?? this.level.hazards ?? [];
   }
 
+  // How far through this segment's waves the level is, 0..1, by their delays.
+  private segProgress() {
+    const waves = this.level.segments[this.segment] ?? [];
+    const total = waves.reduce((n, w) => n + w.delay, 0);
+    if (this.waveIndex >= waves.length || total <= 0) return 1;
+    let done = Math.min(this.waveTimer, waves[this.waveIndex].delay);
+    for (let i = 0; i < this.waveIndex; i++) done += waves[i].delay;
+    return done / total;
+  }
+
+  private stormNow() {
+    const total = (this.level.segments[this.segment] ?? []).reduce((n, w) => n + w.delay, 0);
+    return stormPlan(this.segment, this.segProgress(), total);
+  }
+
+  // Storm Eye's storm sets off the same lightning and embers as the hazard timers.
+  stormStrike() { this.spawnStrike(); }
+  stormEmber() { this.sideHaz.spawn('ember'); }
+
+  hasHazard(kind: string) {
+    return this.hazardList().some((hz) => hz.kind === kind);
+  }
+
   private resetHazardTimers(first: number) {
     this.hazardIn = this.hazardList().map((_hz, i) => first + i * 2500);
   }
 
   private runHazards(dt: number) {
     if (this.boss) return;
+    if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
       if (this.hazardIn[i] > 0) return;
@@ -1296,18 +1353,24 @@ export class GameScene extends Phaser.Scene {
       else if (hz.kind === 'lightning') this.spawnStrike();
       else if (hz.kind === 'flare') this.spawnFlare();
       else if (hz.kind === 'fence') this.spawnFence();
-      else if (hz.kind === 'debris' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
+      else if (hz.kind === 'debris' || hz.kind === 'satchunk' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
       else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier');
       else if (['press', 'gust', 'ember', 'blackout', 'sweep'].includes(hz.kind)) this.sideHaz.spawn(hz.kind);
       else this.act3.spawn(hz.kind);
     });
   }
 
-  private spawnHazard(kind: 'debris' | 'rock' | 'shard' | 'pebble' | 'shelter', x: number, y: number) {
-    const tex = kind === 'debris' ? Phaser.Utils.Array.GetRandom(['debris1', 'debris2']) : kind;
+  private spawnHazard(kind: 'debris' | 'satchunk' | 'rock' | 'shard' | 'pebble' | 'shelter', x: number, y: number) {
+    const tex = kind === 'debris' ? Phaser.Utils.Array.GetRandom(['debris1', 'debris2'])
+      : kind === 'satchunk' ? Phaser.Utils.Array.GetRandom(['satchunk1', 'satchunk2']) : kind;
     const h = this.hazards.create(x, y, tex) as Phaser.Physics.Arcade.Image;
-    h.setData('kind', kind);
-    if (kind === 'shelter') {
+    // Satellite chunks act like wrecks: they block shots and searchlights.
+    h.setData('kind', kind === 'satchunk' ? 'debris' : kind);
+    if (kind === 'satchunk') {
+      // Slow, so there's time to tuck in under one when a searchlight swings.
+      h.setScale(1.5).setVelocity(Phaser.Math.Between(-4, 4), Phaser.Math.Between(14, 19));
+      h.body!.setSize(h.width - 4, h.height - 2);
+    } else if (kind === 'shelter') {
       // A big rock that can't be broken: its shadow is the shelter from a flare.
       h.setVelocity(0, 30);
       h.body!.setCircle(12, h.width / 2 - 12, h.height / 2 - 12);
@@ -1503,7 +1566,7 @@ export class GameScene extends Phaser.Scene {
         p.setVelocity(side * Phaser.Math.Between(18, 30), (h.body!.velocity.y ?? 30) + 6);
       }
     } else if (Math.random() < 0.15) {
-      this.dropCoin(h.x, h.y, Phaser.Math.Between(1, 3));
+      this.dropCoin(h.x, h.y, Phaser.Math.Between(2, 4));
     }
     h.destroy();
   }
@@ -1933,10 +1996,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Credits drop as metal bars: bronze, silver, gold, and a stack of gold for big ones.
-  // Act 3 drops are worth a little more, and a Credit Booster doubles them.
+  // Act 3 drops are worth a little more, and a Credit Booster adds half again.
   dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = 26) {
     if (this.state.level >= 9) value = Math.round(value * (1 + (this.state.level - 8) * 0.06));
-    if (this.boostSegment === this.segment) value *= 2;
+    if (this.boostSegment === this.segment) value = Math.round(value * 1.5);
     const key = value >= 25 ? 'ingot4' : value >= 10 ? 'ingot3' : value >= 5 ? 'ingot2' : 'ingot1';
     const c = this.coins.create(x, y, key) as Phaser.Physics.Arcade.Image;
     c.setData('v', value);
@@ -2054,7 +2117,7 @@ export class GameScene extends Phaser.Scene {
       sporeheart: () => new Sporeheart(this, done),
       wyrm: () => new Wyrm(this, done),
       frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.4 }),
-      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 1.3 }),
+      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 2.6 }),
       broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 1.1 }),
     };
     this.boss = make[kind]();
@@ -2115,7 +2178,19 @@ export class GameScene extends Phaser.Scene {
       else if (this.level.vendorless) this.flowOn();
       else this.vendorArrival();
     } else if (this.level.boss) this.startBoss();
+    else if (this.level.treasure && !this.treasureDone) this.startTreasure();
     else this.levelClear();
+  }
+
+  // A treasure ending: a cargo hauler drifts in to be broken open. Left alone,
+  // it breaks up on its own and the credits are gathered in at once.
+  private startTreasure() {
+    this.treasureDone = true;
+    this.time.delayedCall(TREASURE_WAIT, () => this.blinkTip('BREAK OPEN THE\nCARGO FOR TREASURE'));
+    this.treasure = new Treasure(this, this.level.treasure!, TREASURE_WAIT, (byShip) => {
+      this.treasure = null;
+      this.levelClear(!byShip);
+    });
   }
 
   // Level 15: no vendor between segments. Gather up, maybe change scenery, go on.
@@ -2163,6 +2238,7 @@ export class GameScene extends Phaser.Scene {
   private vendorArrival() {
     this.phase = 'arrival';
     this.dragFrom = null;
+    this.player.setVisible(true); // it may have been mid-blink from a hit
     this.enemyBullets.clear(true, true);
     this.gatherCoins(() => {
       if (this.state.level === 1) this.blinkTip('VENDOR AHEAD');
@@ -2216,6 +2292,7 @@ export class GameScene extends Phaser.Scene {
   private riftSequence() {
     this.phase = 'arrival';
     this.dragFrom = null;
+    this.player.setVisible(true);
     this.enemyBullets.clear(true, true);
     this.gatherCoins(() => {
       this.clearForCutscene();
@@ -2315,12 +2392,26 @@ export class GameScene extends Phaser.Scene {
     this.startNextSegment();
   }
 
-  private levelClear() {
+  private levelClear(skipLinger = false) {
     if (this.phase !== 'action') return;
     this.phase = 'clear';
+    this.player.setVisible(true);
     this.enemyBullets.clear(true, true);
     this.clearTimedHazards();
     const last = !this.side && this.state.level === LEVELS.length;
+    // Loose credits stop where they are, and the ship gets a few seconds to
+    // fly around and pick them up before the rest are gathered in.
+    for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) c.setVelocity(0, 0);
+    if (skipLinger) { this.endLevel(last); return; }
+    this.lingering = true;
+    this.time.delayedCall(LINGER, () => {
+      this.lingering = false;
+      this.dragFrom = null;
+      this.endLevel(last);
+    });
+  }
+
+  private endLevel(last: boolean) {
     this.gatherCoins(() => {
       if (last) { this.ending(); return; }
       if (this.side) {
@@ -2404,10 +2495,12 @@ export class GameScene extends Phaser.Scene {
       this.autoFire(dt);
       this.runWaves(dt);
       this.runHazards(dt);
-    }
+    } else if (this.lingering) this.move(dt);
     this.updateShots(dt);
     this.updateEnemies(edt);
     this.boss?.update(edt);
+    this.treasure?.update(edt);
+    this.storm?.draw(dt, this.stormNow());
     this.drawBossBar();
     this.updateStrikes(edt);
     this.updateFlares(edt);
