@@ -20,7 +20,7 @@ import { SideHazards } from '../sidehaz';
 import { Storm, stormPlan } from '../storm';
 import { Treasure } from '../treasure';
 import { Warps } from '../warp';
-import { sideById } from '../data/sides';
+import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
 
@@ -2580,8 +2580,9 @@ export class GameScene extends Phaser.Scene {
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
       this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+      const unlocked = unlockedBy(this.state.level);
       this.state.level++;
-      this.time.delayedCall(2800, () => this.leaveTo('Base', this.state));
+      this.time.delayedCall(2800, () => this.leaveTo('Base', this.state, unlocked));
     });
   }
 
@@ -2609,9 +2610,11 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1200 + lines.length * 450 + 3500, () => this.leaveTo('Base', this.state));
   }
 
-  private leaveTo(scene: string, state: SaveData) {
+  // Every mission ends back at Base with the star map open, showing any side
+  // missions that just unlocked.
+  private leaveTo(scene: string, state: SaveData, unlocked: string[] = []) {
     this.cameras.main.fadeOut(400);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap: true, unlocked }));
   }
 
   // Level 14: the allied fleet's battle with the gate, far behind the action.

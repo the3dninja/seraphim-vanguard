@@ -1,9 +1,9 @@
 import type { LevelDef, Wave } from './levels';
 import type { SaveData } from '../save';
 
-// Side missions: extra levels beside levels 2, 4, 6, 8, 10, 12 and 14, for
+// Side missions: extra levels beside levels 2, 4, 7, 8, 9, 12 and 14, for
 // more credits and loot before the boss and mini boss levels. Each opens when
-// the ship reaches its level and stays open until the ship leaves that system
+// the ship beats its level and stays open until the ship leaves that system
 // (levels 1 to 5 are system 1, 6 to 10 system 2, 11 to 15 system 3). They
 // bring back enemies already met, in new mixes, with their own hazards.
 export interface SideDef extends LevelDef {
@@ -79,10 +79,10 @@ export const SIDES: SideDef[] = [
       w(2500, 'driller', 'pair', { waitClear: true }),
     ]],
   },
-  // Beside level 6: the longest side mission, a storm that builds to a peak,
+  // Beside level 7: the longest side mission, a storm that builds to a peak,
   // then a derelict cargo hauler to break open.
   {
-    id: 's6', anchor: 6, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
+    id: 's6', anchor: 7, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
     desc: 'A LONG RUN INTO A BUILDING STORM. LIGHTNING AND RED-HOT EMBERS. TREASURE AT THE END.',
     storm: true, treasure: 225,
     segments: [
@@ -157,9 +157,9 @@ export const SIDES: SideDef[] = [
       w(2500, 'phantom', 'line', { count: 4 }), w(3000, 'carrier', 'pair', { waitClear: true }),
     ]],
   },
-  // Beside level 10: the Emperor's armory, all presses and blast doors.
+  // Beside level 9: the Emperor's armory, all presses and blast doors.
   {
-    id: 's10', anchor: 10, name: 'IMPERIAL ARMORY', node: 'moon_armory', theme: 'throne',
+    id: 's10', anchor: 9, name: 'IMPERIAL ARMORY', node: 'moon_armory', theme: 'throne',
     desc: 'A LONG RUN THROUGH THE EMPEROR\'S ARMORY. BLAST DOORS, PRESSES AND HOLLOW INTRUDERS.',
     hazards: [{ kind: 'press', every: [7000, 9500] }, { kind: 'doors', every: [9000, 12000] }],
     segments: [
@@ -260,13 +260,16 @@ export const sideById = (id: string) => SIDES.find((s) => s.id === id);
 // Systems of five levels: 1 to 5, 6 to 10, 11 to 15.
 export const systemOf = (level: number) => Math.ceil(level / 5);
 
-// Side missions in the ship's current system that it has reached.
+// Side missions in the ship's current system whose level it has beaten.
 export function openSides(state: SaveData) {
-  return SIDES.filter((s) => s.anchor <= state.level && systemOf(s.anchor) === systemOf(state.level));
+  return SIDES.filter((s) => s.anchor < state.level && systemOf(s.anchor) === systemOf(state.level));
 }
 
 // Of those, the ones not beaten yet.
 export const unbeatenSides = (state: SaveData) => openSides(state).filter((s) => !state.sides.includes(s.id));
 
 // Whether flying the next level closes this system's side missions.
+// The side missions that open once `level` is beaten.
+export const unlockedBy = (level: number) => SIDES.filter((s) => s.anchor === level).map((s) => s.id);
+
 export const closesSystem = (level: number) => level % 5 === 0;

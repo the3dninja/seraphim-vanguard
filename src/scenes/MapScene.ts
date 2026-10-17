@@ -7,6 +7,7 @@ import { button, starfield, text } from '../ui';
 
 interface MapData {
   state: SaveData;
+  unlocked?: string[]; // side missions that just unlocked, flagged on the map
   onLeave: () => void;
   // Fly the next level (no side) or a side mission; Base takes it from there.
   onLaunch?: (side?: string) => void;
@@ -48,6 +49,9 @@ export class MapScene extends Phaser.Scene {
   init(data: MapData) {
     this.d = data;
     this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
+    // Newly unlocked side missions are picked first, so their briefing shows.
+    const fresh = SIDES.find((sd) => data.unlocked?.includes(sd.id));
+    if (fresh) this.selected = { i: fresh.anchor - 1, side: fresh };
   }
 
   create() {
@@ -95,7 +99,7 @@ export class MapScene extends Phaser.Scene {
   private sideState(sd: SideDef) {
     const st = this.d.state;
     if (st.sides.includes(sd.id)) return 'cleared';
-    if (sd.anchor > st.level) return 'coming';
+    if (sd.anchor >= st.level) return 'coming';
     return systemOf(sd.anchor) === systemOf(st.level) ? 'open' : 'missed';
   }
 
@@ -142,10 +146,55 @@ export class MapScene extends Phaser.Scene {
         if (this.selectable(stop)) { this.selected = stop; this.render(); }
       });
     }
+    this.announce();
     // The player's ship waits at the next level.
     const n = nodePos(this.next);
     const ship = this.add.image(n.x, n.y - 15, 'ship').setScale(0.7);
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
+  }
+
+  // Side missions that just unlocked: a blinking NEW beside their moons, and
+  // a banner near them that flashes a few times and fades.
+  private announce() {
+    const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
+    if (!fresh.length) return;
+    let below = 0; // the lowest NEW tag, so the banner doesn't cover it
+    for (const anchor of new Set(fresh.map((sd) => sd.anchor))) {
+      const moons = fresh.filter((sd) => sd.anchor === anchor).map(sidePos);
+      const tag = text(this, 0, 0, 'NEW', COLOR.yellow).setOrigin(0.5);
+      const at = this.tagSpot(moons, tag.width, tag.height);
+      tag.setPosition(at.x, at.y);
+      below = Math.max(below, at.y + tag.height / 2);
+      this.tweens.add({ targets: tag, alpha: 0.2, yoyo: true, repeat: -1, duration: 300 });
+    }
+    const y = Math.max(below, sidePos(fresh[0]).y + 6);
+    const msg = fresh.length > 1 ? `${fresh.length} SIDE MISSIONS\nUNLOCKED` : 'SIDE MISSION\nUNLOCKED';
+    // Under the moons, or above them on the bottom row, out of the info panel.
+    const by = y + 32 < INFO_Y ? y + 17 : sidePos(fresh[0]).y - 30;
+    const banner = this.add.container(0, 0).setDepth(10);
+    banner.add(this.add.rectangle(W / 2, by, 140, 26, 0x000000).setStrokeStyle(1, 0xf8b800));
+    banner.add(text(this, W / 2, by, msg, COLOR.yellow).setOrigin(0.5).setAlign('center'));
+    this.tweens.add({
+      targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
+      onComplete: () => this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 400, onComplete: () => banner.destroy() }),
+    });
+  }
+
+  // Right of the moons, else left, else below: the first spot clear of the
+  // level pictures and other moons.
+  private tagSpot(moons: { x: number; y: number }[], w: number, h: number) {
+    const left = Math.min(...moons.map((m) => m.x)), right = Math.max(...moons.map((m) => m.x));
+    const y = moons[0].y;
+    const spots = [
+      { x: right + 8 + w / 2, y }, { x: left - 8 - w / 2, y }, { x: (left + right) / 2, y: y + 8 + h / 2 },
+    ];
+    const blocks = [
+      ...LEVELS.map((_l, i) => ({ ...nodePos(i), r: 9 })),
+      ...SIDES.map((sd) => ({ ...sidePos(sd), r: 6 })),
+    ];
+    const clear = (p: { x: number; y: number }) => p.x - w / 2 >= 0 && p.x + w / 2 <= W && p.y + h / 2 < INFO_Y
+      && blocks.every((b) => Math.abs(b.x - p.x) >= w / 2 + b.r || Math.abs(b.y - p.y) >= h / 2 + b.r);
+    return spots.find(clear) ?? spots[0];
   }
 
   private render() {

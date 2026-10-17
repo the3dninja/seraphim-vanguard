@@ -13,11 +13,16 @@ export class BaseScene extends Phaser.Scene {
   private state!: SaveData;
   private scroll!: ReturnType<typeof starfield>;
   private creditsText!: Phaser.GameObjects.Text;
+  // Back from a mission: open the star map, flagging newly unlocked side missions.
+  private toMap = false;
+  private unlocked: string[] = [];
 
   constructor() { super('Base'); }
 
-  init(data: { state: SaveData }) {
+  init(data: { state: SaveData; toMap?: boolean; unlocked?: string[] }) {
     this.state = cloneSave(data.state);
+    this.toMap = !!data.toMap;
+    this.unlocked = data.unlocked ?? [];
     // Playtest helpers: ?rich tops credits up to 5000, ?level=N jumps to level N.
     const params = new URLSearchParams(location.search);
     if (params.has('rich')) this.state.credits = Math.max(this.state.credits, 5000);
@@ -59,19 +64,23 @@ export class BaseScene extends Phaser.Scene {
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 174, bw, bh, 'VIEW MAP', () => {
-      this.scene.pause();
-      this.scene.launch('Map', { state: this.state, onLeave: () => {}, onLaunch: (side?: string) => this.launch(side) });
-    });
+    button(this, bx, 174, bw, bh, 'VIEW MAP', () => this.openMap());
     button(this, bx, 214, bw, bh, 'BEGIN MISSION', () => this.launch(), COLOR.yellow);
 
     text(this, W / 2, H - 14, 'PROGRESS SAVED', COLOR.dim).setOrigin(0.5);
+
+    if (this.toMap) this.openMap(this.unlocked);
 
     const jump = new URLSearchParams(location.search).get('side');
     if (jump && sideById(jump) && !sideJumpDone) {
       sideJumpDone = true;
       this.time.delayedCall(400, () => this.fly(jump));
     }
+  }
+
+  private openMap(unlocked: string[] = []) {
+    this.scene.pause();
+    this.scene.launch('Map', { state: this.state, unlocked, onLeave: () => {}, onLaunch: (side?: string) => this.launch(side) });
   }
 
   // The next level, or a side mission. Flying the last level of a system
