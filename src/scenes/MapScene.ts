@@ -134,7 +134,10 @@ export class MapScene extends Phaser.Scene {
       for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
       const img = this.add.image(x, y, sd.node);
       if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
-      if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
+      // A treasure mission shows a chest in the corner, opened once cleared
+      // (in place of the check mark).
+      if (sd.treasure) this.add.image(x + 7, y + 6, state === 'cleared' ? 'chestOpen' : 'chest').setDepth(5);
+      else if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
       // An open one blinks a ring so it stands out.
       if (state === 'open') {
         const ring = this.add.circle(x, y, 8).setStrokeStyle(1, 0x3cbcfc);
@@ -153,24 +156,15 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
   }
 
-  // Side missions that just unlocked: a blinking NEW beside their moons, and
-  // a banner near them that flashes a few times and fades.
+  // Side missions that just unlocked: a banner near them that flashes a few
+  // times and fades. Their moons already blink a ring while open.
   private announce() {
     const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
     if (!fresh.length) return;
-    let below = 0; // the lowest NEW tag, so the banner doesn't cover it
-    for (const anchor of new Set(fresh.map((sd) => sd.anchor))) {
-      const moons = fresh.filter((sd) => sd.anchor === anchor).map(sidePos);
-      const tag = text(this, 0, 0, 'NEW', COLOR.yellow).setOrigin(0.5);
-      const at = this.tagSpot(moons, tag.width, tag.height);
-      tag.setPosition(at.x, at.y);
-      below = Math.max(below, at.y + tag.height / 2);
-      this.tweens.add({ targets: tag, alpha: 0.2, yoyo: true, repeat: -1, duration: 300 });
-    }
-    const y = Math.max(below, sidePos(fresh[0]).y + 6);
+    const { y } = sidePos(fresh[0]);
     const msg = fresh.length > 1 ? `${fresh.length} SIDE MISSIONS\nUNLOCKED` : 'SIDE MISSION\nUNLOCKED';
     // Under the moons, or above them on the bottom row, out of the info panel.
-    const by = y + 32 < INFO_Y ? y + 17 : sidePos(fresh[0]).y - 30;
+    const by = y + 38 < INFO_Y ? y + 23 : y - 30;
     const banner = this.add.container(0, 0).setDepth(10);
     banner.add(this.add.rectangle(W / 2, by, 140, 26, 0x000000).setStrokeStyle(1, 0xf8b800));
     banner.add(text(this, W / 2, by, msg, COLOR.yellow).setOrigin(0.5).setAlign('center'));
@@ -178,23 +172,6 @@ export class MapScene extends Phaser.Scene {
       targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
       onComplete: () => this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 400, onComplete: () => banner.destroy() }),
     });
-  }
-
-  // Right of the moons, else left, else below: the first spot clear of the
-  // level pictures and other moons.
-  private tagSpot(moons: { x: number; y: number }[], w: number, h: number) {
-    const left = Math.min(...moons.map((m) => m.x)), right = Math.max(...moons.map((m) => m.x));
-    const y = moons[0].y;
-    const spots = [
-      { x: right + 8 + w / 2, y }, { x: left - 8 - w / 2, y }, { x: (left + right) / 2, y: y + 8 + h / 2 },
-    ];
-    const blocks = [
-      ...LEVELS.map((_l, i) => ({ ...nodePos(i), r: 9 })),
-      ...SIDES.map((sd) => ({ ...sidePos(sd), r: 6 })),
-    ];
-    const clear = (p: { x: number; y: number }) => p.x - w / 2 >= 0 && p.x + w / 2 <= W && p.y + h / 2 < INFO_Y
-      && blocks.every((b) => Math.abs(b.x - p.x) >= w / 2 + b.r || Math.abs(b.y - p.y) >= h / 2 + b.r);
-    return spots.find(clear) ?? spots[0];
   }
 
   private render() {
@@ -229,9 +206,9 @@ export class MapScene extends Phaser.Scene {
     add(this.add.rectangle(4, INFO_Y, W - 8, 1, 0x3c3c3c).setOrigin(0));
     add(text(this, 6, INFO_Y + 5, l.desc, COLOR.white).setWordWrapWidth(W - 12));
 
-    // Common enemies: the enemy's own sprite (or ? if not met yet) and 1 to 3 pips.
-    const ey = 258;
-    add(text(this, 6, ey, 'COMMON ENEMIES', COLOR.gray));
+    // Common enemies, unlabeled: the enemy's own sprite (or ? if not met yet)
+    // and 1 to 3 pips.
+    const ey = 256;
     const met = metEnemies(this.d.state.level);
     commonEnemies(l).forEach(([kind, pips], k) => {
       const cx = 18 + k * 40;

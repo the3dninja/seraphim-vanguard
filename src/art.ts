@@ -109,6 +109,9 @@ const SPRITES: Record<string, string[]> = {
   slotItemSmall: ['.LLLLLL.', 'L......L', 'L..LL..L', 'L.LLLL.L', 'L.LLLL.L', 'L..LL..L', 'L......L', '.LLLLLL.'],
   qmark: ['.WWWW.', 'WW..WW', '....WW', '..WWW.', '..WW..', '......', '..WW..'],
   check: ['......T', '.....TT', 'T...TT.', 'TT.TT..', '.TTT...', '..T....'],
+  // Star map treasure chest, in 3/4 view: shut, and opened and emptied.
+  chest: ['.vvvvvvvv.', 'vqbbbbbbev', 'vbbbbbbbev', 'vbbbbbbbev', 'vjjjjYjjzv', 'veeeeYeefv', 'veeeejeefv', 'veeeeeeefv', 'vffffffffv', '.vvvvvvvv.'],
+  chestOpen: ['.vvvvvvvv.', '.veeeeeev.', '.vffffffv.', 'vvvvvvvvvv', 'vjvvvvvvzv', 'vjKKKKKKzv', 'vjjjjjjjzv', 'veeeeYeefv', 'vffffffffv', '.vvvvvvvv.'],
   pip: ['YY', 'YY'],
   pipEmpty: ['DD', 'DD'],
 

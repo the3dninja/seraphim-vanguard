@@ -83,7 +83,7 @@ export const SIDES: SideDef[] = [
   // then a derelict cargo hauler to break open.
   {
     id: 's6', anchor: 7, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
-    desc: 'A LONG RUN INTO A BUILDING STORM. LIGHTNING AND RED-HOT EMBERS. TREASURE AT THE END.',
+    desc: 'A LONG RUN INTO A BUILDING STORM. LIGHTNING AND RED-HOT EMBERS.',
     storm: true, treasure: 225,
     segments: [
       [
