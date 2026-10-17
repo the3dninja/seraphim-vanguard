@@ -54,6 +54,7 @@ export interface LevelDef {
   hazards?: HazardSpec[]; // ms between each hazard during action
   segmentHazards?: HazardSpec[][]; // per segment, in place of `hazards`
   boss?: BossKind; // fought after the last segment
+  bossHazards?: boolean; // hazards keep coming during the boss fight
   treasure?: number; // credits in a cargo hauler that drifts in after the last segment
   storm?: boolean; // Storm Eye: lightning and embers follow a script that builds over the level (storm.ts)
   // Usually two segments with a vendor stop between; empty = not built yet.

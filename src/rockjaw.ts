@@ -20,12 +20,15 @@ const ENTER_Y = 74;
 const REWARD = 175; // credits, dropped as a shower of gold
 const BODY_RX = 30; // contact ellipse
 const BODY_RY = 18;
+const PATTERN_MS: [number, number] = [5500, 9000]; // how long it keeps to one way of moving
 
 // Rockjaw, the level 3 mini boss: a Raider ship welded into an asteroid.
 // Phase 1: the two side plates fire, and it throws boulders. Shots on the core
 // bounce off until all three plates are broken off. Phase 2: the bare core
-// fires spreads, it sways faster and throws more often. Frostjaw (a side
-// mission boss) sheds ice shards while armored and fires its spreads as shards.
+// fires spreads, it moves 25% faster and throws more often. Throughout, it
+// switches now and then between swaying side to side and a diving figure
+// eight. Frostjaw (a side mission boss) sheds ice shards while armored, fires
+// its spreads as shards, and fires everything 50% more often.
 export class Rockjaw {
   private x = W / 2;
   private y = -40;
@@ -41,7 +44,12 @@ export class Rockjaw {
   private warnedArmor = false;
   private sway = 0; // sway phase, advanced each frame so a change of speed doesn't jump
   private swayAmp = 38;
+  private eight = 0; // figure-eight phase
+  private dive = 0; // 0 swaying to 1 flying the figure eight, eased between them
+  private diving = false;
+  private patternIn = Phaser.Math.Between(...PATTERN_MS);
   private shedIn = 1500;
+  private rate: number; // how much more often it fires than Rockjaw
 
   constructor(private g: GameScene, private onDefeated: () => void, private opts: BossOpts = {}) {
     const add = (key: string) => {
@@ -50,6 +58,7 @@ export class Rockjaw {
       return img;
     };
     const hp = (n: number) => Math.round(n * (opts.hp ?? 1));
+    this.rate = opts.shards ? 1.5 : 1;
     this.body = add(opts.skin ?? 'rockjaw');
     this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: hp(65), max: hp(65), gun: false };
     this.plates = [
@@ -67,9 +76,11 @@ export class Rockjaw {
 
   private get armored() { return this.plates.some((p) => p.hp > 0); }
 
-  healthFraction() {
-    const parts = [...this.plates, this.core];
-    return parts.reduce((n, p) => n + Math.max(0, p.hp), 0) / parts.reduce((n, p) => n + p.max, 0);
+  // The health bar is the core; the plates have their own armor bar under it.
+  healthFraction() { return Math.max(0, this.core.hp) / this.core.max; }
+
+  armorFraction() {
+    return this.plates.reduce((n, p) => n + Math.max(0, p.hp), 0) / this.plates.reduce((n, p) => n + p.max, 0);
   }
 
   private place() {
@@ -85,10 +96,23 @@ export class Rockjaw {
     if (!this.entering) {
       this.t += dt;
       const fast = !this.armored;
-      this.sway += dt * (fast ? 1.1 : 0.7);
+      const speed = fast ? 1.25 : 1; // the final phase moves 25% faster
+      this.patternIn -= dt * 1000;
+      if (this.patternIn <= 0) {
+        this.diving = !this.diving;
+        this.patternIn = Phaser.Math.Between(...PATTERN_MS);
+      }
+      this.dive = Phaser.Math.Clamp(this.dive + (this.diving ? dt : -dt), 0, 1);
+      // Both ways of moving run all the time, and it eases from one to the
+      // other, so a switch never makes it jump.
+      this.sway += dt * (fast ? 1.1 : 0.7) * speed;
+      this.eight += dt * 0.9 * speed;
       this.swayAmp += ((fast ? 44 : 38) - this.swayAmp) * Math.min(1, dt * 1.5);
-      this.x = W / 2 + Math.sin(this.sway) * this.swayAmp;
-      this.y = ENTER_Y + Math.sin(this.t * 1.3) * 6;
+      const sx = W / 2 + Math.sin(this.sway) * this.swayAmp, sy = ENTER_Y + Math.sin(this.t * 1.3 * speed) * 6;
+      const ex = W / 2 + Math.sin(this.eight) * 46, ey = ENTER_Y + 20 + Math.sin(this.eight * 2) * 18;
+      const k = this.dive * this.dive * (3 - 2 * this.dive);
+      this.x = Phaser.Math.Linear(sx, ex, k);
+      this.y = Phaser.Math.Linear(sy, ey, k);
     }
     this.place();
     this.checkShots();
@@ -99,11 +123,11 @@ export class Rockjaw {
     this.gunIn -= ms;
     this.throwIn -= ms;
     if (this.gunIn <= 0) {
-      this.gunIn = 1600;
+      this.gunIn = 1600 / this.rate;
       for (const p of this.plates) if (p.gun && p.hp > 0) g.enemyShoot(this.x + p.dx, this.y + p.dy + 7);
     }
     if (this.throwIn <= 0) {
-      this.throwIn = this.armored ? 3000 : 2000;
+      this.throwIn = (this.armored ? 3000 : 2000) / this.rate;
       const side = Math.random() < 0.5 ? -1 : 1;
       g.throwBoulder(this.x + side * 22, this.y + 10);
     }
@@ -111,14 +135,14 @@ export class Rockjaw {
       // Ice flakes off the rock and falls.
       this.shedIn -= ms;
       if (this.shedIn <= 0) {
-        this.shedIn = Phaser.Math.Between(650, 1050);
+        this.shedIn = Phaser.Math.Between(650, 1050) / this.rate;
         g.iceShard(this.x + Phaser.Math.Between(-24, 24), this.y + 12, Phaser.Math.Between(-12, 12), Phaser.Math.Between(48, 70));
       }
     }
     if (!this.armored) {
       this.spreadIn -= ms;
       if (this.spreadIn <= 0) {
-        this.spreadIn = 1500;
+        this.spreadIn = 1500 / this.rate;
         if (this.opts.shards) {
           // A fan of shards aimed at the ship.
           const a = Phaser.Math.Angle.Between(this.x, this.y, g.player.x, g.player.y);

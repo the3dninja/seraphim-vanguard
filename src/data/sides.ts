@@ -60,13 +60,14 @@ export const SIDES: SideDef[] = [
       ],
     ],
   },
-  // Beside level 4: short, with Frostjaw waiting at the end.
+  // Beside level 4: short, with Frostjaw waiting at the end. The ice keeps
+  // coming through the fight.
   {
     id: 's4b', anchor: 4, name: 'GLACIER VAULT', node: 'moon_glacier', theme: 'ice',
     desc: 'SHORT, ON SLICK ICE. SOMETHING BIG AND COLD SLEEPS IN THE VAULT. MINI BOSS.',
     // The ice builds up: twice the patches and three times the shards by the end.
     hazards: [{ kind: 'patch', every: [5000, 7000], ramp: 2 }, { kind: 'shard', every: [4000, 6000], ramp: 3 }],
-    boss: 'frostjaw',
+    boss: 'frostjaw', bossHazards: true,
     segments: [[
       w(2500, 'dart', 'line', { count: 7 }), w(2500, 'driller', 'pair'),
       w(3000, 'gunboat', 'single', { x: 0.5 }), w(2000, 'weaver', 'pair', { waitClear: true }),
@@ -74,6 +75,8 @@ export const SIDES: SideDef[] = [
       w(3000, 'drone', 'swarm', { count: 10, x: 0.1 }), w(2500, 'bomber', 'single', { x: 0.5, waitClear: true }),
       w(2000, 'driller', 'pair'), w(1500, 'dart', 'vee', { count: 7, x: 0.5 }),
       w(3000, 'gunboat', 'pair'), w(2500, 'weaver', 'line', { count: 4, waitClear: true }),
+      w(2500, 'drone', 'swarm', { count: 8, x: 0.9 }), w(2000, 'lancer', 'pair'),
+      w(2500, 'driller', 'pair', { waitClear: true }),
     ]],
   },
   // Beside level 6: the longest side mission, a storm that builds to a peak,

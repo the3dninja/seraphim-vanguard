@@ -52,9 +52,10 @@ export class Sporeheart {
 
   private get bare() { return this.petals.every((p) => p.hp <= 0); }
 
-  healthFraction() {
-    return (Math.max(0, this.hp) + this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0)) / (CORE_HP + PETALS * PETAL_HP);
-  }
+  // The health bar is the core; the petals have their own armor bar under it.
+  healthFraction() { return Math.max(0, this.hp) / CORE_HP; }
+
+  armorFraction() { return this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0) / (PETALS * PETAL_HP); }
 
   aimPoint() { return this.dead ? null : { x: this.x, y: this.y }; }
 

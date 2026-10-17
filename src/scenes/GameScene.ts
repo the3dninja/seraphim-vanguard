@@ -55,6 +55,7 @@ export interface EnemyData {
 interface Boss {
   update(dt: number): void;
   healthFraction(): number;
+  armorFraction?(): number; // bosses with armor show it in a second bar
   aimPoint?(): { x: number; y: number } | null; // where homing missiles steer
 }
 
@@ -1382,7 +1383,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private runHazards(dt: number) {
-    if (this.boss) return;
+    if (this.boss && !this.level.bossHazards) return;
     if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
@@ -2261,13 +2262,14 @@ export class GameScene extends Phaser.Scene {
       mind: () => new HollowMind(this, done),
       sporeheart: () => new Sporeheart(this, done),
       wyrm: () => new Wyrm(this, done),
-      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.8, shards: true }),
+      // 1.8x Rockjaw, then half again for the armor and the core alike.
+      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 2.7, shards: true }),
       hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 5.2 }),
       broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 8.8 }),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
-    this.bossName = text(this, W / 2, 28, BOSS_NAMES[kind], COLOR.red).setOrigin(0.5, 0).setDepth(900);
+    this.bossName = text(this, W / 2, this.boss.armorFraction ? 31 : 28, BOSS_NAMES[kind], COLOR.red).setOrigin(0.5, 0).setDepth(900);
     // The dark lifts a little for the Brood Queen.
     if (this.dark) this.tweens.add({ targets: this.dark, scale: 1.7, alpha: 0.8, duration: 1500 });
   }
@@ -2280,6 +2282,12 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(0x3c3c3c).fillRect(W / 2 - w / 2 - 1, 19, w + 2, 6);
     g.fillStyle(0x000000).fillRect(W / 2 - w / 2, 20, w, 4);
     g.fillStyle(0xd82800).fillRect(W / 2 - w / 2, 20, Math.ceil(w * this.boss.healthFraction()), 4);
+    // Armor: a thinner blue bar under the health bar.
+    const armor = this.boss.armorFraction?.();
+    if (armor === undefined) return;
+    g.fillStyle(0x3c3c3c).fillRect(W / 2 - w / 2 - 1, 25, w + 2, 4);
+    g.fillStyle(0x000000).fillRect(W / 2 - w / 2, 26, w, 2);
+    g.fillStyle(0x3cbcfc).fillRect(W / 2 - w / 2, 26, Math.ceil(w * armor), 2);
   }
 
   private bossDefeated(kind: BossKind) {
