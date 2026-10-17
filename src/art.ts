@@ -112,8 +112,8 @@ const SPRITES: Record<string, string[]> = {
   // Treasure chest, in 3/4 view: shut, and opened and emptied (not in use).
   chest: ['.vvvvvvvv.', 'vqbbbbbbev', 'vbbbbbbbev', 'vbbbbbbbev', 'vjjjjYjjzv', 'veeeeYeefv', 'veeeejeefv', 'veeeeeeefv', 'vffffffffv', '.vvvvvvvv.'],
   chestOpen: ['.vvvvvvvv.', '.veeeeeev.', '.vffffffv.', 'vvvvvvvvvv', 'vjvvvvvvzv', 'vjKKKKKKzv', 'vjjjjjjjzv', 'veeeeYeefv', 'vffffffffv', '.vvvvvvvv.'],
-  // Star map pile of gold, for a mission with treasure still to take.
-  goldPile: ['....zz....', '...zqYz...', '..zqYYjz..', '..zYjqYz..', '.zqYYYjYz.', '.zYjqYYjz.', 'zqYYYjqYjz', 'zjjjjjjjjz', '.zzzzzzzz.'],
+  // Star map treasure: three small gold bars, stacked like the big credit drop.
+  goldPile: ['....qWqqz...', '...YYYYzz...', '...YYYYz....', '...jjjj.....', '.qWqqz.qWqqz', 'YYYYzzYYYYzz', 'YYYYz.YYYYz.', 'jjjj..jjjj..'],
   pip: ['YY', 'YY'],
   pipEmpty: ['DD', 'DD'],
 
