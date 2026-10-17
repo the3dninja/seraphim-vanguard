@@ -64,7 +64,8 @@ export const SIDES: SideDef[] = [
   {
     id: 's4b', anchor: 4, name: 'GLACIER VAULT', node: 'moon_glacier', theme: 'ice',
     desc: 'SHORT, ON SLICK ICE. SOMETHING BIG AND COLD SLEEPS IN THE VAULT. MINI BOSS.',
-    hazards: [{ kind: 'patch', every: [5000, 7000] }, { kind: 'shard', every: [4000, 6000] }],
+    // The ice builds up: twice the patches and three times the shards by the end.
+    hazards: [{ kind: 'patch', every: [5000, 7000], ramp: 2 }, { kind: 'shard', every: [4000, 6000], ramp: 3 }],
     boss: 'frostjaw',
     segments: [[
       w(2500, 'dart', 'line', { count: 7 }), w(2500, 'driller', 'pair'),
@@ -80,7 +81,7 @@ export const SIDES: SideDef[] = [
   {
     id: 's6', anchor: 6, name: 'STORM EYE', node: 'moon_storm', theme: 'nebula',
     desc: 'A LONG RUN INTO A BUILDING STORM. LIGHTNING AND RED-HOT EMBERS. TREASURE AT THE END.',
-    storm: true, treasure: 300,
+    storm: true, treasure: 225,
     segments: [
       [
         w(2500, 'minelayer', 'single', { x: 0.3 }), w(2500, 'dart', 'vee', { count: 7, x: 0.7 }),

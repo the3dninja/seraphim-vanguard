@@ -52,16 +52,16 @@ function pickByStrength(pool: string[], level: number, n: number) {
 type Tab = 'buy' | 'sell' | 'upgrade' | 'repair';
 
 // Everything sits at a fixed height, so nothing shifts as lists grow or shrink:
-// three rows per page, the page arrows, Storage, the info box, the equipped
-// slots and the Leave button.
+// three rows per page, the page arrows, the info box (up to 4 lines), Storage,
+// the equipped slots and the Leave button.
 const ROW_H = 34;
 const PER_PAGE = 3;
 const LIST_Y = 44;
 const PAGER_Y = LIST_Y + PER_PAGE * ROW_H + 2;
-const STORE_Y = PAGER_Y + 18;
+const INFO_Y = PAGER_Y + 22;
 const STORE_LINES = 3;
-const INFO_Y = STORE_Y + 4 + STORE_LINES * 13 + 6;
 const STRIP_Y = 272; // equipped slots: weapons and gear, then items on the line below
+const STORE_Y = STRIP_Y - 10 - STORE_LINES * 13;
 const STORE_X = 64; // where storage icons start, after the label
 // The shop, used both at in-level vendor stops and at Base. The Base vendor
 // adds an Upgrade tab for hull, extra slots and weapon levels.
@@ -107,7 +107,10 @@ export class VendorScene extends Phaser.Scene {
   private rollStock(): string[] {
     const s = this.d.state;
     const lv = s.level;
-    const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare);
+    // The Credit Booster is rare early on: the Base vendor has it from level 4,
+    // and in-level vendors mostly pass it over before then.
+    const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare && (i !== 'booster' || this.d.mode !== 'base' || lv >= 4));
+    const skipBooster = (id: string) => id === 'booster' && Math.random() < Math.max(0, 0.85 - (lv - 1) * 0.15);
     if (this.d.mode === 'base') {
       const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w) && lv >= WEAPONS[w].from);
       const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
@@ -117,7 +120,7 @@ export class VendorScene extends Phaser.Scene {
     const consumables = Phaser.Math.RND.weightedPick([0, 1, 1, 2, 2]);
     for (let i = 0; i < consumables; i++) {
       const id = Math.random() < 0.5 ? 'repair' : Phaser.Utils.Array.GetRandom(common);
-      if (!out.includes(id)) out.push(id);
+      if (!out.includes(id) && !skipBooster(id)) out.push(id);
     }
     // Gear only shows up once gear slots can be bought (level 6 on).
     const gearOk = lv >= 6 || s.gear.length > 0;
@@ -129,7 +132,7 @@ export class VendorScene extends Phaser.Scene {
     out.push(...pickByStrength(pool, lv, Phaser.Math.Between(2, 3)));
     if (Math.random() < 0.12 + lv * 0.03) out.push(Math.random() < 0.55 ? 'wkit' : 'gkit');
     // Top up with common consumables so there are always at least four.
-    for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id)) out.push(id);
+    for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id) && !skipBooster(id)) out.push(id);
     return out;
   }
 
@@ -158,10 +161,7 @@ export class VendorScene extends Phaser.Scene {
     if (this.tab === 'repair') this.repairPanel(add);
     else this.listRows(add);
 
-    // Storage, at a fixed spot under the page arrows. The Sell tab lists storage already.
-    if (this.tab !== 'sell') this.storageStrip(add, STORE_Y);
-
-    // Info box for the tapped entry.
+    // Info box for the tapped entry, under the page arrows.
     add(this.add.rectangle(4, INFO_Y - 4, W - 8, 1, 0x3c3c3c).setOrigin(0));
     const sel = this.selected;
     const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
@@ -170,6 +170,9 @@ export class VendorScene extends Phaser.Scene {
       : this.tab === 'repair' ? `REPAIRS COST ${repairPrice(s.level)} CR A HEART AT THIS VENDOR.`
       : 'TAP AN ENTRY FOR INFO';
     add(text(this, 6, INFO_Y, info, sel || this.tab === 'repair' ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+
+    // Storage, at a fixed spot above the equipped slots. The Sell tab lists storage already.
+    if (this.tab !== 'sell') this.storageStrip(add, STORE_Y);
 
     this.slotStrip(add, STRIP_Y);
 

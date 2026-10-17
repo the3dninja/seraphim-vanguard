@@ -5,7 +5,7 @@ import {
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
-import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponStats } from '../inventory';
+import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
@@ -19,6 +19,7 @@ import { Barriers, Tunnel } from '../heart';
 import { SideHazards } from '../sidehaz';
 import { Storm, stormPlan } from '../storm';
 import { Treasure } from '../treasure';
+import { Warps } from '../warp';
 import { sideById } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { starfield, text, toast } from '../ui';
@@ -62,7 +63,11 @@ interface Strike { x: number; t: number } // lightning: ms since the column star
 interface Flare { rock: Phaser.Physics.Arcade.Image; t: number; sweepY: number } // ms since the rock appeared
 interface Fence { y: number; t: number; posts: Phaser.GameObjects.Image[] } // t: ms into its on/off cycle
 interface Zap { x1: number; y1: number; x2: number; y2: number; t: number; color: number } // a lightning line, ms left
-interface Ally { img: Phaser.GameObjects.Image; ox: number; oy: number; fireIn: number; dtype: DType }
+// Wingmen. Vex fires laser bursts, the Vossari ion bolt chains between
+// enemies, and the point ship lobs homing plasma that splashes.
+type AllyKind = 'vex' | 'ion' | 'plasma';
+interface Ally { img: Phaser.GameObjects.Image; ox: number; oy: number; fireIn: number; kind: AllyKind; burst: number }
+interface Pop { x: number; y: number; t: number; lv: number; color: number } // a hit's flash ring, ms since the hit
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
@@ -97,6 +102,7 @@ const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
 const TREASURE_WAIT = 3500; // ms of calm before the cargo hauler drifts in
 const LINGER = 3000; // ms after a level is cleared to pick up credits by hand
+const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve toward the ship
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
 const godMode = () => new URLSearchParams(location.search).has('god');
@@ -121,11 +127,12 @@ export class GameScene extends Phaser.Scene {
   private slide = { x: 0, y: 0 }; // ship velocity, which lags behind the controls on ice
   beams!: Phaser.GameObjects.Graphics; // Lancer and boss lasers, redrawn every frame
   sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private impact!: Phaser.GameObjects.Particles.ParticleEmitter; // shot hits, colored per hit
   private goo!: Phaser.GameObjects.Particles.ParticleEmitter; // Plasma Lobber splashes
   private blobHitAt = -1; // when a boss last took a Plasma Lobber hit, so its flash shows it
   // Each player shot's damage, type and look, kept outside the shot itself:
   // bosses read it after destroying the shot, when its data is already gone.
-  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean }>();
+  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean; lv: number }>();
   private scroll!: ReturnType<typeof starfield>;
   private scenery: Phaser.GameObjects.TileSprite | null = null;
   private planet: Phaser.GameObjects.Image | null = null;
@@ -157,6 +164,11 @@ export class GameScene extends Phaser.Scene {
   private zaps: Zap[] = [];
   private allies: Ally[] = [];
   private riftOpen = 0; // 0 to 1: how far the rift has torn open (level 11 cutscene)
+  private warps!: Warps; // Maw Gate: enemies warping in
+  private warpsDone = new Set<number>(); // which one-off warp-ins have happened
+  private warpIn: number | null = null; // ms to the next repeating warp-in
+  private homeUntil = 0; // credits dropped before this curve toward the ship (a boss's gold)
+  private pops: Pop[] = [];
   bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
 
   // Gear
@@ -220,6 +232,10 @@ export class GameScene extends Phaser.Scene {
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
+    this.warpsDone = new Set();
+    this.warpIn = null;
+    this.homeUntil = 0;
+    this.pops = [];
     this.bossPull = { x: 0, y: 0 };
     this.sats = [];
     this.satTimer = 0;
@@ -289,6 +305,7 @@ export class GameScene extends Phaser.Scene {
     this.act3 = new Act3Hazards(this);
     this.barriers = new Barriers(this);
     this.sideHaz = new SideHazards(this);
+    this.warps = new Warps(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
@@ -304,6 +321,9 @@ export class GameScene extends Phaser.Scene {
       speed: { min: 20, max: 90 }, lifespan: { min: 200, max: 500 }, scale: { start: 1, end: 0 },
       tint: [0xfcfcfc, 0xf8b800, 0xd82800], emitting: false,
     }).setDepth(20);
+    this.impact = this.add.particles(0, 0, 'px', {
+      speed: { min: 30, max: 80 }, lifespan: { min: 120, max: 300 }, scale: { start: 1, end: 0 }, emitting: false,
+    }).setDepth(20);
     this.goo = this.add.particles(0, 0, 'px', {
       speed: { min: 30, max: 110 }, lifespan: { min: 250, max: 520 }, scale: { start: 1, end: 0.3 }, gravityY: 60,
       tint: [0xfcfcfc, 0x58d854, 0x58d854, 0x00a800], emitting: false,
@@ -313,7 +333,8 @@ export class GameScene extends Phaser.Scene {
     const spr = (o: unknown) => o as Phaser.Physics.Arcade.Sprite;
     this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(img(b), spr(e)));
     this.physics.add.overlap(this.playerBullets, this.hazards, (b, h) => this.hitHazard(img(b), img(h)));
-    this.physics.add.overlap(this.enemyBullets, this.hazards, (b) => b.destroy());
+    // Wrecks and rocks stop enemy shots; falling ice shards don't.
+    this.physics.add.overlap(this.enemyBullets, this.hazards, (b, h) => { if (img(h).getData('kind') !== 'shard') b.destroy(); });
     this.physics.add.overlap(this.player, this.enemyBullets, (_p, b) => this.shotHitShip(img(b)));
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.rammed(spr(e)));
     this.physics.add.overlap(this.player, this.hazards, () => this.hurt());
@@ -337,13 +358,21 @@ export class GameScene extends Phaser.Scene {
     this.events.on('resume', () => this.afterVendor());
   }
 
-  // Scenery and a planet for the level's locale. Level 11 switches to the rift partway through.
-  private setTheme(theme: Theme) {
+  // Scenery and a planet for the level's locale. Level 11 switches to the rift
+  // partway through. With `fade` (ms) the old scenery fades out as the new one
+  // fades in, so nothing goes black (level 15's legs).
+  private setTheme(theme: Theme, fade = 0) {
     this.theme = theme;
-    this.scenery?.destroy();
-    this.planet?.destroy();
-    this.fog?.destroy();
-    this.motes?.destroy();
+    const old = [this.scenery, this.planet, this.fog].filter((o): o is NonNullable<typeof o> => !!o);
+    if (fade) {
+      this.tweens.add({ targets: old, alpha: 0, duration: fade, onComplete: () => old.forEach((o) => o.destroy()) });
+      const motes = this.motes;
+      motes?.stop();
+      if (motes) this.time.delayedCall(9000, () => motes.destroy());
+    } else {
+      old.forEach((o) => o.destroy());
+      this.motes?.destroy();
+    }
     this.scenery = null;
     this.planet = null;
     this.fog = null;
@@ -364,6 +393,14 @@ export class GameScene extends Phaser.Scene {
     // Just above the two star layers, under everything that flies.
     if (this.scenery) this.children.moveTo(this.scenery, 2);
     if (this.planet) this.children.moveTo(this.planet, this.scenery ? 3 : 2);
+    if (fade) {
+      for (const o of [this.scenery, this.planet, this.fog]) {
+        if (!o) continue;
+        const a = o.alpha;
+        o.setAlpha(0);
+        this.tweens.add({ targets: o, alpha: a, duration: fade });
+      }
+    }
   }
 
   // The scenery for a segment: level 15 changes it as it goes.
@@ -710,8 +747,11 @@ export class GameScene extends Phaser.Scene {
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
-      // In the tunnel, fly on until it opens out again.
-      if (this.enemies.countActive() === 0 && (!this.tunnel || this.tunnel.done)) {
+      // In the tunnel, fly on until it opens out again. Level 15's legs flow
+      // straight on without waiting for the screen to clear, unless a boss is next.
+      const last = this.segment >= this.level.segments.length - 1;
+      const flows = this.level.vendorless && !last && !this.level.segmentBoss?.[this.segment];
+      if ((flows || this.enemies.countActive() === 0) && (!this.tunnel || this.tunnel.done)) {
         this.tunnel?.destroy();
         this.tunnel = null;
         this.endSegment();
@@ -1347,7 +1387,8 @@ export class GameScene extends Phaser.Scene {
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
       if (this.hazardIn[i] > 0) return;
-      this.hazardIn[i] = Phaser.Math.Between(...hz.every);
+      // A ramping hazard comes more and more often through the segment.
+      this.hazardIn[i] = Phaser.Math.Between(...hz.every) / (1 + ((hz.ramp ?? 1) - 1) * this.segProgress());
       if (hz.kind === 'patch') this.spawnPatch();
       else if (hz.kind === 'turret') this.edgeTurret();
       else if (hz.kind === 'lightning') this.spawnStrike();
@@ -1358,6 +1399,28 @@ export class GameScene extends Phaser.Scene {
       else if (['press', 'gust', 'ember', 'blackout', 'sweep'].includes(hz.kind)) this.sideHaz.spawn(hz.kind);
       else this.act3.spawn(hz.kind);
     });
+  }
+
+  // Maw Gate: enemies warp into the top half at set points through a segment,
+  // and every so often through part of one (see LevelDef.warps).
+  private runWarps(dt: number) {
+    const plan = this.level.warps;
+    if (!plan || this.boss) return;
+    const prog = this.segProgress();
+    plan.at.forEach((w, i) => {
+      if (w.seg !== this.segment || this.warpsDone.has(i) || prog < w.p) return;
+      this.warpsDone.add(i);
+      this.warps.open(w.big ? 8 : 4, !!w.big);
+    });
+    const ev = plan.every;
+    if (!ev || ev.seg !== this.segment || prog >= ev.until) return;
+    // The gap shrinks from `start` to `end` as the run goes on.
+    const gap = () => Phaser.Math.Linear(Phaser.Math.Between(...ev.start), Phaser.Math.Between(...ev.end), prog / ev.until);
+    if (this.warpIn === null) { this.warpIn = gap(); return; }
+    this.warpIn -= dt * 1000;
+    if (this.warpIn > 0) return;
+    this.warpIn = gap();
+    this.warps.open(4, false);
   }
 
   private spawnHazard(kind: 'debris' | 'satchunk' | 'rock' | 'shard' | 'pebble' | 'shelter', x: number, y: number) {
@@ -1391,6 +1454,14 @@ export class GameScene extends Phaser.Scene {
       h.body!.setCircle(kind === 'rock' ? 7 : 3, kind === 'rock' ? 2 : 1, kind === 'rock' ? 1 : 1);
       if (kind === 'rock' && this.state.level === 3) this.tipOnce('rock', 'SHOOT ROCKS OR DODGE');
     }
+    return h;
+  }
+
+  // An ice shard thrown or shed by Frostjaw, flying at (vx, vy) px/s.
+  iceShard(x: number, y: number, vx: number, vy: number) {
+    const h = this.spawnHazard('shard', x, y);
+    h.setVelocity(vx, vy);
+    h.setRotation(Math.atan2(vy, vx) - Math.PI / 2);
     return h;
   }
 
@@ -1547,6 +1618,7 @@ export class GameScene extends Phaser.Scene {
     this.act3.clear();
     this.barriers.clear();
     this.sideHaz.clear();
+    this.warps.clear();
   }
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
@@ -1566,7 +1638,7 @@ export class GameScene extends Phaser.Scene {
         p.setVelocity(side * Phaser.Math.Between(18, 30), (h.body!.velocity.y ?? 30) + 6);
       }
     } else if (Math.random() < 0.15) {
-      this.dropCoin(h.x, h.y, Phaser.Math.Between(2, 4));
+      this.dropCoin(h.x, h.y, Phaser.Math.Between(2, 3));
     }
     h.destroy();
   }
@@ -1671,32 +1743,61 @@ export class GameScene extends Phaser.Scene {
   // --- Allies (levels 11 to 14) ------------------------------------------------
 
   // Wingmen fly in formation off the ship's wings and fire with it: Vex the
-  // Raider fires lasers, freed Vossari fire ion and plasma. A third flies
-  // point, ahead of the ship, so it stays clear of the item bar.
+  // Raider fires laser bursts, freed Vossari fire chaining ion bolts and
+  // homing plasma. A third flies point, ahead of the ship, so it stays clear
+  // of the item bar. They stay with the ship through vendor stops and level ends.
   private setupAllies() {
     const n = this.level.allies ?? 0;
-    const slots: [string, number, number, DType][] = [['vex', -24, 10, 'laser'], ['ally', 24, 10, 'ion'], ['ally2', 0, -26, 'plasma']];
-    for (const [tex, ox, oy, dtype] of slots.slice(0, n)) {
+    const slots: [string, number, number, AllyKind][] = [['vex', -24, 10, 'vex'], ['ally', 24, 10, 'ion'], ['ally2', 0, -26, 'plasma']];
+    for (const [tex, ox, oy, kind] of slots.slice(0, n)) {
       const img = this.add.image(this.player.x + ox, H + 20, tex).setDepth(9.9);
-      this.allies.push({ img, ox, oy, fireIn: Phaser.Math.Between(200, 600), dtype });
+      this.allies.push({ img, ox, oy, fireIn: Phaser.Math.Between(200, 600), kind, burst: 0 });
+    }
+  }
+
+  // Each wingman's own gun.
+  private allyFire(a: Ally) {
+    const { x, y } = a.img;
+    if (a.kind === 'vex') {
+      // Bursts of three lasers, fanning a little.
+      if (a.burst <= 0) a.burst = 3;
+      a.burst--;
+      a.fireIn = a.burst > 0 ? 90 : 1000;
+      this.shot(x, y - 6, 'laser', (1 - a.burst) * 4, 400, 0.6, 'laser');
+    } else if (a.kind === 'ion') {
+      // A bolt that stuns and jumps on to two more enemies.
+      a.fireIn = 800;
+      this.shot(x, y - 6, 'allyion', 0, 300, 0.9, 'ion').setData('chain', true).setData('stun', 300);
+    } else {
+      // A slow homing blob that splashes.
+      a.fireIn = 1200;
+      this.shot(x, y - 6, 'allyplasma', 0, 190, 1.8, 'plasma').setData('fx', 'homing').setData('splash', 10).setScale(1.3);
     }
   }
 
   private updateAllies(dt: number) {
-    const flying = this.phase === 'action' || this.phase === 'ready';
+    const p = this.player;
+    // Through a vendor stop, the rift and a level end they copy the ship's
+    // moves: the line-up, the barrel rolls, the sink and the climb away.
+    const escort = this.phase === 'arrival' || this.phase === 'clear';
+    const flying = escort || this.phase === 'action' || this.phase === 'ready';
     for (const a of this.allies) {
       a.img.setVisible(flying);
-      if (!flying) { a.img.setPosition(this.player.x + a.ox, H + 20); continue; }
-      const tx = Phaser.Math.Clamp(this.player.x + a.ox, 8, W - 8);
-      const ty = Phaser.Math.Clamp(this.player.y + a.oy, 30, H - 20);
-      const k = Math.min(1, 3 * dt);
+      if (!flying) { a.img.setPosition(p.x + a.ox, H + 20); continue; }
+      let tx = Phaser.Math.Clamp(p.x + a.ox, 8, W - 8);
+      let ty = Phaser.Math.Clamp(p.y + a.oy, 30, H - 20);
+      if (escort) {
+        // Closing in as the ship shrinks into the station, and no clamping, so they can leave the screen.
+        const sc = Math.abs(p.scaleY);
+        tx = p.x + a.ox * sc;
+        ty = p.y + a.oy * sc;
+        a.img.setScale(p.scaleX, p.scaleY).setAlpha(p.alpha).setAngle(p.angle);
+      } else if (a.img.scaleY !== 1 || a.img.alpha !== 1) a.img.setScale(1).setAlpha(1).setAngle(0);
+      const k = Math.min(1, (escort ? 8 : 3) * dt);
       a.img.x += (tx - a.img.x) * k;
       a.img.y += (ty - a.img.y) * k;
       a.fireIn -= dt * 1000;
-      if (this.phase === 'action' && a.fireIn <= 0) {
-        a.fireIn = 420;
-        this.shot(a.img.x, a.img.y - 6, a.dtype === 'laser' ? 'laser' : a.dtype === 'ion' ? 'allyion' : 'allyplasma', 0, 320, 0.6, a.dtype);
-      }
+      if (this.phase === 'action' && a.fireIn <= 0) this.allyFire(a);
       // Enemy shots that hit a wingman are soaked up.
       for (const b of this.enemyBullets.getChildren().slice() as Phaser.GameObjects.Image[]) {
         if (Math.abs(b.x - a.img.x) < 5 && Math.abs(b.y - a.img.y) < 5) { b.destroy(); this.flash(a.img); }
@@ -1713,10 +1814,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   // One player shot. `deg` is degrees from straight up.
-  private shot(x: number, y: number, texture: string, deg: number, speed: number, dmg: number, dtype: DType) {
+  // `lv` is the weapon's level, which sets how hard its hits look.
+  private shot(x: number, y: number, texture: string, deg: number, speed: number, dmg: number, dtype: DType, lv = 1) {
     const b = this.playerBullets.create(x, y, texture) as Phaser.Physics.Arcade.Image;
     b.setData('dmg', dmg).setData('dtype', dtype).setData('t', 0);
-    this.shotInfo.set(b, { dmg, dtype, blob: texture === 'blob' });
+    this.shotInfo.set(b, { dmg, dtype, blob: texture === 'blob', lv });
     const rad = Phaser.Math.DegToRad(deg - 90);
     b.setVelocity(Math.cos(rad) * speed, Math.sin(rad) * speed);
     b.setRotation(Phaser.Math.DegToRad(deg));
@@ -1730,6 +1832,7 @@ export class GameScene extends Phaser.Scene {
       if (!id) return;
       const def = WEAPONS[id];
       const stats = weaponStats(s, id);
+      const lv = weaponLevel(s, id);
       this.fireTimers[slot] = (this.fireTimers[slot] ?? 0) - dt * 1000;
       // The Rail Lance glows at the nose while it charges.
       if (def.fx === 'rail' && this.fireTimers[slot] < 380 && this.fireTimers[slot] > 0) {
@@ -1748,7 +1851,7 @@ export class GameScene extends Phaser.Scene {
       stats.shots.forEach((sh, i) => {
         const back = Math.abs(sh.deg) > 90;
         const b = this.shot(this.player.x + sh.dx, this.player.y + (back ? 7 : -7), def.texture, sh.deg, def.speed ?? 300,
-          stats.damage * (charged ? 3 : 1), dtype);
+          stats.damage * (charged ? 3 : 1), dtype, lv);
         b.setData('fx', def.fx);
         if (def.splash) b.setData('splash', def.splash + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0));
         if (burn) b.setData('burn', burn);
@@ -1794,7 +1897,7 @@ export class GameScene extends Phaser.Scene {
           if (t > FLAK_FUSE) {
             const dmg = (b.getData('dmg') as number) * 0.8;
             for (let i = 0; i < 7; i++) {
-              const p = this.shot(b.x, b.y, 'shrap', -60 + i * 20, 200, dmg, 'explosive');
+              const p = this.shot(b.x, b.y, 'shrap', -60 + i * 20, 200, dmg, 'explosive', this.shotInfo.get(b)?.lv);
               p.setData('fx', 'shrap');
             }
             this.sparks.explode(5, b.x, b.y);
@@ -1864,9 +1967,35 @@ export class GameScene extends Phaser.Scene {
     return dmg * m;
   }
 
+  // A hit's impact: sparks in the shot's damage color, more and faster as the
+  // weapon levels up, and from level 2 a flash ring that grows with it.
+  private hitFx(b: Phaser.GameObjects.Image) {
+    const info = this.shotInfo.get(b);
+    const lv = info?.lv ?? 1;
+    const color = DTYPE_COLOR[info?.dtype ?? 'kinetic'];
+    this.impact.setParticleTint([0xfcfcfc, color, color]);
+    this.impact.setParticleSpeed(20 + lv * 14, 50 + lv * 26);
+    this.impact.explode(1 + lv * 2, b.x, b.y);
+    if (lv >= 2 && this.pops.length < 40) this.pops.push({ x: b.x, y: b.y, t: 0, lv, color });
+  }
+
+  private drawPops(dt: number) {
+    const g = this.beams;
+    for (const p of this.pops.slice()) {
+      p.t += dt * 1000;
+      const life = 60 + p.lv * 25;
+      if (p.t >= life) { this.pops.splice(this.pops.indexOf(p), 1); continue; }
+      const k = p.t / life;
+      const r = 1.5 + p.lv * 1.4 * (0.4 + k);
+      g.lineStyle(p.lv >= 5 ? 2 : 1, p.color, 1 - k).strokeCircle(p.x, p.y, r);
+      if (p.lv >= 4 && k < 0.5) g.fillStyle(0xfcfcfc, 1 - k * 2).fillCircle(p.x, p.y, p.lv - 2.5);
+    }
+  }
+
   // What a player shot does to a boss part with these weaknesses.
   shotDamage(b: Phaser.GameObjects.Image, weak: DType[], resist: DType[]) {
     if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
+    this.hitFx(b);
     const info = this.shotInfo.get(b);
     return this.typedDamage(info?.dmg ?? 1, info?.dtype ?? 'kinetic', weak, resist);
   }
@@ -1900,8 +2029,9 @@ export class GameScene extends Phaser.Scene {
     const burn = b.getData('burn') as number | undefined;
     if (burn) { d.burn = 2000; d.burnDmg = burn; d.burnTick = Math.min(d.burnTick || 400, 400); }
     const dead = this.damageEnemy(e, dmg, dtype);
+    this.hitFx(b);
     if (this.plasmaSplash(b, (b.x + e.x) / 2, (b.y + e.y) / 2) && !dead) this.plasmaFlash(e);
-    if (b.getData('fx') === 'arc') this.chainArc(e, dmg, dtype);
+    if (b.getData('fx') === 'arc' || b.getData('chain')) this.chainArc(e, dmg, dtype);
     if (b.getData('splash')) this.splash(e.x, e.y, b.getData('splash') as number, dmg / 2, dtype, dead ? null : e);
   }
 
@@ -2008,8 +2138,23 @@ export class GameScene extends Phaser.Scene {
     c.setDepth(9.7); // shows in the dark
     c.setVelocity(vx, vy);
     c.body!.setSize(c.width + 6, c.height + 6); // generous pickup radius
+    if (this.time.now < this.homeUntil) c.setData('home', true);
     if (this.state.level === 1) this.tipOnce('coin', 'SHIPS DROP CREDITS');
     return c;
+  }
+
+  // A credit curving toward the ship: it keeps its momentum, turns harder the
+  // closer it gets (so it can't circle the ship), and speeds up as it goes.
+  private homeCoin(c: Phaser.Physics.Arcade.Image, dt: number) {
+    if (!c.body?.enable) return;
+    const p = this.player;
+    const dx = p.x - c.x, dy = p.y - c.y;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const v = c.body.velocity;
+    const speed = Math.min(240, Math.max(Math.hypot(v.x, v.y), 20) + 110 * dt);
+    let a = Math.atan2(dy, dx);
+    if (dist > 12) a = Phaser.Math.Angle.RotateTo(Math.atan2(v.y, v.x), a, (1.2 + (1.8 * speed) / dist) * dt);
+    c.setVelocity(Math.cos(a) * speed, Math.sin(a) * speed);
   }
 
   private collect(c: Phaser.Physics.Arcade.Image) {
@@ -2112,13 +2257,13 @@ export class GameScene extends Phaser.Scene {
       dreadnought: () => new Dreadnought(this, done),
       watcher: () => new Watcher(this, done),
       voss: () => new Voss(this, done),
-      queen: () => new BroodQueen(this, done),
+      queen: () => new BroodQueen(this, done, { hp: 4 }),
       mind: () => new HollowMind(this, done),
       sporeheart: () => new Sporeheart(this, done),
       wyrm: () => new Wyrm(this, done),
-      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.4 }),
-      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 2.6 }),
-      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 1.1 }),
+      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 1.8, shards: true }),
+      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 5.2 }),
+      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 8.8 }),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
@@ -2143,6 +2288,7 @@ export class GameScene extends Phaser.Scene {
     this.bossBar = null;
     this.bossPull = { x: 0, y: 0 };
     this.enemyBullets.clear(true, true);
+    this.homeUntil = this.time.now + HOME_AFTER_BOSS; // its gold pops out and curves in
     const big = ['dreadnought', 'voss', 'mind'].includes(kind);
     const midLevel = this.segment < this.level.segments.length - 1;
     // Wait for the gold to drop before gathering it up.
@@ -2193,25 +2339,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // Level 15: no vendor between segments. Gather up, maybe change scenery, go on.
+  // Level 15: no vendor between segments. The next leg starts at once, with
+  // everything on screen carried over, and new scenery fades in over the old.
   private flowOn() {
-    this.phase = 'ready';
-    this.dragFrom = null;
-    this.enemyBullets.clear(true, true);
-    this.gatherCoins(() => {
-      this.clearForCutscene();
-      const next = this.segment + 1;
-      // A Rewind Beacon would restart from here.
-      this.checkpoint = { save: cloneSave(this.state), segment: next };
-      if (this.segmentTheme(next) !== this.theme) {
-        this.cameras.main.fadeOut(500);
-        this.cameras.main.once('camerafadeoutcomplete', () => {
-          this.setTheme(this.segmentTheme(next));
-          this.cameras.main.fadeIn(700);
-        });
-      }
-      this.startNextSegment();
-    });
+    const next = this.segment + 1;
+    // A Rewind Beacon would restart from here.
+    this.checkpoint = { save: cloneSave(this.state), segment: next };
+    if (this.segmentTheme(next) !== this.theme) this.setTheme(this.segmentTheme(next), 2500);
+    this.beginSegment();
   }
 
   private gatherCoins(then: () => void) {
@@ -2365,21 +2500,27 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'ready';
     this.time.delayedCall(1500, () => {
       ready.destroy();
-      this.segment++;
-      this.waveIndex = 0;
-      this.waveTimer = 0;
-      this.segBossDone = false;
-      this.resetHazardTimers(3000);
-      this.startTunnel();
-      const call = this.level.segmentRadio?.[this.segment];
-      if (call) this.radio(call);
-      this.phase = 'action';
+      this.beginSegment();
     });
+  }
+
+  private beginSegment() {
+    this.segment++;
+    this.waveIndex = 0;
+    this.waveTimer = 0;
+    this.segBossDone = false;
+    this.warpIn = null;
+    this.resetHazardTimers(3000);
+    this.startTunnel();
+    const call = this.level.segmentRadio?.[this.segment];
+    if (call) this.radio(call);
+    this.phase = 'action';
   }
 
   private afterVendor() {
     if (this.phase !== 'vendor') return;
     this.player.setPosition(W / 2, H - 50).setScale(1).setAlpha(1);
+    this.allies.forEach((a) => a.img.setPosition(this.player.x + a.ox, this.player.y + a.oy).setScale(1).setAlpha(1));
     this.slide = { x: 0, y: 0 };
     // Gear may have changed at the vendor.
     this.maxHp = totalMaxHealth(this.state);
@@ -2399,15 +2540,20 @@ export class GameScene extends Phaser.Scene {
     this.enemyBullets.clear(true, true);
     this.clearTimedHazards();
     const last = !this.side && this.state.level === LEVELS.length;
-    // Loose credits stop where they are, and the ship gets a few seconds to
-    // fly around and pick them up before the rest are gathered in.
-    for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) c.setVelocity(0, 0);
+    // Loose credits curve in toward the ship (see homeCoin) for a few seconds,
+    // or until they're all picked up, before the rest are gathered in.
     if (skipLinger) { this.endLevel(last); return; }
     this.lingering = true;
-    this.time.delayedCall(LINGER, () => {
-      this.lingering = false;
-      this.dragFrom = null;
-      this.endLevel(last);
+    const start = this.time.now;
+    const check = this.time.addEvent({
+      delay: 100, loop: true, callback: () => {
+        const t = this.time.now - start;
+        if (t < LINGER && (t < 1000 || this.coins.countActive() > 0)) return;
+        check.remove();
+        this.lingering = false;
+        this.dragFrom = null;
+        this.endLevel(last);
+      },
     });
   }
 
@@ -2495,6 +2641,7 @@ export class GameScene extends Phaser.Scene {
       this.autoFire(dt);
       this.runWaves(dt);
       this.runHazards(dt);
+      this.runWarps(dt);
     } else if (this.lingering) this.move(dt);
     this.updateShots(dt);
     this.updateEnemies(edt);
@@ -2517,9 +2664,11 @@ export class GameScene extends Phaser.Scene {
     }
     this.barriers.update(edt);
     this.sideHaz.update(edt);
+    this.warps.update(edt);
     this.updateGear(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);
+    this.drawPops(dt);
     this.drawScanner();
     this.drawRift();
     this.drawFleetBattle();
@@ -2549,8 +2698,9 @@ export class GameScene extends Phaser.Scene {
     this.bubble.setVisible(this.phase === 'action' && now < this.shieldUntil && (this.shieldUntil - now > 1000 || Math.floor(now / 100) % 2 === 0));
     this.bubble.setPosition(this.player.x, this.player.y);
 
-    // Bars catch the light now and then.
+    // Bars catch the light now and then. At a level end, and after a boss, they curve to the ship.
     for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (this.phase === 'clear' || c.getData('home')) this.homeCoin(c, dt);
       const shine = (now + (c.getData('glint') as number)) % 1600 < 120;
       c.setTexture(shine ? `${c.getData('key')}_glint` : c.getData('key'));
     }

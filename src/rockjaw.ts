@@ -17,14 +17,15 @@ interface Part {
 }
 
 const ENTER_Y = 74;
-const REWARD = 225; // credits, dropped as a shower of gold
+const REWARD = 175; // credits, dropped as a shower of gold
 const BODY_RX = 30; // contact ellipse
 const BODY_RY = 18;
 
 // Rockjaw, the level 3 mini boss: a Raider ship welded into an asteroid.
 // Phase 1: the two side plates fire, and it throws boulders. Shots on the core
 // bounce off until all three plates are broken off. Phase 2: the bare core
-// fires spreads, it sways faster and throws more often.
+// fires spreads, it sways faster and throws more often. Frostjaw (a side
+// mission boss) sheds ice shards while armored and fires its spreads as shards.
 export class Rockjaw {
   private x = W / 2;
   private y = -40;
@@ -38,8 +39,11 @@ export class Rockjaw {
   private throwIn = 2200;
   private spreadIn = 1500;
   private warnedArmor = false;
+  private sway = 0; // sway phase, advanced each frame so a change of speed doesn't jump
+  private swayAmp = 38;
+  private shedIn = 1500;
 
-  constructor(private g: GameScene, private onDefeated: () => void, opts: BossOpts = {}) {
+  constructor(private g: GameScene, private onDefeated: () => void, private opts: BossOpts = {}) {
     const add = (key: string) => {
       const img = g.add.image(0, -100, key).setDepth(8);
       if (opts.tint) img.setData('baseTint', opts.tint).setTint(opts.tint);
@@ -81,7 +85,9 @@ export class Rockjaw {
     if (!this.entering) {
       this.t += dt;
       const fast = !this.armored;
-      this.x = W / 2 + Math.sin(this.t * (fast ? 1.1 : 0.7)) * (fast ? 44 : 38);
+      this.sway += dt * (fast ? 1.1 : 0.7);
+      this.swayAmp += ((fast ? 44 : 38) - this.swayAmp) * Math.min(1, dt * 1.5);
+      this.x = W / 2 + Math.sin(this.sway) * this.swayAmp;
       this.y = ENTER_Y + Math.sin(this.t * 1.3) * 6;
     }
     this.place();
@@ -101,11 +107,23 @@ export class Rockjaw {
       const side = Math.random() < 0.5 ? -1 : 1;
       g.throwBoulder(this.x + side * 22, this.y + 10);
     }
+    if (this.opts.shards && this.armored) {
+      // Ice flakes off the rock and falls.
+      this.shedIn -= ms;
+      if (this.shedIn <= 0) {
+        this.shedIn = Phaser.Math.Between(650, 1050);
+        g.iceShard(this.x + Phaser.Math.Between(-24, 24), this.y + 12, Phaser.Math.Between(-12, 12), Phaser.Math.Between(48, 70));
+      }
+    }
     if (!this.armored) {
       this.spreadIn -= ms;
       if (this.spreadIn <= 0) {
         this.spreadIn = 1500;
-        for (let i = -2; i <= 2; i++) g.enemyShoot(this.x, this.y + 8, Math.PI / 2 + i * 0.3, 72);
+        if (this.opts.shards) {
+          // A fan of shards aimed at the ship.
+          const a = Phaser.Math.Angle.Between(this.x, this.y, g.player.x, g.player.y);
+          for (let i = -2; i <= 2; i++) g.iceShard(this.x, this.y + 10, Math.cos(a + i * 0.28) * 80, Math.sin(a + i * 0.28) * 80);
+        } else for (let i = -2; i <= 2; i++) g.enemyShoot(this.x, this.y + 8, Math.PI / 2 + i * 0.3, 72);
       }
     }
   }

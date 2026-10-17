@@ -17,7 +17,7 @@ interface Part {
 }
 
 const ENTER_Y = 62; // hull center once it has moved in, below the boss bar
-const REWARD = 600; // credits, dropped as a shower of gold
+const REWARD = 450; // credits, dropped as a shower of gold
 const SWEEP_WARN = 900; // ms the beam paths show before the lasers fire
 const BEAM_REACH = 3;
 // The two lasers start pointing at the screen sides and close in toward the

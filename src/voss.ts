@@ -9,7 +9,7 @@ const SHIELD = 100; // shield health; ion breaks it fast
 const SHIELD_BACK = 6500; // ms the shield stays down
 const HULL = 420;
 const PARASITE = 510;
-const REWARD = 600;
+const REWARD = 450;
 
 // Emperor Voss, Possessed: the level 10 boss. Phase 1 is the Emperor's
 // flagship behind a shield (ion breaks it; it comes back after a while), firing
