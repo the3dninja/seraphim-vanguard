@@ -807,6 +807,7 @@ export class GameScene extends Phaser.Scene {
 
   spawnEnemy(kind: FoeKind, x: number, y: number) {
     const stats = ENEMY_STATS[kind];
+    this.sighted(kind);
     const e = this.enemies.create(x, y, stats.texture) as Phaser.Physics.Arcade.Sprite;
     const data: EnemyData = {
       kind, hp: stats.hp, t: 0, baseX: x, fireIn: Phaser.Math.Between(900, 2200),
@@ -2118,6 +2119,7 @@ export class GameScene extends Phaser.Scene {
     const d = e.getData('e') as EnemyData;
     this.sparks.explode(10, e.x, e.y);
     const stats = ENEMY_STATS[d.kind];
+    this.state.kills[d.kind] = (this.state.kills[d.kind] ?? 0) + 1;
     if (drop && Math.random() < stats.dropChance) this.dropCoin(e.x, e.y, Phaser.Math.Between(...stats.credits));
     const { x, y } = e;
     e.destroy();
@@ -2226,6 +2228,7 @@ export class GameScene extends Phaser.Scene {
       const save = cloneSave(this.checkpoint.save);
       const start = cloneSave(this.startState);
       for (const s of [save, start]) {
+        this.keepLog(s);
         const i = s.items.findIndex((it) => it?.id === 'rewind');
         if (i >= 0 && --s.items[i]!.count <= 0) s.items[i] = null;
       }
@@ -2253,6 +2256,7 @@ export class GameScene extends Phaser.Scene {
     const warn = text(this, W / 2, H / 2 - 30, 'WARNING', COLOR.red, 16).setOrigin(0.5).setDepth(1000);
     this.tweens.add({ targets: warn, alpha: 0.1, yoyo: true, repeat: 4, duration: 250, onComplete: () => warn.destroy() });
     const done = () => this.bossDefeated(kind);
+    this.sighted(kind);
     const make: Record<BossKind, () => Boss> = {
       rockjaw: () => new Rockjaw(this, done),
       dreadnought: () => new Dreadnought(this, done),
@@ -2291,6 +2295,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private bossDefeated(kind: BossKind) {
+    this.state.kills[kind] = (this.state.kills[kind] ?? 0) + 1;
     this.bossBar?.destroy();
     this.bossName?.destroy();
     this.bossBar = null;
@@ -2610,9 +2615,21 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1200 + lines.length * 450 + 3500, () => this.leaveTo('Base', this.state));
   }
 
+  // The Bestiary's log: a sighting the first time each kind shows up.
+  private sighted(kind: string) {
+    if (!this.state.seen.includes(kind)) this.state.seen.push(kind);
+  }
+
+  // Kills and sightings stick even when the ship is lost or rewinds.
+  private keepLog(s: SaveData) {
+    s.kills = { ...this.state.kills };
+    s.seen = [...this.state.seen];
+  }
+
   // Every mission ends back at Base with the star map open, showing any side
   // missions that just unlocked.
   private leaveTo(scene: string, state: SaveData, unlocked: string[] = []) {
+    this.keepLog(state);
     this.cameras.main.fadeOut(400);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap: true, unlocked }));
   }
