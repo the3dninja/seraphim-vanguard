@@ -108,6 +108,7 @@ const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve to
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
 // A Trapper's net: how long it holds the ship, and how much of its speed is left.
 const NET_TIME = 2200;
+const TRAP_STEP = 150; // ms per Trapper pincer frame
 // Lit fuses: a Trapper mine flashes this long (ms) before its net, and a Bomb
 // flashes over the last this many pixels before the height where it blows.
 const MINE_FLASH = 750;
@@ -832,7 +833,7 @@ export class GameScene extends Phaser.Scene {
     // Weaver sine amplitude has to stay on screen.
     if (kind === 'weaver') data.baseX = Phaser.Math.Clamp(x, 34, W - 34);
     if (kind === 'gunboat') data.fireIn = 700;
-    if (kind === 'trapper') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
+    if (kind === 'trapper') { data.fireIn = 900; data.aim = 1e9; e.x = x < W / 2 ? 24 : W - 24; }
     if (kind === 'bomber') {
       e.x = Phaser.Math.Clamp(x, 24, W - 24);
       data.stopY = Phaser.Math.Between(36, 60);
@@ -1153,13 +1154,17 @@ export class GameScene extends Phaser.Scene {
           e.setTexture(d.charge && this.fuseLit(d, dt, 1 - (d.stopY - e.y) / BOMB_FLASH, 0.5) ? 'bombLit' : 'bomb');
           break;
         case 'trapper':
-          // Drop to bombing height, then cross the screen laying mines.
+          // Drop to bombing height, then cross the screen laying mines. Its pincers
+          // open (frames 2, 3) just before each mine and close again just after.
+          d.aim += dt * 1000; // time since the last mine
+          e.setTexture(Math.min(d.fireIn, d.aim) < TRAP_STEP ? 'trapper3' : Math.min(d.fireIn, d.aim) < TRAP_STEP * 2 ? 'trapper2' : 'trapper');
           if (e.y < 44) e.y += 40 * dt;
           else {
             e.x += d.dir * 26 * dt;
             if (d.fireIn <= 0 && firing && e.x > 8 && e.x < W - 8) {
               d.fireIn = 1700;
-              this.spawnEnemy('mine', e.x, e.y + 6);
+              d.aim = 0;
+              this.spawnEnemy('mine', e.x, e.y + 7); // between the open pincers
             }
           }
           break;
