@@ -1113,8 +1113,8 @@ export class GameScene extends Phaser.Scene {
               d.fireIn = 2500;
               const tg = this.aimTarget();
               const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
-              // Gun tips: the outer pair reach one pixel lower than the inner pair.
-              for (const g of [{ dx: -5, dy: 5, off: -0.3 }, { dx: -3, dy: 4, off: -0.1 }, { dx: 3, dy: 4, off: 0.1 }, { dx: 5, dy: 5, off: 0.3 }])
+              // Gun tips: the inner pair reach one pixel lower than the outer pair.
+              for (const g of [{ dx: -5, dy: 4, off: -0.3 }, { dx: -3, dy: 5, off: -0.1 }, { dx: 3, dy: 5, off: 0.1 }, { dx: 5, dy: 4, off: 0.3 }])
                 this.enemyShoot(e.x + g.dx, e.y + g.dy, a + g.off);
             }
           } else e.y += 40 * dt;
