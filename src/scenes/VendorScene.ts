@@ -17,6 +17,7 @@ interface VendorData {
   from: string; // scene to resume on Leave
   onLeave: () => void;
   repair?: Repair; // in-level vendors fix the hull for credits
+  first?: boolean; // the campaign's very first vendor stop (level 1, after segment 1)
 }
 
 // The ship's health as the level knows it, for the in-level Repair tab.
@@ -116,6 +117,7 @@ export class VendorScene extends Phaser.Scene {
       const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
       return [...weapons.filter((w) => WEAPONS[w].where === 'base'), ...gear.filter((g) => GEAR[g].where === 'base'), ...common];
     }
+    if (this.d.first) return this.firstStock(common);
     const out: string[] = [];
     const consumables = Phaser.Math.RND.weightedPick([0, 1, 1, 2, 2]);
     for (let i = 0; i < consumables; i++) {
@@ -134,6 +136,18 @@ export class VendorScene extends Phaser.Scene {
     // Top up with common consumables so there are always at least four.
     for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id) && !skipBooster(id)) out.push(id);
     return out;
+  }
+
+  // The very first vendor stop is a fixed, affordable spread so new players
+  // can actually buy something: a Repair Kit, a Shield Cell and two more cheap
+  // consumables, plus one or two pricier picks to show what's out there.
+  private firstStock(common: ItemId[]): string[] {
+    const cheap = Phaser.Utils.Array.Shuffle(common.filter((i) => i !== 'repair' && i !== 'shield' && ITEMS[i].price <= 25));
+    const pool = [
+      ...(Object.keys(WEAPONS) as WeaponId[]).filter((w) => WEAPONS[w].where === 'level' && !this.owns(w)),
+      ...(Object.keys(ITEMS) as ItemId[]).filter((i) => ITEMS[i].rare && ITEMS[i].price < 200),
+    ];
+    return ['repair', 'shield', ...cheap.slice(0, 2), ...pickByStrength(pool, 1, Phaser.Math.Between(1, 2))];
   }
 
   private render() {

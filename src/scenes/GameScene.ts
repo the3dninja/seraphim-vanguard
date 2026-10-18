@@ -2426,7 +2426,8 @@ export class GameScene extends Phaser.Scene {
                 max: this.maxHp,
                 heal: (n: number) => { this.health = Math.min(this.maxHp, this.health + n); },
               };
-              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair });
+              const first = !this.side && this.state.level === 1 && this.segment === 0;
+              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair, first });
             });
           },
         });
@@ -2587,7 +2588,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
       const unlocked = unlockedBy(this.state.level);
       this.state.level++;
-      this.time.delayedCall(2800, () => this.leaveTo('Base', this.state, unlocked));
+      this.time.delayedCall(2800, () => this.leaveTo('Base', this.state, unlocked.length > 0, unlocked));
     });
   }
 
@@ -2626,12 +2627,12 @@ export class GameScene extends Phaser.Scene {
     s.seen = [...this.state.seen];
   }
 
-  // Every mission ends back at Base with the star map open, showing any side
-  // missions that just unlocked.
-  private leaveTo(scene: string, state: SaveData, unlocked: string[] = []) {
+  // Every mission ends back at the Base menu. A level that unlocks side missions
+  // first shows the star map for a moment, announcing them.
+  private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = []) {
     this.keepLog(state);
     this.cameras.main.fadeOut(400);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap: true, unlocked }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap, unlocked }));
   }
 
   // Level 14: the allied fleet's battle with the gate, far behind the action.

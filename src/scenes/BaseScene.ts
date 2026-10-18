@@ -13,7 +13,7 @@ export class BaseScene extends Phaser.Scene {
   private state!: SaveData;
   private scroll!: ReturnType<typeof starfield>;
   private creditsText!: Phaser.GameObjects.Text;
-  // Back from a mission: open the star map, flagging newly unlocked side missions.
+  // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
 
@@ -73,7 +73,7 @@ export class BaseScene extends Phaser.Scene {
 
     text(this, W / 2, H - 14, 'PROGRESS SAVED', COLOR.dim).setOrigin(0.5);
 
-    if (this.toMap) this.openMap(this.unlocked);
+    if (this.toMap) this.openMap(this.unlocked, true);
 
     const jump = new URLSearchParams(location.search).get('side');
     if (jump && sideById(jump) && !sideJumpDone) {
@@ -82,9 +82,9 @@ export class BaseScene extends Phaser.Scene {
     }
   }
 
-  private openMap(unlocked: string[] = []) {
+  private openMap(unlocked: string[] = [], announce = false) {
     this.scene.pause();
-    this.scene.launch('Map', { state: this.state, unlocked, onLeave: () => {}, onLaunch: (side?: string) => this.launch(side) });
+    this.scene.launch('Map', { state: this.state, unlocked, announce, onLeave: () => {}, onLaunch: (side?: string) => this.launch(side) });
   }
 
   // The next level, or a side mission. Flying the last level of a system
