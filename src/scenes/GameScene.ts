@@ -820,7 +820,15 @@ export class GameScene extends Phaser.Scene {
     // Weaver sine amplitude has to stay on screen.
     if (kind === 'weaver') data.baseX = Phaser.Math.Clamp(x, 34, W - 34);
     if (kind === 'gunboat') data.fireIn = 700;
-    if (kind === 'bomber') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
+    if (kind === 'raiderlayer') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
+    if (kind === 'bomber') {
+      e.x = Phaser.Math.Clamp(x, 24, W - 24);
+      data.stopY = Phaser.Math.Between(36, 60);
+      data.hold = 6000;
+      data.fireIn = 900;
+      this.tipOnce('bomb', 'BOMBS BURST WIDE\nSHOOT THEM FROM AFAR');
+    }
+    if (kind === 'bomb') data.aim = 24; // fall speed
     if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
     if (kind === 'pmine') e.body!.setCircle(3.5);
     if (kind === 'minelayer') {
@@ -1097,6 +1105,26 @@ export class GameScene extends Phaser.Scene {
           } else e.y += 40 * dt;
           break;
         case 'bomber':
+          // Sinks to its height, edges toward the ship dropping a bomb from under
+          // each wing, then flies on down.
+          if (e.y < d.stopY && d.hold > 0) e.y += 34 * dt;
+          else if (d.hold > 0) {
+            d.hold -= dt * 1000;
+            e.x += Phaser.Math.Clamp(this.player.x - e.x, -10, 10) * dt;
+            if (d.fireIn <= 0 && firing) {
+              d.fireIn = 2000;
+              this.spawnEnemy('bomb', e.x - 7, e.y + 9);
+              this.spawnEnemy('bomb', e.x + 7, e.y + 9);
+            }
+          } else e.y += 30 * dt;
+          break;
+        case 'bomb':
+          // Falls straight down, slow at first and faster and faster.
+          d.aim = Math.min(140, d.aim + 35 * dt);
+          e.y += d.aim * dt;
+          e.setTexture(Math.floor(d.t * 6) % 2 ? 'bombLit' : 'bomb');
+          break;
+        case 'raiderlayer':
           // Drop to bombing height, then cross the screen laying mines.
           if (e.y < 44) e.y += 40 * dt;
           else {
@@ -1924,7 +1952,7 @@ export class GameScene extends Phaser.Scene {
     let bestD = 160;
     for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
       const d = e.getData('e') as EnemyData;
-      if (d.cloaked || e.y < 0 || ['mine', 'pmine', 'boulder'].includes(d.kind)) continue;
+      if (d.cloaked || e.y < 0 || ['mine', 'bomb', 'pmine', 'boulder'].includes(d.kind)) continue;
       const dist = Phaser.Math.Distance.Between(x, y, e.x, e.y);
       if (dist < bestD) { bestD = dist; best = e; }
     }
@@ -2128,6 +2156,16 @@ export class GameScene extends Phaser.Scene {
     // Spore Pods and Husks burst into seekers when shot down.
     if (drop && d.kind === 'spore') for (let i = 0; i < 3; i++) this.spawnEnemy('seeker', x + (i - 1) * 4, y);
     if (drop && d.kind === 'husk') for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
+    if (d.kind === 'bomb') this.bombBurst(x, y);
+  }
+
+  // A Bomb going off, shot or rammed: the blast hurts the ship if it is close.
+  private bombBurst(x: number, y: number) {
+    const r = 22;
+    const ring = this.add.circle(x, y, r, 0xfc7460, 0.45).setDepth(12);
+    this.tweens.add({ targets: ring, alpha: 0, scale: 1.15, duration: 220, onComplete: () => ring.destroy() });
+    this.sparks.explode(14, x, y);
+    if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) <= r) this.hurt();
   }
 
   // Credits drop as metal bars: bronze, silver, gold, and a stack of gold for big ones.

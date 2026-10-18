@@ -1,10 +1,10 @@
 import type { DType } from './items';
 import type { EnemyKind } from './levels';
 
-// Mines are dropped by Bombers, proximity mines (pmine) by Mine Layers,
+// Mines are dropped by Raider Mine Layers, bombs by Bombers, proximity mines (pmine) by Mine Layers,
 // boulders are thrown by Rockjaw, and seekers burst out of Spore Pods and Husks;
 // all can be shot down.
-export type FoeKind = EnemyKind | 'mine' | 'pmine' | 'boulder' | 'seeker';
+export type FoeKind = EnemyKind | 'mine' | 'bomb' | 'pmine' | 'boulder' | 'seeker';
 
 export interface FoeDef {
   hp: number;
@@ -27,6 +27,7 @@ export const ENEMY_STATS: Record<FoeKind, FoeDef> = {
   drone: { hp: 1, texture: 'drone', dropChance: 0.3, credits: [2, 3], weak: ['explosive'], resist: [], light: true },
   gunboat: { hp: 8, texture: 'gunboat', dropChance: 0.9, credits: [11, 18], weak: ['laser', 'explosive'], resist: [] },
   bomber: { hp: 6, texture: 'bomber', dropChance: 0.9, credits: [11, 20], weak: ['kinetic'], resist: ['laser'] },
+  raiderlayer: { hp: 6, texture: 'raiderlayer', dropChance: 0.9, credits: [11, 20], weak: ['kinetic'], resist: ['laser'] },
   driller: { hp: 4, texture: 'driller', dropChance: 0.6, credits: [7, 14], weak: ['ion'], resist: ['kinetic'], light: true },
   lancer: { hp: 6, texture: 'lancer', dropChance: 0.8, credits: [9, 16], weak: ['ion'], resist: ['laser'] },
   bulwark: { hp: 14, texture: 'bulwark', dropChance: 0.9, credits: [20, 34], weak: ['ion', 'plasma'], resist: ['kinetic'] },
@@ -41,6 +42,7 @@ export const ENEMY_STATS: Record<FoeKind, FoeDef> = {
   egg: { hp: 8, texture: 'egg', dropChance: 0.5, credits: [4, 7], weak: ['plasma', 'explosive'], resist: ['kinetic'], organic: true },
   larva: { hp: 2, texture: 'larva', dropChance: 0.25, credits: [2, 3], weak: ['plasma'], resist: [], organic: true, light: true },
   seeker: { hp: 1, texture: 'seeker', dropChance: 0.1, credits: [1, 2], weak: ['plasma'], resist: [], organic: true, light: true },
+  bomb: { hp: 1, texture: 'bomb', dropChance: 0, credits: [0, 0], weak: [], resist: [] },
   mine: { hp: 1, texture: 'mine', dropChance: 0, credits: [0, 0], weak: [], resist: [] },
   pmine: { hp: 1, texture: 'pmine', dropChance: 0, credits: [0, 0], weak: [], resist: [] },
   boulder: { hp: 3, texture: 'boulder', dropChance: 0, credits: [0, 0], weak: ['explosive'], resist: [] },
