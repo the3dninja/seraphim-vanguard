@@ -8,11 +8,13 @@ import { button, starfield, text, toast } from '../ui';
 // Playtest helper: ?side=ID flies that side mission once, straight from Base.
 let sideJumpDone = false;
 
-// The hub between levels. Arriving here autosaves.
+// The hub between levels: your ship in the middle (tap it to outfit), Shop,
+// Map, Foes and Options in the corners, and Launch below. Arriving here autosaves.
 export class BaseScene extends Phaser.Scene {
   private state!: SaveData;
   private scroll!: ReturnType<typeof starfield>;
   private creditsText!: Phaser.GameObjects.Text;
+  private coin!: Phaser.GameObjects.Image;
   // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
@@ -35,20 +37,39 @@ export class BaseScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
 
-    text(this, W / 2, 24, 'BASE', COLOR.white, 16).setOrigin(0.5);
-    const next = LEVELS[this.state.level - 1];
-    text(this, W / 2, 50, `NEXT: LEVEL ${this.state.level}`, COLOR.gray).setOrigin(0.5);
-    const done = this.state.level > LEVELS.length;
-    text(this, W / 2, 64, isBuilt(next) ? next.name : done ? 'CAMPAIGN COMPLETE' : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
-
-    this.add.image(W / 2 - 34, 86, 'coinIcon').setOrigin(0, 0.5);
-    this.creditsText = text(this, W / 2 - 26, 86, '', COLOR.yellow).setOrigin(0, 0.5);
+    text(this, 8, 10, 'BASE', COLOR.white, 16);
+    this.coin = this.add.image(0, 18, 'coinIcon').setOrigin(0, 0.5);
+    this.creditsText = text(this, W - 8, 18, '', COLOR.yellow).setOrigin(1, 0.5);
     this.refresh();
-    const open = unbeatenSides(this.state).length;
-    if (open) text(this, W / 2, 98, `${open} SIDE MISSION${open > 1 ? 'S' : ''} OPEN`, COLOR.cyan).setOrigin(0.5);
+    const next = LEVELS[this.state.level - 1];
+    text(this, W / 2, 40, `NEXT: LEVEL ${this.state.level}`, COLOR.gray).setOrigin(0.5);
+    const done = this.state.level > LEVELS.length;
+    text(this, W / 2, 52, isBuilt(next) ? next.name : done ? 'CAMPAIGN COMPLETE' : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
 
-    const bx = 30, bw = 120, bh = 22;
-    button(this, bx, 108, bw, bh, 'VENDOR', () => {
+    // Your ship in the middle, on a glowing pad: tap it to outfit it.
+    const cx = W / 2, cy = 136;
+    this.add.ellipse(cx, cy + 34, 92, 22, 0x0058f8, 0.35);
+    this.add.ellipse(cx, cy + 34, 70, 14, 0x3cbcfc, 0.35);
+    const ship = this.add.image(cx, cy, 'shipLarge').setScale(2);
+    this.tweens.add({ targets: ship, y: cy - 3, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    text(this, cx, cy + 46, 'SHIP').setOrigin(0.5);
+    const pad = this.add.zone(cx, cy + 8, 84, 88).setInteractive({ useHandCursor: true });
+    let pressed = false;
+    pad.on('pointerdown', () => { pressed = true; ship.setTint(0xbcbcbc); });
+    pad.on('pointerout', () => { pressed = false; ship.clearTint(); });
+    pad.on('pointerup', () => {
+      ship.clearTint();
+      if (!pressed) return;
+      pressed = false;
+      this.scene.pause();
+      this.scene.launch('Ship', {
+        state: this.state,
+        onLeave: () => { writeSave(this.state); this.refresh(); },
+      });
+    });
+
+    // The other rooms, one picture tile in each corner.
+    this.tile(30, 88, 'iconShop', 'SHOP', () => {
       this.scene.pause();
       this.scene.launch('Vendor', {
         state: this.state,
@@ -57,19 +78,19 @@ export class BaseScene extends Phaser.Scene {
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 134, bw, bh, 'SHIP', () => {
-      this.scene.pause();
-      this.scene.launch('Ship', {
-        state: this.state,
-        onLeave: () => { writeSave(this.state); this.refresh(); },
-      });
-    });
-    button(this, bx, 160, bw, bh, 'VIEW MAP', () => this.openMap());
-    button(this, bx, 186, bw, bh, 'BESTIARY', () => {
+    this.tile(W - 30, 88, 'iconMap', 'MAP', () => this.openMap());
+    this.tile(30, 196, 'iconFoes', 'FOES', () => {
       this.scene.pause();
       this.scene.launch('Bestiary', { state: this.state, onLeave: () => {} });
     });
-    button(this, bx, 220, bw, 24, 'BEGIN MISSION', () => this.launch(), COLOR.yellow);
+    this.tile(W - 30, 196, 'iconGear', 'OPTIONS', () => toast(this, 'OPTIONS COMING SOON', 233), 2);
+
+    button(this, 14, 246, W - 28, 34, '', () => this.launch(), COLOR.yellow);
+    this.add.image(36, 263, 'ship');
+    text(this, W / 2 + 12, 263, 'LAUNCH', COLOR.yellow, 16).setOrigin(0.5);
+
+    const open = unbeatenSides(this.state).length;
+    if (open) text(this, W / 2, 292, `${open} SIDE MISSION${open > 1 ? 'S' : ''} OPEN`, COLOR.cyan).setOrigin(0.5);
 
     text(this, W / 2, H - 14, 'PROGRESS SAVED', COLOR.dim).setOrigin(0.5);
 
@@ -121,8 +142,16 @@ export class BaseScene extends Phaser.Scene {
     box.add(button(this, 92, 190, 68, 22, 'FLY ON', () => { box.destroy(); this.fly(); }, COLOR.yellow));
   }
 
+  // A 34px picture button with its name underneath.
+  private tile(x: number, y: number, icon: string, label: string, onClick: () => void, scale = 1) {
+    button(this, x - 17, y - 17, 34, 34, '', onClick);
+    this.add.image(x, y, icon).setScale(scale);
+    text(this, x, y + 20, label).setOrigin(0.5, 0);
+  }
+
   private refresh() {
     this.creditsText.setText(`${this.state.credits}`);
+    this.coin.setX(this.creditsText.x - this.creditsText.width - 9);
   }
 
   update(_t: number, delta: number) {
