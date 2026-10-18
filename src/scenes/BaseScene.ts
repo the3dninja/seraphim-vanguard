@@ -13,7 +13,7 @@ export class BaseScene extends Phaser.Scene {
   private state!: SaveData;
   private scroll!: ReturnType<typeof starfield>;
   private creditsText!: Phaser.GameObjects.Text;
-  // Back from a cleared level: show the star map briefly, announcing what unlocked.
+  // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
 

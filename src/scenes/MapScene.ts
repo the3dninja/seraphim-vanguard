@@ -8,7 +8,7 @@ import { button, starfield, text } from '../ui';
 interface MapData {
   state: SaveData;
   unlocked?: string[]; // side missions that just unlocked, flagged on the map
-  // Just back from clearing a level: announce the level it unlocked, with no
+  // Just back from a level that unlocked side missions: show them with no
   // buttons, then return to Base on its own after a few seconds.
   announce?: boolean;
   onLeave: () => void;
@@ -52,10 +52,9 @@ export class MapScene extends Phaser.Scene {
   init(data: MapData) {
     this.d = data;
     this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
-    // Newly unlocked side missions are picked first, so their briefing shows,
-    // unless the map is announcing the newly unlocked level.
+    // Newly unlocked side missions are picked first, so their briefing shows.
     const fresh = SIDES.find((sd) => data.unlocked?.includes(sd.id));
-    if (fresh && !data.announce) this.selected = { i: fresh.anchor - 1, side: fresh };
+    if (fresh) this.selected = { i: fresh.anchor - 1, side: fresh };
   }
 
   create() {
@@ -169,24 +168,17 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
   }
 
-  // What just unlocked: the next level when announcing, and any side
-  // missions. A banner near them flashes a few times and fades. Open side
-  // mission moons already blink a ring.
+  // Side missions that just unlocked: a banner near them that flashes a few
+  // times and fades. Their moons already blink a ring while open.
   private announce() {
     const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
-    const level = this.d.announce && this.d.state.level <= LEVELS.length;
-    if (!fresh.length && !level) return;
-    const lines = level ? [`LEVEL ${this.d.state.level}`] : [];
-    if (fresh.length) lines.push(fresh.length > 1 ? `${fresh.length} SIDE MISSIONS` : 'SIDE MISSION');
-    lines.push('UNLOCKED');
-    const msg = lines.join('\n');
-    const h = lines.length * 10 + 6;
-    const { y } = level ? nodePos(this.next) : sidePos(fresh[0]);
-    // Under the level or moons, or above them on the bottom row, out of the info panel.
-    const below = (level ? y + 16 : y + 10) + 2;
-    const by = below + h + 2 < INFO_Y ? below + h / 2 : y - 22 - h / 2;
+    if (!fresh.length) return;
+    const { y } = sidePos(fresh[0]);
+    const msg = fresh.length > 1 ? `${fresh.length} SIDE MISSIONS\nUNLOCKED` : 'SIDE MISSION\nUNLOCKED';
+    // Under the moons, or above them on the bottom row, out of the info panel.
+    const by = y + 38 < INFO_Y ? y + 23 : y - 30;
     const banner = this.add.container(0, 0).setDepth(10);
-    banner.add(this.add.rectangle(W / 2, by, 140, h, 0x000000).setStrokeStyle(1, 0xf8b800));
+    banner.add(this.add.rectangle(W / 2, by, 140, 26, 0x000000).setStrokeStyle(1, 0xf8b800));
     banner.add(text(this, W / 2, by, msg, COLOR.yellow).setOrigin(0.5).setAlign('center'));
     this.tweens.add({
       targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
