@@ -120,17 +120,15 @@ const SPRITES: Record<string, string[]> = {
 
   // Level 2 and 3 enemies.
   gunboat: [
-    '...Y.....Y...',
-    '..RRR...RRR..',
-    '.RRRRRRRRRRR.',
-    'RRLLLRRRLLLRR',
-    'RLDDDLRLDDDLR',
-    'RRLLLRORLLLRR',
-    '.RRRROOORRRR.',
-    '.GRRRRYRRRRG.',
-    '.G..RRRRR..G.',
-    '.G...RRR...G.',
-    '......R......',
+    'G.....b.....G',
+    'G...GLYLG...G',
+    'GG.GRGLGRG.GG',
+    'RGGGRRRRRGGGR',
+    'RRGGGRRRGGGRR',
+    'RRRRRRWRRRRRR',
+    'RLRLRRYRRLRLR',
+    '.LRLR...RLRL.',
+    '.L.L.....L.L.',
   ],
   drone: ['G.....G', '.G.L.G.', '..LLL..', 'GLYKYLG', '.LLLLL.', '.G.G.G.', 'G..G..G'],
   bomber: [
