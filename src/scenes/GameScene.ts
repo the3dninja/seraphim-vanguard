@@ -106,6 +106,9 @@ const LINGER = 3000; // ms after a level is cleared to pick up credits by hand
 const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve toward the ship
 
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
+// A Trapper's net: how long it holds the ship, and how much of its speed is left.
+const NET_TIME = 2200;
+const NET_SLOW = 0.4;
 const godMode = () => new URLSearchParams(location.search).has('god');
 
 export class GameScene extends Phaser.Scene {
@@ -192,6 +195,8 @@ export class GameScene extends Phaser.Scene {
   private fireTimers: number[] = [];
   private invulnUntil = 0;
   private shieldUntil = 0;
+  private snaredUntil = 0; // a Trapper's net mine slows the ship until then
+  private netImg!: Phaser.GameObjects.Image;
   private overdriveUntil = 0;
   private warpUntil = 0; // Time Warp
   private flare: Phaser.GameObjects.Image | null = null; // Decoy Flare
@@ -260,6 +265,7 @@ export class GameScene extends Phaser.Scene {
     this.bossName = null;
     this.fireTimers = [];
     this.invulnUntil = 0;
+    this.snaredUntil = 0;
     this.shieldUntil = 0;
     this.overdriveUntil = 0;
     this.warpUntil = 0;
@@ -313,6 +319,7 @@ export class GameScene extends Phaser.Scene {
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
     this.bubble = this.add.image(0, 0, 'bubble').setDepth(11).setVisible(false);
     this.deflectRing = this.add.image(0, 0, 'deflect').setDepth(11).setVisible(false);
+    this.netImg = this.add.image(0, 0, 'net').setDepth(11).setVisible(false);
     this.flareGlow = this.add.rectangle(0, 0, W, H, 0xf8b800, 0).setOrigin(0).setDepth(5); // under the ship and the shadow lane
     if (this.level.dark) this.dark = this.add.image(W / 2, H / 2, 'darkness').setDepth(9.6);
     this.setupGear();
@@ -484,6 +491,7 @@ export class GameScene extends Phaser.Scene {
   private move(dt: number) {
     if (dt <= 0 || this.dashing) return;
     const want = this.wantedStep(dt);
+    if (this.time.now < this.snaredUntil) { want.x *= NET_SLOW; want.y *= NET_SLOW; }
     const wl = Math.hypot(want.x, want.y);
     if (wl > 0.01) this.lastMove = { x: want.x / wl, y: want.y / wl };
     let mx = want.x, my = want.y;
@@ -820,7 +828,7 @@ export class GameScene extends Phaser.Scene {
     // Weaver sine amplitude has to stay on screen.
     if (kind === 'weaver') data.baseX = Phaser.Math.Clamp(x, 34, W - 34);
     if (kind === 'gunboat') data.fireIn = 700;
-    if (kind === 'raiderlayer') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
+    if (kind === 'trapper') { data.fireIn = 900; e.x = x < W / 2 ? 24 : W - 24; }
     if (kind === 'bomber') {
       e.x = Phaser.Math.Clamp(x, 24, W - 24);
       data.stopY = Phaser.Math.Between(36, 60);
@@ -1124,7 +1132,7 @@ export class GameScene extends Phaser.Scene {
           e.y += d.aim * dt;
           e.setTexture(Math.floor(d.t * 6) % 2 ? 'bombLit' : 'bomb');
           break;
-        case 'raiderlayer':
+        case 'trapper':
           // Drop to bombing height, then cross the screen laying mines.
           if (e.y < 44) e.y += 40 * dt;
           else {
@@ -1136,12 +1144,12 @@ export class GameScene extends Phaser.Scene {
           }
           break;
         case 'mine':
-          // Drift down blinking, then burst into a ring of shots, sooner if the ship comes close.
+          // Net mine: drifts down blinking, then throws out an energy net, sooner
+          // if the ship comes close. A ship inside the net is slowed for a while.
           e.y += 26 * dt;
           e.setTexture(Math.floor(d.t * (d.fireIn < 700 ? 12 : 4)) % 2 ? 'mineLit' : 'mine');
           if (firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 22)) {
-            for (let i = 0; i < 6; i++) this.enemyShoot(e.x, e.y, (i / 6) * Math.PI * 2 + 0.3, 55);
-            this.sparks.explode(6, e.x, e.y);
+            this.netBurst(e.x, e.y);
             e.destroy();
             continue;
           }
@@ -1696,6 +1704,10 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     const flying = this.phase === 'action' || this.phase === 'ready';
     const p = this.player;
+    // A net flickers out over its last half second.
+    const net = this.snaredUntil - now;
+    this.netImg.setVisible(flying && net > 0 && p.visible && (net > 500 || Math.floor(now / 80) % 2 === 0))
+      .setPosition(p.x, p.y);
 
     // Deflector: charges come back one at a time.
     if (hasGear(s, 'deflector')) {
@@ -2157,6 +2169,18 @@ export class GameScene extends Phaser.Scene {
     if (drop && d.kind === 'spore') for (let i = 0; i < 3; i++) this.spawnEnemy('seeker', x + (i - 1) * 4, y);
     if (drop && d.kind === 'husk') for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
     if (d.kind === 'bomb') this.bombBurst(x, y);
+  }
+
+  // A Trapper's net mine going off: an energy net that snares the ship if it is close.
+  private netBurst(x: number, y: number) {
+    const r = 26;
+    const ring = this.add.circle(x, y, 4, 0x3cbcfc, 0).setStrokeStyle(1, 0xa4e4fc).setDepth(12);
+    this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    this.sparks.explode(6, x, y);
+    if (this.phase !== 'action' || godMode()) return;
+    if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) > r) return;
+    this.snaredUntil = this.time.now + NET_TIME;
+    this.tipOnce('net', 'NETS SLOW YOUR SHIP');
   }
 
   // A Bomb going off, shot or rammed: the blast hurts the ship if it is close.

@@ -1,4 +1,4 @@
-export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'raiderlayer' | 'driller' | 'lancer' | 'bulwark'
+export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'trapper' | 'driller' | 'lancer' | 'bulwark'
   | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk' | 'egg' | 'larva';
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
@@ -180,7 +180,7 @@ export const LEVELS: LevelDef[] = [
     segments: [
       [
         { delay: 2500, kind: 'dart', pattern: 'vee', count: 5, x: 0.5 },
-        { delay: 3000, kind: 'raiderlayer', pattern: 'single', x: 0 },
+        { delay: 3000, kind: 'trapper', pattern: 'single', x: 0 },
         { delay: 4000, kind: 'weaver', pattern: 'pair' },
         { delay: 3000, kind: 'dart', pattern: 'line', count: 6 },
         { delay: 3000, kind: 'bomber', pattern: 'single', x: 1 },
@@ -188,7 +188,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'gunboat', pattern: 'single', x: 0.5, waitClear: true },
         { delay: 2000, kind: 'dart', pattern: 'column', count: 6, x: 0.3 },
         { delay: 800, kind: 'dart', pattern: 'column', count: 6, x: 0.7, waitClear: true },
-        { delay: 2000, kind: 'raiderlayer', pattern: 'single', x: 0 },
+        { delay: 2000, kind: 'trapper', pattern: 'single', x: 0 },
         { delay: 1500, kind: 'bomber', pattern: 'single', x: 1 },
         { delay: 4000, kind: 'weaver', pattern: 'line', count: 4 },
         { delay: 3000, kind: 'gunboat', pattern: 'pair', waitClear: true },
@@ -196,14 +196,14 @@ export const LEVELS: LevelDef[] = [
       [
         { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.4 },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
-        { delay: 2500, kind: 'raiderlayer', pattern: 'single', x: 0 },
+        { delay: 2500, kind: 'trapper', pattern: 'single', x: 0 },
         { delay: 2500, kind: 'dart', pattern: 'line', count: 6, waitClear: true },
         { delay: 2000, kind: 'gunboat', pattern: 'line', count: 3 },
         { delay: 3500, kind: 'bomber', pattern: 'single', x: 1 },
         { delay: 1500, kind: 'weaver', pattern: 'pair' },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
         { delay: 1500, kind: 'drone', pattern: 'swarm', count: 8, x: 1 },
-        { delay: 3000, kind: 'raiderlayer', pattern: 'single', x: 0 },
+        { delay: 3000, kind: 'trapper', pattern: 'single', x: 0 },
         { delay: 1000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5, waitClear: true },
       ],
     ],
@@ -375,7 +375,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.3 },
         { delay: 1500, kind: 'dart', pattern: 'vee', count: 7, x: 0.7 },
         { delay: 3000, kind: 'minelayer', pattern: 'single', x: 0.5 },
-        { delay: 2500, kind: 'raiderlayer', pattern: 'single', x: 1, waitClear: true },
+        { delay: 2500, kind: 'trapper', pattern: 'single', x: 1, waitClear: true },
         { delay: 2000, kind: 'weaver', pattern: 'pair' },
         { delay: 2000, kind: 'gunboat', pattern: 'line', count: 3 },
         { delay: 3500, kind: 'minelayer', pattern: 'pair', waitClear: true },
@@ -387,7 +387,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'gunboat', pattern: 'pair' },
         { delay: 3000, kind: 'weaver', pattern: 'line', count: 4, waitClear: true },
         { delay: 2000, kind: 'bomber', pattern: 'single', x: 0 },
-        { delay: 1500, kind: 'raiderlayer', pattern: 'single', x: 1 },
+        { delay: 1500, kind: 'trapper', pattern: 'single', x: 1 },
         { delay: 3000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
         { delay: 2500, kind: 'drone', pattern: 'swarm', count: 9, x: 1 },
         { delay: 2500, kind: 'minelayer', pattern: 'line', count: 3, waitClear: true },

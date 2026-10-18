@@ -168,8 +168,8 @@ const SPRITES: Record<string, string[]> = {
     '.YYY.',
     '..Y..',
   ],
-  // Mine Layer (Raiders): hugs the edge and seeds mines.
-  raiderlayer: [
+  // Trapper (Raiders): hugs the edge and seeds net mines.
+  trapper: [
     'G..............G',
     'GG............GG',
     'RGG....bb....GGR',
@@ -188,6 +188,24 @@ const SPRITES: Record<string, string[]> = {
     '...LGL....LGL...',
     '....GL....LG....',
     '.....L....L.....',
+  ],
+  // Energy net drawn over the ship while a Trapper's mine has it snared.
+  net: [
+    '......C.C......',
+    '...C.C...C.C...',
+    '..C.A.A.A.A.C..',
+    '.C.A...A...A.C.',
+    '..A.A.A.A.A.A..',
+    '.C...A...A...C.',
+    'C.A.A.A.A.A.A.C',
+    '...A...A...A...',
+    'C.A.A.A.A.A.A.C',
+    '.C...A...A...C.',
+    '..A.A.A.A.A.A..',
+    '.C.A...A...A.C.',
+    '..C.A.A.A.A.C..',
+    '...C.C...C.C...',
+    '......C.C......',
   ],
   mine: ['...G...', '..GDG..', '.GDRDG.', 'GDRYRDG', '.GDRDG.', '..GDG..', '...G...'],
   mineLit: ['...G...', '..GRG..', '.GRWRG.', 'GRWWWRG', '.GRWRG.', '..GRG..', '...G...'],
