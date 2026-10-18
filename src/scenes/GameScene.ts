@@ -2217,7 +2217,7 @@ export class GameScene extends Phaser.Scene {
 
   // A Bomb going off, shot or rammed: the blast hurts the ship if it is close.
   private bombBurst(x: number, y: number) {
-    const r = 22;
+    const r = 28;
     const ring = this.add.circle(x, y, r, 0xfc7460, 0.45).setDepth(12);
     this.tweens.add({ targets: ring, alpha: 0, scale: 1.15, duration: 220, onComplete: () => ring.destroy() });
     this.sparks.explode(14, x, y);
