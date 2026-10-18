@@ -8,6 +8,9 @@ import { button, starfield, text } from '../ui';
 interface MapData {
   state: SaveData;
   unlocked?: string[]; // side missions that just unlocked, flagged on the map
+  // Just back from clearing a level: announce the level it unlocked, with no
+  // buttons, then return to Base on its own after a few seconds.
+  announce?: boolean;
   onLeave: () => void;
   // Fly the next level (no side) or a side mission; Base takes it from there.
   onLaunch?: (side?: string) => void;
@@ -49,9 +52,10 @@ export class MapScene extends Phaser.Scene {
   init(data: MapData) {
     this.d = data;
     this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
-    // Newly unlocked side missions are picked first, so their briefing shows.
+    // Newly unlocked side missions are picked first, so their briefing shows,
+    // unless the map is announcing the newly unlocked level.
     const fresh = SIDES.find((sd) => data.unlocked?.includes(sd.id));
-    if (fresh) this.selected = { i: fresh.anchor - 1, side: fresh };
+    if (fresh && !data.announce) this.selected = { i: fresh.anchor - 1, side: fresh };
   }
 
   create() {
@@ -62,6 +66,13 @@ export class MapScene extends Phaser.Scene {
     this.drawRoute();
     this.content = this.add.container(0, 0);
 
+    if (this.d.announce) {
+      // Nothing to tap: the map shows itself, then goes back to the menu.
+      this.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0).setInteractive().setDepth(20);
+      this.render();
+      this.time.delayedCall(3000, () => this.leave());
+      return;
+    }
     const kb = this.input.keyboard!;
     kb.enabled = true;
     kb.on('keydown', (e: KeyboardEvent) => {
@@ -135,7 +146,10 @@ export class MapScene extends Phaser.Scene {
       const img = this.add.image(x, y, sd.node);
       if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
       // A treasure mission shows a pile of gold in the corner until it's cleared.
-      if (sd.treasure && state !== 'cleared') this.add.image(x + 7, y + 5, 'goldPile').setDepth(5);
+      // It's dimmed with the moon until the mission opens.
+      if (sd.treasure && state !== 'cleared') {
+        this.add.image(x + 7, y + 5, 'goldPile').setDepth(5).setAlpha(state === 'open' ? 1 : 0.35);
+      }
       if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
       // An open one blinks a ring so it stands out.
       if (state === 'open') {
@@ -155,17 +169,24 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
   }
 
-  // Side missions that just unlocked: a banner near them that flashes a few
-  // times and fades. Their moons already blink a ring while open.
+  // What just unlocked: the next level when announcing, and any side
+  // missions. A banner near them flashes a few times and fades. Open side
+  // mission moons already blink a ring.
   private announce() {
     const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
-    if (!fresh.length) return;
-    const { y } = sidePos(fresh[0]);
-    const msg = fresh.length > 1 ? `${fresh.length} SIDE MISSIONS\nUNLOCKED` : 'SIDE MISSION\nUNLOCKED';
-    // Under the moons, or above them on the bottom row, out of the info panel.
-    const by = y + 38 < INFO_Y ? y + 23 : y - 30;
+    const level = this.d.announce && this.d.state.level <= LEVELS.length;
+    if (!fresh.length && !level) return;
+    const lines = level ? [`LEVEL ${this.d.state.level}`] : [];
+    if (fresh.length) lines.push(fresh.length > 1 ? `${fresh.length} SIDE MISSIONS` : 'SIDE MISSION');
+    lines.push('UNLOCKED');
+    const msg = lines.join('\n');
+    const h = lines.length * 10 + 6;
+    const { y } = level ? nodePos(this.next) : sidePos(fresh[0]);
+    // Under the level or moons, or above them on the bottom row, out of the info panel.
+    const below = (level ? y + 16 : y + 10) + 2;
+    const by = below + h + 2 < INFO_Y ? below + h / 2 : y - 22 - h / 2;
     const banner = this.add.container(0, 0).setDepth(10);
-    banner.add(this.add.rectangle(W / 2, by, 140, 26, 0x000000).setStrokeStyle(1, 0xf8b800));
+    banner.add(this.add.rectangle(W / 2, by, 140, h, 0x000000).setStrokeStyle(1, 0xf8b800));
     banner.add(text(this, W / 2, by, msg, COLOR.yellow).setOrigin(0.5).setAlign('center'));
     this.tweens.add({
       targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
@@ -216,6 +237,7 @@ export class MapScene extends Phaser.Scene {
       for (let p = 0; p < 3; p++) add(this.add.image(cx - 4 + p * 4, ey + 32, p < pips ? 'pip' : 'pipEmpty'));
     });
 
+    if (this.d.announce) return;
     if (launch && this.d.onLaunch) {
       add(button(this, 6, H - 22, 84, 18, 'BACK', () => this.leave(), COLOR.cyan));
       add(button(this, 94, H - 22, W - 100, 18, 'LAUNCH', () => this.leave(side ? side.id : null), COLOR.yellow));
@@ -224,6 +246,7 @@ export class MapScene extends Phaser.Scene {
 
   // `launch` is null for the next level, or a side mission's id.
   private leave(launch?: string | null) {
+    if (!this.scene.isActive()) return;
     this.input.keyboard!.enabled = false;
     this.cameras.main.fadeOut(250);
     this.cameras.main.once('camerafadeoutcomplete', () => {
