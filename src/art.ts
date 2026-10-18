@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { W, H } from './config';
 import { PAL3, generateArt3, mimicRows } from './art3';
+import { generateMenuIcons } from './menuIcons';
 
 // Placeholder pixel art, drawn from text grids so it can be tweaked without an editor.
 // Each character is one pixel; "." is transparent.
@@ -840,4 +841,5 @@ export function generateArt(scene: Phaser.Scene) {
   makeDreadnought(scene);
   makeStars(scene, 'stars-far', 70, ['#3c3c3c', '#7c7c7c']);
   makeStars(scene, 'stars-near', 25, ['#bcbcbc', '#fcfcfc', '#a4e4fc']);
+  generateMenuIcons(scene);
 }
