@@ -1082,7 +1082,7 @@ export class GameScene extends Phaser.Scene {
           e.x = d.baseX + d.dir * d.t * 42 + Math.sin(d.t * 3.6) * 12 * d.dir;
           break;
         case 'gunboat':
-          // Fly in, park, fire 3-shot spreads, then move on.
+          // Fly in, park, fire a 4-shot spread (one from each gun tip), then move on.
           if (e.y < d.stopY && d.hold > 0) e.y += 50 * dt;
           else if (d.hold > 0) {
             d.hold -= dt * 1000;
@@ -1090,7 +1090,9 @@ export class GameScene extends Phaser.Scene {
               d.fireIn = 1500;
               const tg = this.aimTarget();
               const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
-              for (const off of [-0.28, 0, 0.28]) this.enemyShoot(e.x, e.y + 6, a + off);
+              // Gun tips: the outer pair reach one pixel lower than the inner pair.
+              for (const g of [{ dx: -5, dy: 5, off: -0.3 }, { dx: -3, dy: 4, off: -0.1 }, { dx: 3, dy: 4, off: 0.1 }, { dx: 5, dy: 5, off: 0.3 }])
+                this.enemyShoot(e.x + g.dx, e.y + g.dy, a + g.off);
             }
           } else e.y += 40 * dt;
           break;
