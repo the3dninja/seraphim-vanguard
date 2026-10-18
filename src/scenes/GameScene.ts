@@ -842,7 +842,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (kind === 'bomb') {
       data.aim = 24; // fall speed
-      data.hold = Phaser.Math.Between(Math.round(H / 3), H - 24); // where it blows
+      data.hold = Phaser.Math.Between(Math.round(H / 3), H - 24); // where it blows if it gets past the ship
     }
     if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
     if (kind === 'pmine') e.body!.setCircle(3.5);
@@ -1134,13 +1134,22 @@ export class GameScene extends Phaser.Scene {
           } else e.y += 30 * dt;
           break;
         case 'bomb':
-          // Falls straight down, slow at first and faster and faster, and blows at
-          // a height picked when it was dropped, flashing faster and faster as it
-          // closes the last stretch.
+          // Falls straight down, slow at first and faster and faster. Like a depth
+          // charge it blows at the ship's height while it is above the ship;
+          // otherwise at a height picked when it was dropped. It flashes faster
+          // and faster over the last stretch, and once flashing its height is set.
           d.aim = Math.min(70, d.aim + 35 * dt);
           e.y += d.aim * dt;
-          if (e.y >= d.hold && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
-          e.setTexture(d.hold - e.y < BOMB_FLASH && this.fuseLit(d, dt, 1 - (d.hold - e.y) / BOMB_FLASH) ? 'bombLit' : 'bomb');
+          if (!d.charge) {
+            // Past the ship already: if its own height is gone by too, pick a new one below.
+            if (e.y >= this.player.y && d.hold < e.y + BOMB_FLASH) {
+              d.hold = Phaser.Math.Between(Math.round(e.y + BOMB_FLASH), Math.max(Math.round(e.y + BOMB_FLASH), H - 24));
+            }
+            const at = e.y < this.player.y ? this.player.y : d.hold;
+            if (at - e.y < BOMB_FLASH) { d.charge = 1; d.stopY = at; }
+          }
+          if (d.charge && e.y >= d.stopY && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
+          e.setTexture(d.charge && this.fuseLit(d, dt, 1 - (d.stopY - e.y) / BOMB_FLASH) ? 'bombLit' : 'bomb');
           break;
         case 'trapper':
           // Drop to bombing height, then cross the screen laying mines.
