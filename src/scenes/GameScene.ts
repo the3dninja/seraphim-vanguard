@@ -108,10 +108,10 @@ const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve to
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
 // A Trapper's net: how long it holds the ship, and how much of its speed is left.
 const NET_TIME = 2200;
-// Lit fuses: a Trapper mine flashes this long before its net, a Bomb before it blows.
+// Lit fuses: a Trapper mine flashes this long (ms) before its net, and a Bomb
+// flashes over the last this many pixels before the height where it blows.
 const MINE_FLASH = 750;
-const FUSE_FLASH = 1000;
-const BOMB_DRIFT = 12; // how slowly a Bomb sinks once its fuse is lit
+const BOMB_FLASH = 36;
 const NET_SLOW = 0.4;
 const godMode = () => new URLSearchParams(location.search).has('god');
 
@@ -840,7 +840,10 @@ export class GameScene extends Phaser.Scene {
       data.fireIn = 900;
       this.tipOnce('bomb', 'BOMBS BURST WIDE\nSHOOT THEM FROM AFAR');
     }
-    if (kind === 'bomb') data.aim = 24; // fall speed
+    if (kind === 'bomb') {
+      data.aim = 24; // fall speed
+      data.hold = Phaser.Math.Between(Math.round(H / 3), H - 24); // where it blows
+    }
     if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
     if (kind === 'pmine') e.body!.setCircle(3.5);
     if (kind === 'minelayer') {
@@ -1107,7 +1110,7 @@ export class GameScene extends Phaser.Scene {
           else if (d.hold > 0) {
             d.hold -= dt * 1000;
             if (d.fireIn <= 0 && firing) {
-              d.fireIn = 1500;
+              d.fireIn = 2500;
               const tg = this.aimTarget();
               const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
               // Gun tips: the outer pair reach one pixel lower than the inner pair.
@@ -1131,17 +1134,13 @@ export class GameScene extends Phaser.Scene {
           } else e.y += 30 * dt;
           break;
         case 'bomb':
-          // Falls straight down, slow at first and faster and faster. In the lower
-          // third of the screen it brakes and its fuse starts: 1 to 3 seconds,
-          // then a second of quickening flashes, then it blows.
-          if (!d.charge && e.y > (H * 2) / 3) { d.charge = 1; d.hold = Phaser.Math.Between(1000, 3000) + FUSE_FLASH; }
-          if (d.charge) {
-            d.aim += (BOMB_DRIFT - d.aim) * Math.min(1, 4 * dt);
-            d.hold -= dt * 1000;
-            if (d.hold <= 0 && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
-          } else d.aim = Math.min(140, d.aim + 35 * dt);
+          // Falls straight down, slow at first and faster and faster, and blows at
+          // a height picked when it was dropped, flashing faster and faster as it
+          // closes the last stretch.
+          d.aim = Math.min(70, d.aim + 35 * dt);
           e.y += d.aim * dt;
-          e.setTexture(d.hold > 0 && d.hold < FUSE_FLASH && this.fuseLit(d, dt, 1 - d.hold / FUSE_FLASH) ? 'bombLit' : 'bomb');
+          if (e.y >= d.hold && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
+          e.setTexture(d.hold - e.y < BOMB_FLASH && this.fuseLit(d, dt, 1 - (d.hold - e.y) / BOMB_FLASH) ? 'bombLit' : 'bomb');
           break;
         case 'trapper':
           // Drop to bombing height, then cross the screen laying mines.
@@ -1159,7 +1158,7 @@ export class GameScene extends Phaser.Scene {
           // close, it flashes faster and faster, then throws out an energy net.
           // A ship inside the net is slowed for a while.
           e.y += 26 * dt;
-          if (d.charge <= 0 && firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 44)) d.charge = MINE_FLASH;
+          if (d.charge <= 0 && firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 66)) d.charge = MINE_FLASH;
           if (d.charge > 0) {
             d.charge -= dt * 1000;
             e.setTexture(this.fuseLit(d, dt, 1 - d.charge / MINE_FLASH) ? 'mineLit' : 'mine');
@@ -2196,7 +2195,7 @@ export class GameScene extends Phaser.Scene {
 
   // A Trapper's net mine going off: an energy net that snares the ship if it is close.
   private netBurst(x: number, y: number) {
-    const r = 26;
+    const r = 39;
     const ring = this.add.circle(x, y, 4, 0x3cbcfc, 0).setStrokeStyle(1, 0xa4e4fc).setDepth(12);
     this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
     this.sparks.explode(6, x, y);
