@@ -162,11 +162,11 @@ const SPRITES: Record<string, string[]> = {
   bombLit: [
     'G.G.G',
     'GGGGG',
-    '.WWW.',
-    'WWWWW',
-    'WWWWW',
     '.YYY.',
-    '..Y..',
+    'YWYYY',
+    'YYYYY',
+    '.bbb.',
+    '..b..',
   ],
   // Trapper (Raiders): hugs the edge and seeds net mines.
   trapper: [

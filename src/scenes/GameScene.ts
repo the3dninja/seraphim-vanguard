@@ -111,7 +111,7 @@ const NET_TIME = 2200;
 // Lit fuses: a Trapper mine flashes this long (ms) before its net, and a Bomb
 // flashes over the last this many pixels before the height where it blows.
 const MINE_FLASH = 750;
-const BOMB_FLASH = 36;
+const BOMB_FLASH = 54;
 const NET_SLOW = 0.4;
 const godMode = () => new URLSearchParams(location.search).has('god');
 
@@ -1146,10 +1146,11 @@ export class GameScene extends Phaser.Scene {
               d.hold = Phaser.Math.Between(Math.round(e.y + BOMB_FLASH), Math.max(Math.round(e.y + BOMB_FLASH), H - 24));
             }
             const at = e.y < this.player.y ? this.player.y : d.hold;
-            if (at - e.y < BOMB_FLASH) { d.charge = 1; d.stopY = at; }
+            // Bombs dropped together blow a moment apart.
+            if (at - e.y < BOMB_FLASH) { d.charge = 1; d.stopY = at + Phaser.Math.Between(-4, 12); }
           }
           if (d.charge && e.y >= d.stopY && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
-          e.setTexture(d.charge && this.fuseLit(d, dt, 1 - (d.stopY - e.y) / BOMB_FLASH) ? 'bombLit' : 'bomb');
+          e.setTexture(d.charge && this.fuseLit(d, dt, 1 - (d.stopY - e.y) / BOMB_FLASH, 0.5) ? 'bombLit' : 'bomb');
           break;
         case 'trapper':
           // Drop to bombing height, then cross the screen laying mines.
@@ -2195,10 +2196,10 @@ export class GameScene extends Phaser.Scene {
     if (d.kind === 'bomb') this.bombBurst(x, y);
   }
 
-  // A lit fuse's flashing, which quickens from 5 to 25 flashes a second as
-  // `k` runs from 0 to 1. Returns whether this frame shows lit.
-  private fuseLit(d: EnemyData, dt: number, k: number) {
-    d.step += dt * (5 + 20 * Phaser.Math.Clamp(k, 0, 1));
+  // A lit fuse's flashing, which quickens from 5 to 25 flashes a second (times
+  // `rate`) as `k` runs from 0 to 1. Returns whether this frame shows lit.
+  private fuseLit(d: EnemyData, dt: number, k: number, rate = 1) {
+    d.step += dt * rate * (5 + 20 * Phaser.Math.Clamp(k, 0, 1));
     return Math.floor(d.step * 2) % 2 === 1;
   }
 
