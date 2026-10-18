@@ -47,8 +47,8 @@ export class BaseScene extends Phaser.Scene {
     const open = unbeatenSides(this.state).length;
     if (open) text(this, W / 2, 98, `${open} SIDE MISSION${open > 1 ? 'S' : ''} OPEN`, COLOR.cyan).setOrigin(0.5);
 
-    const bx = 30, bw = 120, bh = 24;
-    button(this, bx, 110, bw, bh, 'VENDOR', () => {
+    const bx = 30, bw = 120, bh = 22;
+    button(this, bx, 108, bw, bh, 'VENDOR', () => {
       this.scene.pause();
       this.scene.launch('Vendor', {
         state: this.state,
@@ -57,15 +57,19 @@ export class BaseScene extends Phaser.Scene {
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 142, bw, bh, 'SHIP', () => {
+    button(this, bx, 134, bw, bh, 'SHIP', () => {
       this.scene.pause();
       this.scene.launch('Ship', {
         state: this.state,
         onLeave: () => { writeSave(this.state); this.refresh(); },
       });
     });
-    button(this, bx, 174, bw, bh, 'VIEW MAP', () => this.openMap());
-    button(this, bx, 214, bw, bh, 'BEGIN MISSION', () => this.launch(), COLOR.yellow);
+    button(this, bx, 160, bw, bh, 'VIEW MAP', () => this.openMap());
+    button(this, bx, 186, bw, bh, 'BESTIARY', () => {
+      this.scene.pause();
+      this.scene.launch('Bestiary', { state: this.state, onLeave: () => {} });
+    });
+    button(this, bx, 220, bw, 24, 'BEGIN MISSION', () => this.launch(), COLOR.yellow);
 
     text(this, W / 2, H - 14, 'PROGRESS SAVED', COLOR.dim).setOrigin(0.5);
 

@@ -8,6 +8,7 @@ import { VendorScene } from './scenes/VendorScene';
 import { BaseScene } from './scenes/BaseScene';
 import { ShipScene } from './scenes/ShipScene';
 import { MapScene } from './scenes/MapScene';
+import { BestiaryScene } from './scenes/BestiaryScene';
 
 function start() {
   const game = new Phaser.Game({
@@ -21,7 +22,7 @@ function start() {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { debug: false } },
     input: { activePointers: 2 },
-    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene, ShipScene, MapScene],
+    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene, ShipScene, MapScene, BestiaryScene],
   });
   // Lets browser tests drive the game during development; left out of real builds.
   if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;

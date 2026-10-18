@@ -16,6 +16,8 @@ export interface SaveData {
   gearLevels: Partial<Record<GearId, number>>; // 1 to 5; missing means 1
   storage: string[]; // weapon, gear and item ids not in a slot
   sides: string[]; // side missions beaten (see data/sides.ts)
+  kills: Record<string, number>; // enemies and bosses destroyed, by kind (for the Bestiary)
+  seen: string[]; // enemy and boss kinds faced in flight
 }
 
 const KEY = 'seraphim-vanguard-save';
@@ -24,6 +26,7 @@ export function newSave(): SaveData {
   return {
     v: 2, level: 1, credits: 0, maxHealth: 5,
     weapons: ['pulse'], items: [null], gear: [], weaponLevels: {}, gearLevels: {}, storage: [], sides: [],
+    kills: {}, seen: [],
   };
 }
 
