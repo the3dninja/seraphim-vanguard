@@ -108,6 +108,10 @@ const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve to
 // Playtest helper: add ?god to the URL and the ship can't be destroyed.
 // A Trapper's net: how long it holds the ship, and how much of its speed is left.
 const NET_TIME = 2200;
+// Lit fuses: a Trapper mine flashes this long before its net, a Bomb before it blows.
+const MINE_FLASH = 750;
+const FUSE_FLASH = 1000;
+const BOMB_DRIFT = 12; // how slowly a Bomb sinks once its fuse is lit
 const NET_SLOW = 0.4;
 const godMode = () => new URLSearchParams(location.search).has('god');
 
@@ -1127,10 +1131,17 @@ export class GameScene extends Phaser.Scene {
           } else e.y += 30 * dt;
           break;
         case 'bomb':
-          // Falls straight down, slow at first and faster and faster.
-          d.aim = Math.min(140, d.aim + 35 * dt);
+          // Falls straight down, slow at first and faster and faster. In the lower
+          // third of the screen it brakes and its fuse starts: 1 to 3 seconds,
+          // then a second of quickening flashes, then it blows.
+          if (!d.charge && e.y > (H * 2) / 3) { d.charge = 1; d.hold = Phaser.Math.Between(1000, 3000) + FUSE_FLASH; }
+          if (d.charge) {
+            d.aim += (BOMB_DRIFT - d.aim) * Math.min(1, 4 * dt);
+            d.hold -= dt * 1000;
+            if (d.hold <= 0 && firing) { this.bombBurst(e.x, e.y); e.destroy(); continue; }
+          } else d.aim = Math.min(140, d.aim + 35 * dt);
           e.y += d.aim * dt;
-          e.setTexture(Math.floor(d.t * 6) % 2 ? 'bombLit' : 'bomb');
+          e.setTexture(d.hold > 0 && d.hold < FUSE_FLASH && this.fuseLit(d, dt, 1 - d.hold / FUSE_FLASH) ? 'bombLit' : 'bomb');
           break;
         case 'trapper':
           // Drop to bombing height, then cross the screen laying mines.
@@ -1144,15 +1155,20 @@ export class GameScene extends Phaser.Scene {
           }
           break;
         case 'mine':
-          // Net mine: drifts down blinking, then throws out an energy net, sooner
-          // if the ship comes close. A ship inside the net is slowed for a while.
+          // Net mine: drifts down blinking. On its timer, or when the ship comes
+          // close, it flashes faster and faster, then throws out an energy net.
+          // A ship inside the net is slowed for a while.
           e.y += 26 * dt;
-          e.setTexture(Math.floor(d.t * (d.fireIn < 700 ? 12 : 4)) % 2 ? 'mineLit' : 'mine');
-          if (firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 22)) {
-            this.netBurst(e.x, e.y);
-            e.destroy();
-            continue;
-          }
+          if (d.charge <= 0 && firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 44)) d.charge = MINE_FLASH;
+          if (d.charge > 0) {
+            d.charge -= dt * 1000;
+            e.setTexture(this.fuseLit(d, dt, 1 - d.charge / MINE_FLASH) ? 'mineLit' : 'mine');
+            if (d.charge <= 0 && firing) {
+              this.netBurst(e.x, e.y);
+              e.destroy();
+              continue;
+            }
+          } else e.setTexture(Math.floor(d.t * 4) % 2 ? 'mineLit' : 'mine');
           break;
         case 'pmine':
           // Drifts with the nebula until the ship comes close, then arms and bursts.
@@ -2169,6 +2185,13 @@ export class GameScene extends Phaser.Scene {
     if (drop && d.kind === 'spore') for (let i = 0; i < 3; i++) this.spawnEnemy('seeker', x + (i - 1) * 4, y);
     if (drop && d.kind === 'husk') for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
     if (d.kind === 'bomb') this.bombBurst(x, y);
+  }
+
+  // A lit fuse's flashing, which quickens from 5 to 25 flashes a second as
+  // `k` runs from 0 to 1. Returns whether this frame shows lit.
+  private fuseLit(d: EnemyData, dt: number, k: number) {
+    d.step += dt * (5 + 20 * Phaser.Math.Clamp(k, 0, 1));
+    return Math.floor(d.step * 2) % 2 === 1;
   }
 
   // A Trapper's net mine going off: an energy net that snares the ship if it is close.
