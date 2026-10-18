@@ -45,8 +45,8 @@ const SPRITES: Record<string, string[]> = {
   ],
   weaver: [
     '..G.....G..',
-    'G.RG...GR.G',
-    'GRORG.GRORG',
+    'G.RG.b.GR.G',
+    'GRORGYGRORG',
     'rRORRGRRORr',
     'rrOORKROOrr',
     'r..rrYrr..r',
