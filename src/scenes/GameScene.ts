@@ -2426,7 +2426,8 @@ export class GameScene extends Phaser.Scene {
                 max: this.maxHp,
                 heal: (n: number) => { this.health = Math.min(this.maxHp, this.health + n); },
               };
-              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair });
+              const first = !this.side && this.state.level === 1 && this.segment === 0;
+              this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair, first });
             });
           },
         });
