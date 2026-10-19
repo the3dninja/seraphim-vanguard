@@ -19,7 +19,7 @@ Playtest helpers (add to the end of the link, combine with `&`):
 - `?god`: your ship can't be destroyed.
 - `?rich`: tops your credits up to 5000 when you reach Base, for trying upgrades.
 - `?level=3`: sets your next mission to level 3 (any built level works) when you reach Base.
-- `?test`: combat test mode. Tap the gear button at the bottom to pause and switch looping enemy wave sequences on or off (they stack) and to put any weapon in slot 1 or 2 and set its level (1 to 5). The ship respawns with full health when destroyed, and nothing is saved or added to the Bestiary.
+- `?test`: combat test mode. Tap the gear button at the bottom to pause and switch looping enemy wave sequences on or off (they stack) and to put any weapon or gear in slot 1 or 2 and set weapon levels (1 to 5). The ship respawns with full health when destroyed, and nothing is saved or added to the Bestiary.
 
 For example `https://the3dninja.github.io/seraphim-vanguard/?god&rich&level=3`.
 

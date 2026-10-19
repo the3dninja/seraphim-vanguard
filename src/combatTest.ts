@@ -9,9 +9,9 @@ export const TEST_LEVEL: LevelDef = {
   name: 'COMBAT TEST', desc: '', node: '', theme: 'outpost', segments: [[]],
 };
 
-// Level 0 keeps level-specific tips quiet. Two weapon slots, no items or gear.
+// Level 0 keeps level-specific tips quiet. Two weapon and two gear slots, no items.
 export function testSave(): SaveData {
-  return { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], items: [] };
+  return { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], gear: [null, null], items: [] };
 }
 
 // Groupings taken from the levels' own wave scripts, a few kinds per sequence.

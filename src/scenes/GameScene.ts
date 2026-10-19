@@ -2388,6 +2388,7 @@ export class GameScene extends Phaser.Scene {
       waves: this.test,
       state: this.state,
       equip: (slot: number, id: WeaponId) => this.testEquip(slot, id),
+      equipGear: (slot: number, id: GearId) => this.testEquipGear(slot, id),
       setLevel: (id: WeaponId, lv: number) => { this.state.weaponLevels[id] = lv; this.fireTimers = []; this.volleys = []; },
       resume: () => { this.scene.stop('TestMenu'); this.scene.resume(); },
       quit: () => { this.scene.stop('TestMenu'); this.scene.start('Title'); },
@@ -2407,6 +2408,22 @@ export class GameScene extends Phaser.Scene {
     }
     this.fireTimers = [];
     this.volleys = [];
+    this.refreshHud();
+  }
+
+  // Gear goes in either slot the same way, and either slot can be emptied.
+  private testEquipGear(slot: number, id: GearId) {
+    const g = this.state.gear;
+    const other = 1 - slot;
+    if (g[slot] === id) g[slot] = null;
+    else {
+      if (g[other] === id) g[other] = g[slot];
+      g[slot] = id;
+    }
+    this.gearReadyAt = {};
+    this.maxHp = totalMaxHealth(this.state); // Hull Plating
+    this.health = this.maxHp;
+    this.setupGear();
     this.refreshHud();
   }
 
