@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, gearStats, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
+  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
@@ -91,10 +91,10 @@ const GEAR_KEYS = ['Q', 'E'];
 const ALL_TYPES: DType[] = ['kinetic', 'laser', 'plasma', 'ion', 'explosive'];
 // Ion Arc's numbers live in its Tuner values (WEAPONS.ion.tune).
 const ion = () => WEAPONS.ion.tune!;
-// s an Ion Arc bolt lasts, which sets its range (8% longer each level).
-const arcLife = (lv: number) => (ion().life / 1000) * (1 + 0.08 * (lv - 1));
+// s an Ion Arc bolt lasts, which sets its range.
+const arcLife = (lv: number) => atLv(ion().life, lv) / 1000;
 // Ion Arc stuns from level 3: ms of stun at each level.
-const ionStun = (lv: number) => (lv >= 3 ? ion().stun + (lv - 3) * ion().stunGain : 0);
+const ionStun = (lv: number) => atLv(ion().stun, lv, 3);
 const FLAK_FUSE = 0.42; // s before a flak shell bursts
 const BOMB_FUSE = 0.6; // s before a cluster bomblet goes off
 // A one-line radio call as each act 3 level starts.
@@ -1998,6 +1998,7 @@ export class GameScene extends Phaser.Scene {
         const b = this.shot(this.player.x + dx, this.player.y + (back ? 7 : -7), def.texture, deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
         if (def.fx) this.setFx(b, def.fx);
         if (splash) b.setData('splash', splash + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0));
+        if (stats.splashDamage) b.setData('splashDmg', stats.splashDamage * (charged ? 3 : 1));
         if (incend) { b.setData('incend', incend); this.shotInfo.get(b)!.incend = incend; }
         if (stun) b.setData('stun', stun);
         if (def.fx === 'pierce' || def.fx === 'rail') b.setData('hits', new Set());
@@ -2032,7 +2033,7 @@ export class GameScene extends Phaser.Scene {
         case 'latch': {
           // Missiles and Bio Seeker spores turn toward the nearest enemy.
           const tg = this.nearestTarget(b.x, b.y);
-          if (tg) this.steer(b, tg, (b.getData('fx') === 'homing' ? WEAPONS.homing.tune!.turn : 2) * dt);
+          if (tg) this.steer(b, tg, (b.getData('fx') === 'homing' ? atLv(WEAPONS.homing.tune!.turn, this.shotInfo.get(b)?.lv ?? 1) : 2) * dt);
           break;
         }
         case 'seek': {
@@ -2218,6 +2219,13 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, alpha: 0, scale: 1.4, duration: 100 + lv * 20, onComplete: () => ring.destroy() });
       this.sparks.explode(2 + lv, b.x, b.y);
     }
+    // What the hit does beyond its damage, read before the shot is destroyed
+    // below (destroying it clears its data).
+    const splash = b.getData('splash') as number | undefined;
+    const splashDmg = b.getData('splashDmg') as number | undefined;
+    const stun = b.getData('stun') as number | undefined;
+    const incend = b.getData('incend') as number | undefined;
+    const chain = fx === 'arc' || !!b.getData('chain');
     // Piercing shots hit each enemy once and fly on.
     const hits = b.getData('hits') as Set<unknown> | undefined;
     if (hits) {
@@ -2238,9 +2246,7 @@ export class GameScene extends Phaser.Scene {
       d.shieldImg = null;
       return;
     }
-    const stun = b.getData('stun') as number | undefined;
     if (stun && !ENEMY_STATS[d.kind].organic) d.stun = Math.max(d.stun, stun);
-    const incend = b.getData('incend') as number | undefined;
     if (incend) {
       const st = gearStats.incendiary(incend);
       if (st.burnTime) { d.burn = Math.max(d.burn, st.burnTime); d.burnDmg = st.burn; d.burnTick = Math.min(d.burnTick || 400, 400); }
@@ -2250,8 +2256,8 @@ export class GameScene extends Phaser.Scene {
     this.incendHit(b, dead ? null : e);
     if (fx === 'latch' && !dead) this.bioLatch(e, b);
     if (this.plasmaSplash(b, (b.x + e.x) / 2, (b.y + e.y) / 2) && !dead) this.plasmaFlash(e);
-    if (fx === 'arc' || b.getData('chain')) this.chainArc(e, dmg, dtype, (b.getData('stun') as number) ?? 0);
-    if (b.getData('splash')) this.splash(e.x, e.y, b.getData('splash') as number, dmg / 2, dtype, dead ? null : e);
+    if (chain) this.chainArc(e, dmg, dtype, stun ?? 0, lv);
+    if (splash) this.splash(e.x, e.y, splash, splashDmg ?? dmg / 2, dtype, dead ? null : e);
   }
 
   // Incendiary Ammo's scorch: extra damage on each hit, as plasma's share of it.
@@ -2288,7 +2294,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Bio Seeker: a spore that hits clings on and burns for a while. Each enemy
-  // (or the boss, null) holds level + 1 at most (with the Tuner's cling at 1);
+  // (or the boss, null) holds level + 1 at most (the Tuner's cling);
   // another knocks the oldest off.
   private bioLatch(e: Phaser.Physics.Arcade.Sprite | null, b: Phaser.GameObjects.Image) {
     const info = this.shotInfo.get(b);
@@ -2297,11 +2303,11 @@ export class GameScene extends Phaser.Scene {
     if (!anchor) return;
     const mine = this.latches.filter((l) => l.on === e);
     const t = WEAPONS.bio.tune!;
-    if (mine.length >= lv + t.cling) this.dropLatch(mine[0]);
+    if (mine.length >= Math.round(atLv(t.cling, lv))) this.dropLatch(mine[0]);
     const img = this.add.image(b.x, b.y, 'sporeshot').setDepth(11).setTint(0x58d854);
     this.latches.push({
-      on: e, ox: b.x - anchor.x, oy: b.y - anchor.y, img, left: t.burnTime + lv * t.burnGain, tick: 250,
-      dps: (info?.dmg ?? 1) * t.burn, lv,
+      on: e, ox: b.x - anchor.x, oy: b.y - anchor.y, img, left: atLv(t.burnTime, lv), tick: 250,
+      dps: (info?.dmg ?? 1) * atLv(t.burn, lv), lv,
     });
   }
 
@@ -2346,8 +2352,9 @@ export class GameScene extends Phaser.Scene {
 
   // Explosive splash: everything else within `r` takes `dmg`.
   private splash(x: number, y: number, r: number, dmg: number, dtype: DType, skip: unknown) {
-    const ring = this.add.circle(x, y, r, 0xf8b800, 0.35).setDepth(12);
-    this.tweens.add({ targets: ring, alpha: 0, duration: 160, onComplete: () => ring.destroy() });
+    // The ring shows exactly how far it reaches.
+    const ring = this.add.circle(x, y, r, 0xf8b800, 0.3).setStrokeStyle(1, 0xfcfcfc, 0.8).setDepth(12);
+    this.tweens.add({ targets: ring, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
     for (const o of this.enemies.getChildren().slice() as Phaser.Physics.Arcade.Sprite[]) {
       if (o === skip || !o.active || (o.getData('e') as EnemyData).cloaked) continue;
       if (Phaser.Math.Distance.Between(x, y, o.x, o.y) <= r) this.damageEnemy(o, dmg, dtype);
@@ -2365,10 +2372,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Ion Arc: lightning jumps from the target to the nearest enemies (two unless tuned).
-  private chainArc(from: Phaser.Physics.Arcade.Sprite, dmg: number, dtype: DType, stun: number) {
+  private chainArc(from: Phaser.Physics.Arcade.Sprite, dmg: number, dtype: DType, stun: number, lv: number) {
     let at = { x: from.x, y: from.y };
     const done = new Set<unknown>([from]);
-    const { jumps, jumpRange, jumpDamage } = ion();
+    const t = ion();
+    const [jumps, jumpRange, jumpDamage] = [Math.round(atLv(t.jumps, lv)), atLv(t.jumpRange, lv), atLv(t.jumpDamage, lv)];
     for (let jump = 0; jump < jumps; jump++) {
       const next = (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[])
         .filter((o) => o.active && !done.has(o) && !(o.getData('e') as EnemyData).cloaked

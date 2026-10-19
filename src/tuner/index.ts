@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { FONT } from '../config';
 import { TUNE_HISTORY, type TuneChange } from '../data/tuneHistory';
+import { atLv, MAX_WEAPON_LEVEL } from '../data/items';
 import { BY_PATH, CATS, ENTRIES, GAME_VALUES, PROPS, pathOf, type TuneCat, type TuneEntry } from './entries';
 
 // The Tuner (?tune, or with ?test): a page over the game for changing weapon
@@ -53,8 +54,11 @@ const CSS = `
 #tuner .card { border: 1px solid #3c3c3c; padding: 8px; margin-bottom: 8px; max-width: 520px; margin-inline: auto; }
 #tuner .card h2 { font-size: 10px; margin: 0 0 4px; font-weight: normal; color: #fc7460; }
 #tuner .desc { color: #bcbcbc; margin-bottom: 6px; }
-#tuner .row { display: flex; align-items: center; gap: 4px; padding: 4px 0; border-top: 1px solid #1c1c1c; }
-#tuner .row .lbl { flex: 1; color: #bcbcbc; }
+#tuner .stat { padding: 5px 0 3px; border-top: 1px solid #1c1c1c; }
+#tuner .stat .lbl { color: #bcbcbc; }
+#tuner .stat .lvls { color: #7c7c7c; }
+#tuner .row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+#tuner .row .lbl { flex: 1; color: #7c7c7c; }
 #tuner .row .game { display: block; color: #3cbcfc; }
 #tuner .row button { width: 28px; padding: 6px 0; }
 #tuner .row input { width: 64px; font: 11px ${FONT}; color: #fcfcfc; background: #000; border: 1px solid #7c7c7c;
@@ -82,12 +86,12 @@ export function installTuner(game: Phaser.Game) {
   for (const [path, v] of Object.entries(stored.applied)) {
     if (!BY_PATH.has(path) || GAME_VALUES.get(path) === v) delete stored.applied[path];
   }
-  stored.exports = stored.exports.filter((x) => x.changes.some((c) => GAME_VALUES.get(c.path) !== c.to));
+  stored.exports = stored.exports.filter((x) => x.changes.some((c) => BY_PATH.has(c.path) && GAME_VALUES.get(c.path) !== c.to));
   save(stored);
 
   // Put the live values to the game's, then the applied ones on top.
   const setLive = () => {
-    for (const [path, { entry, key }] of BY_PATH) entry.values[key] = stored.applied[path] ?? GAME_VALUES.get(path)!;
+    for (const [path, { entry, key, i }] of BY_PATH) entry.values[key][i] = stored.applied[path] ?? GAME_VALUES.get(path)!;
   };
   setLive();
 
@@ -188,42 +192,63 @@ export function installTuner(game: Phaser.Game) {
     const c = el('div', 'card');
     c.append(el('h2', '', e.name), el('div', 'desc', e.desc));
     for (const key of Object.keys(e.values)) {
-      const path = pathOf(e, key);
       const prop = PROPS[key] ?? { label: key.toUpperCase(), step: 1 };
-      const game0 = GAME_VALUES.get(path)!;
-      const row = el('div', 'row');
-      const lbl = el('div', 'lbl', prop.label);
-      const gameLbl = el('span', 'game');
-      lbl.append(gameLbl);
-      const input = el('input');
-      input.type = 'text';
-      input.inputMode = 'decimal';
-      const minus = el('button', '', '-');
-      const plus = el('button', '', '+');
-      const paint = () => {
-        const v = current(path);
-        if (document.activeElement !== input) input.value = fmt(v);
-        row.classList.toggle('draft', path in draft);
-        row.classList.toggle('tuned', !(path in draft) && path in stored.applied);
-        gameLbl.textContent = v !== game0 ? `GAME: ${fmt(game0)} (TAP TO RESET)` : '';
+      const from = prop.from ?? 1;
+      const stat = el('div', 'stat');
+      // What the pair works out to at each level, as it stands with edits.
+      const lvls = el('div', 'lvls');
+      const showLevels = () => {
+        const pair = [current(pathOf(e, key, 0)), current(pathOf(e, key, 1))] as [number, number];
+        const at = Array.from({ length: MAX_WEAPON_LEVEL }, (_, n) => fmt(atLv(pair, n + 1, from)));
+        lvls.textContent = `LV 1-5: ${at.join(' ')}`;
       };
-      const set = (v: number) => {
-        if (!Number.isFinite(v)) return;
-        v = Math.round(v * 1000) / 1000;
-        if (v === (stored.applied[path] ?? game0)) delete draft[path];
-        else draft[path] = v;
-        paint();
-        refreshFoot();
-      };
-      minus.addEventListener('click', () => set(current(path) - prop.step));
-      plus.addEventListener('click', () => set(current(path) + prop.step));
-      input.addEventListener('change', () => { set(parseFloat(input.value)); input.value = fmt(current(path)); });
-      gameLbl.addEventListener('click', () => set(game0));
-      paint();
-      row.append(lbl, minus, input, plus);
-      c.append(row);
+      stat.append(el('div', 'lbl', prop.label), lvls);
+      stat.append(
+        stepper(pathOf(e, key, 0), from > 1 ? `AT LV ${from}` : 'AT LV 1', prop.step, showLevels),
+        stepper(pathOf(e, key, 1), 'PER LV', prop.step, showLevels),
+      );
+      showLevels();
+      c.append(stat);
     }
     return c;
+  }
+
+  // One editable number: its name, - and + buttons, and the game's value under
+  // the name when it differs (tap it to go back).
+  function stepper(path: string, name: string, step: number, onChange: () => void) {
+    const game0 = GAME_VALUES.get(path)!;
+    const row = el('div', 'row');
+    const lbl = el('div', 'lbl', name);
+    const gameLbl = el('span', 'game');
+    lbl.append(gameLbl);
+    const input = el('input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    const minus = el('button', '', '-');
+    const plus = el('button', '', '+');
+    const paint = () => {
+      const v = current(path);
+      if (document.activeElement !== input) input.value = fmt(v);
+      row.classList.toggle('draft', path in draft);
+      row.classList.toggle('tuned', !(path in draft) && path in stored.applied);
+      gameLbl.textContent = v !== game0 ? `GAME: ${fmt(game0)} (TAP)` : '';
+    };
+    const set = (v: number) => {
+      if (!Number.isFinite(v)) return;
+      v = Math.round(v * 1000) / 1000;
+      if (v === (stored.applied[path] ?? game0)) delete draft[path];
+      else draft[path] = v;
+      paint();
+      onChange();
+      refreshFoot();
+    };
+    minus.addEventListener('click', () => set(current(path) - step));
+    plus.addEventListener('click', () => set(current(path) + step));
+    input.addEventListener('change', () => { set(parseFloat(input.value)); input.value = fmt(current(path)); });
+    gameLbl.addEventListener('click', () => set(game0));
+    paint();
+    row.append(lbl, minus, input, plus);
+    return row;
   }
 
   // The footer's count and buttons, without rebuilding the cards (and losing scroll).
@@ -259,7 +284,9 @@ export function installTuner(game: Phaser.Game) {
 
   const describe = (path: string) => {
     const at = BY_PATH.get(path);
-    return at ? `${at.entry.name}: ${(PROPS[at.key]?.label ?? at.key).toLowerCase()}` : path;
+    if (!at) return path;
+    const from = PROPS[at.key]?.from ?? 1;
+    return `${at.entry.name}: ${(PROPS[at.key]?.label ?? at.key).toLowerCase()}, ${at.i ? 'per lv' : `at lv ${from}`}`;
   };
   const exportText = (x: LocalExport) => [
     `TUNER EXPORT ${x.date}`,
