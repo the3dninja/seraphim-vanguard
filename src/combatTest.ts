@@ -9,9 +9,9 @@ export const TEST_LEVEL: LevelDef = {
   name: 'COMBAT TEST', desc: '', node: '', theme: 'outpost', segments: [[]],
 };
 
-// Level 0 keeps level-specific tips quiet. Two weapon and two gear slots, no items.
+// Level 0 keeps level-specific tips quiet. Two weapon and gear slots, three item slots.
 export function testSave(): SaveData {
-  return { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], gear: [null, null], items: [] };
+  return { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], gear: [null, null], items: [null, null, null] };
 }
 
 // Groupings taken from the levels' own wave scripts, a few kinds per sequence.
@@ -103,5 +103,8 @@ export class TestWaves {
   }
 }
 
-// The config button: bottom center, in line with the HUD's gear and item buttons.
-export const CONFIG_BOX = { x: 79, y: 294, size: 22 }; // top left, at W 180 x H 320
+// The two test buttons, crossed swords for waves and a ship for equipment:
+// bottom middle, between the HUD's gear and item buttons. Left edges, at W 180 x H 320.
+export type TestPanel = 'waves' | 'ship';
+export const TEST_BUTTONS = { y: 294, size: 22, x: { waves: 56, ship: 80 } as Record<TestPanel, number> };
+export const TEST_ICONS: Record<TestPanel, string> = { waves: 'iconSwords', ship: 'ship' };

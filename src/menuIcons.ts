@@ -118,6 +118,24 @@ const ICONS: Record<string, string[]> = {
     '................................',
     '................................',
   ],
+  // Combat test's waves button: two crossed swords (shown tinted flat yellow).
+  iconSwords: [
+    'Y.............Y',
+    'YY...........YY',
+    '.YY.........YY.',
+    '..YY.......YY..',
+    '...YY.....YY...',
+    '....YY...YY....',
+    '.....YY.YY.....',
+    '......YYY......',
+    '.....YY.YY.....',
+    '..Y.YY...YY.Y..',
+    '...YY.....YY...',
+    '..YYY.....YYY..',
+    '.YY..Y...Y..YY.',
+    'YY...........YY',
+    'Y.............Y',
+  ],
   // Options: a gear, drawn at half size and shown doubled.
   iconGear: [
     '......LLLL......',

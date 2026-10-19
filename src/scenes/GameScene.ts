@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, gearStats, stackLabel, type DType, type GearId, type WeaponId,
+  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, gearStats, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
@@ -22,7 +22,7 @@ import { Treasure } from '../treasure';
 import { Warps } from '../warp';
 import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
-import { CONFIG_BOX, TEST_LEVEL, TestWaves } from '../combatTest';
+import { TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
@@ -557,12 +557,15 @@ export class GameScene extends Phaser.Scene {
       this.gearButtons.push({ box, icon, cool });
     });
     const slots = this.state.items.length;
+    // Combat test's items never run out, so their buttons drop the count and
+    // narrow to leave room for the test buttons.
+    const iw = this.test ? 22 : 39;
     this.state.items.forEach((_it, i) => {
-      const x = W - 42 - (slots - 1 - i) * 42; // slot 1 on the left, like the Ship screen
-      const box = this.add.rectangle(x, H - 26, 39, 22, 0x000000).setOrigin(0).setDepth(900)
+      const x = W - iw - 3 - (slots - 1 - i) * (iw + 3); // slot 1 on the left, like the Ship screen
+      const box = this.add.rectangle(x, H - 26, iw, 22, 0x000000).setOrigin(0).setDepth(900)
         .setStrokeStyle(1, 0xfcfcfc).setInteractive();
       box.on('pointerdown', () => this.useItem(i));
-      const icon = this.add.image(x + 7, H - 15, 'icon_repair').setDepth(901);
+      const icon = this.add.image(x + (this.test ? 11 : 7), H - 15, 'icon_repair').setDepth(901);
       const count = text(this, x + 13, H - 19, '', COLOR.white).setDepth(901);
       this.itemButtons.push({ box, icon, count });
     });
@@ -586,7 +589,7 @@ export class GameScene extends Phaser.Scene {
     this.state.items.forEach((item, i) => {
       const b = this.itemButtons[i];
       b.icon.setVisible(!!item);
-      b.count.setText(item ? stackLabel(item) : '');
+      b.count.setText(item && !this.test ? stackLabel(item) : '');
       if (item) b.icon.setTexture(ITEMS[item.id].icon);
       b.box.setStrokeStyle(1, item ? 0xfcfcfc : 0x3c3c3c);
     });
@@ -675,6 +678,7 @@ export class GameScene extends Phaser.Scene {
         toast(this, 'IT WORKS BY ITSELF\nIF YOUR SHIP IS DESTROYED', H / 2 + 30, 1200);
         return;
     }
+    if (this.test) { this.refreshHud(); return; }
     item.count--;
     if (item.count <= 0) this.state.items[slot] = null;
     this.refreshHud();
@@ -2370,26 +2374,33 @@ export class GameScene extends Phaser.Scene {
 
   // --- Combat test --------------------------------------------------------------
 
-  // The config button pauses and opens the test menu (TestMenuScene), whose own
-  // config button resumes.
+  // The swords button (waves) and the ship button (equipment) each pause and
+  // open the test menu (TestMenuScene) on their panel; the same buttons there
+  // switch panels or resume.
   private setupTest() {
-    const { x, y, size } = CONFIG_BOX;
-    this.add.rectangle(x, y, size, size, 0x000000).setOrigin(0).setDepth(900).setStrokeStyle(1, 0xfcfcfc)
-      .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openTestMenu());
-    this.add.image(x + size / 2, y + size / 2, 'iconGear').setDepth(901);
-    this.time.delayedCall(600, () => this.blinkTip('TAP THE GEAR TO\nPICK WAVES AND WEAPONS'));
+    const { y, size } = TEST_BUTTONS;
+    (['waves', 'ship'] as TestPanel[]).forEach((panel) => {
+      const x = TEST_BUTTONS.x[panel];
+      this.add.rectangle(x, y, size, size, 0x000000).setOrigin(0).setDepth(900).setStrokeStyle(1, 0xfcfcfc)
+        .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openTestMenu(panel));
+      this.add.image(x + size / 2, y + size / 2, TEST_ICONS[panel]).setDepth(901).setTintFill(0xf8b800);
+    });
+    this.time.delayedCall(600, () => this.blinkTip('SWORDS: PICK WAVES\nSHIP: PICK LOADOUT'));
   }
 
-  private openTestMenu() {
+  private openTestMenu(panel: TestPanel) {
     if (this.scene.isPaused()) return;
     this.dragFrom = null;
     this.scene.pause();
     this.scene.launch('TestMenu', {
+      panel,
       waves: this.test,
       state: this.state,
       equip: (slot: number, id: WeaponId) => this.testEquip(slot, id),
       equipGear: (slot: number, id: GearId) => this.testEquipGear(slot, id),
+      equipItem: (slot: number, id: ItemId) => this.testEquipItem(slot, id),
       setLevel: (id: WeaponId, lv: number) => { this.state.weaponLevels[id] = lv; this.fireTimers = []; this.volleys = []; },
+      setGearLevel: (id: GearId, lv: number) => { this.state.gearLevels[id] = lv; this.testGearChanged(); },
       resume: () => { this.scene.stop('TestMenu'); this.scene.resume(); },
       quit: () => { this.scene.stop('TestMenu'); this.scene.start('Title'); },
     });
@@ -2420,10 +2431,26 @@ export class GameScene extends Phaser.Scene {
       if (g[other] === id) g[other] = g[slot];
       g[slot] = id;
     }
+    this.testGearChanged();
+  }
+
+  private testGearChanged() {
     this.gearReadyAt = {};
     this.maxHp = totalMaxHealth(this.state); // Hull Plating
     this.health = this.maxHp;
     this.setupGear();
+    this.refreshHud();
+  }
+
+  // Items fill their slot with a full stack, and don't run out in test mode.
+  private testEquipItem(slot: number, id: ItemId) {
+    const it = this.state.items;
+    const other = it.findIndex((x) => x?.id === id);
+    if (other === slot) it[slot] = null;
+    else {
+      if (other >= 0) it[other] = it[slot];
+      it[slot] = { id, count: ITEMS[id].cap };
+    }
     this.refreshHud();
   }
 
