@@ -22,6 +22,7 @@ import { Treasure } from '../treasure';
 import { Warps } from '../warp';
 import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
+import { CONFIG_BOX, TEST_LEVEL, TestWaves } from '../combatTest';
 import { starfield, text, toast } from '../ui';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
@@ -154,6 +155,7 @@ export class GameScene extends Phaser.Scene {
   private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private segBossDone = false; // this segment's mini boss is beaten
   private side: string | null = null; // the side mission being flown, if any
+  private test: TestWaves | null = null; // combat test mode (see combatTest.ts)
   private sideHaz!: SideHazards;
 
   phase: Phase = 'action';
@@ -227,11 +229,13 @@ export class GameScene extends Phaser.Scene {
 
   // `resume` comes from a Rewind Beacon: restart at a checkpoint instead of the level start.
   // `side` names a side mission to fly instead of the next level.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string }) {
+  // `test` flies combat test mode: no level script, waves come from its menu.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string; test?: boolean }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
     this.side = data.side ?? null;
-    this.level = (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
+    this.test = data.test ? new TestWaves() : null;
+    this.level = this.test ? TEST_LEVEL : (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
     this.checkpoint = data.resume ? { save: cloneSave(data.resume.save), segment: data.resume.segment } : { save: cloneSave(data.state), segment: 0 };
     this.rewound = !!data.resume;
     this.maxHp = totalMaxHealth(this.state);
@@ -355,6 +359,8 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.createHud();
+    this.events.off('resume');
+    if (this.test) { this.setupTest(); return; }
 
     const intro = [
       text(this, W / 2, H / 2 - 40, this.side ? 'SIDE MISSION' : `LEVEL ${this.state.level}`, this.side ? COLOR.cyan : COLOR.gray),
@@ -367,7 +373,6 @@ export class GameScene extends Phaser.Scene {
     if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
     if (equippedGear(this.state).some((g) => GEAR[g].active)) this.time.delayedCall(3000, () => this.tipOnce('gearbtn', 'TAP A GEAR BUTTON\nTO USE IT'));
 
-    this.events.off('resume');
     this.events.on('resume', () => this.afterVendor());
   }
 
@@ -621,7 +626,7 @@ export class GameScene extends Phaser.Scene {
 
   // Show a tip the first time something happens in a level.
   tipOnce(key: string, msg: string) {
-    if (this.tipsShown.has(key)) return;
+    if (this.test || this.tipsShown.has(key)) return;
     this.tipsShown.add(key);
     this.blinkTip(msg);
   }
@@ -2191,7 +2196,7 @@ export class GameScene extends Phaser.Scene {
     const d = e.getData('e') as EnemyData;
     this.sparks.explode(10, e.x, e.y);
     const stats = ENEMY_STATS[d.kind];
-    this.state.kills[d.kind] = (this.state.kills[d.kind] ?? 0) + 1;
+    if (!this.test) this.state.kills[d.kind] = (this.state.kills[d.kind] ?? 0) + 1;
     if (drop && Math.random() < stats.dropChance) this.dropCoin(e.x, e.y, Phaser.Math.Between(...stats.credits));
     const { x, y } = e;
     e.destroy();
@@ -2324,6 +2329,18 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
     this.bubble.setVisible(false);
     this.sats.forEach((sat) => sat.setVisible(false));
+    // Combat test: demigod. Blow up, then come straight back with full health.
+    if (this.test) {
+      this.time.delayedCall(900, () => {
+        this.health = this.maxHp;
+        this.invulnUntil = this.time.now + 1500;
+        this.phase = 'action';
+        this.player.setVisible(true);
+        this.sats.forEach((sat) => sat.setVisible(true));
+        this.refreshHud();
+      });
+      return;
+    }
     // A Rewind Beacon in an item slot restarts from the last vendor stop instead.
     if (this.state.items.some((it) => it?.id === 'rewind')) {
       const save = cloneSave(this.checkpoint.save);
@@ -2349,6 +2366,47 @@ export class GameScene extends Phaser.Scene {
     });
     // Credits and items earned this level are lost; replay from the start.
     this.time.delayedCall(3000, () => this.leaveTo('Base', this.startState));
+  }
+
+  // --- Combat test --------------------------------------------------------------
+
+  // The config button pauses and opens the test menu (TestMenuScene), whose own
+  // config button resumes.
+  private setupTest() {
+    const { x, y, size } = CONFIG_BOX;
+    this.add.rectangle(x, y, size, size, 0x000000).setOrigin(0).setDepth(900).setStrokeStyle(1, 0xfcfcfc)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openTestMenu());
+    this.add.image(x + size / 2, y + size / 2, 'iconGear').setDepth(901);
+    this.time.delayedCall(600, () => this.blinkTip('TAP THE GEAR TO\nPICK WAVES AND WEAPONS'));
+  }
+
+  private openTestMenu() {
+    if (this.scene.isPaused()) return;
+    this.dragFrom = null;
+    this.scene.pause();
+    this.scene.launch('TestMenu', {
+      waves: this.test,
+      state: this.state,
+      equip: (slot: number, id: WeaponId) => this.testEquip(slot, id),
+      resume: () => { this.scene.stop('TestMenu'); this.scene.resume(); },
+      quit: () => { this.scene.stop('TestMenu'); this.scene.start('Title'); },
+    });
+  }
+
+  // Puts a weapon in a slot. If the other slot has it, the two swap; picking
+  // the slot it's already in empties that slot (slot 1 always keeps one).
+  private testEquip(slot: number, id: WeaponId) {
+    const w = this.state.weapons;
+    const other = 1 - slot;
+    if (w[slot] === id) { if (slot === 1) w[1] = null; }
+    else {
+      if (w[other] === id) w[other] = w[slot];
+      w[slot] = id;
+      if (!w[0]) { w[0] = w[1]; w[1] = null; }
+    }
+    this.fireTimers = [];
+    this.volleys = [];
+    this.refreshHud();
   }
 
   // --- Boss ------------------------------------------------------------------
@@ -2719,7 +2777,7 @@ export class GameScene extends Phaser.Scene {
 
   // The Bestiary's log: a sighting the first time each kind shows up.
   private sighted(kind: string) {
-    if (!this.state.seen.includes(kind)) this.state.seen.push(kind);
+    if (!this.test && !this.state.seen.includes(kind)) this.state.seen.push(kind);
   }
 
   // Kills and sightings stick even when the ship is lost or rewinds.
@@ -2769,9 +2827,12 @@ export class GameScene extends Phaser.Scene {
     if (this.phase === 'action') {
       this.move(dt);
       this.autoFire(dt);
-      this.runWaves(dt);
-      this.runHazards(dt);
-      this.runWarps(dt);
+      if (this.test) this.test.update(dt, (w) => this.spawnWave(w));
+      else {
+        this.runWaves(dt);
+        this.runHazards(dt);
+        this.runWarps(dt);
+      }
     } else if (this.lingering) this.move(dt);
     this.updateShots(dt);
     this.updateEnemies(edt);
