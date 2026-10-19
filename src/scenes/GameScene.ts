@@ -2388,6 +2388,7 @@ export class GameScene extends Phaser.Scene {
       waves: this.test,
       state: this.state,
       equip: (slot: number, id: WeaponId) => this.testEquip(slot, id),
+      setLevel: (id: WeaponId, lv: number) => { this.state.weaponLevels[id] = lv; this.fireTimers = []; this.volleys = []; },
       resume: () => { this.scene.stop('TestMenu'); this.scene.resume(); },
       quit: () => { this.scene.stop('TestMenu'); this.scene.start('Title'); },
     });

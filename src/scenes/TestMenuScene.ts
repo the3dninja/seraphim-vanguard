@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { WEAPONS, type WeaponId } from '../data/items';
+import { MAX_WEAPON_LEVEL, WEAPONS, type WeaponId } from '../data/items';
+import { weaponLevel } from '../inventory';
 import { CONFIG_BOX, TEST_SEQUENCES, type TestWaves } from '../combatTest';
 import type { SaveData } from '../save';
 import { button, text } from '../ui';
@@ -9,6 +10,7 @@ interface TestMenuData {
   waves: TestWaves;
   state: SaveData;
   equip: (slot: number, id: WeaponId) => void;
+  setLevel: (id: WeaponId, level: number) => void;
   resume: () => void;
   quit: () => void;
 }
@@ -17,8 +19,9 @@ const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 const COLS = 6;
 const CELL = 26; // weapon buttons sit this far apart
 const GRID_X = (W - COLS * CELL) / 2;
-const GRID_Y = 150;
+const GRID_Y = 138;
 const ROW_H = 44; // room under each row for the slot picker
+const LEVEL_Y = 236; // the two slot rows with their level buttons
 const hexNum = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
 
 // Combat test's pause menu: wave sequence toggles, weapon picker, quit. Opened
@@ -28,6 +31,7 @@ export class TestMenuScene extends Phaser.Scene {
   private picker: Phaser.GameObjects.Container | null = null;
   private slotTags: Phaser.GameObjects.Text[] = [];
   private weaponName!: Phaser.GameObjects.Text;
+  private slotRows: { icon: Phaser.GameObjects.Image; levels: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text }[] }[] = [];
 
   constructor() { super('TestMenu'); }
 
@@ -35,6 +39,7 @@ export class TestMenuScene extends Phaser.Scene {
     this.d = data;
     this.picker = null;
     this.slotTags = [];
+    this.slotRows = [];
   }
 
   create() {
@@ -44,14 +49,15 @@ export class TestMenuScene extends Phaser.Scene {
     text(this, W / 2, 8, 'COMBAT TEST', COLOR.yellow).setOrigin(0.5, 0);
 
     text(this, 14, 24, 'WAVES', COLOR.gray);
-    TEST_SEQUENCES.forEach((seq, i) => this.toggle(14, 34 + i * 20, W - 28, 16, seq.name, i));
+    TEST_SEQUENCES.forEach((seq, i) => this.toggle(14, 34 + i * 18, W - 28, 15, seq.name, i));
 
     text(this, 14, GRID_Y - 12, 'WEAPONS', COLOR.gray);
     WEAPON_IDS.forEach((id, i) => this.weaponButton(id, GRID_X + (i % COLS) * CELL + 2, GRID_Y + Math.floor(i / COLS) * ROW_H));
-    this.weaponName = text(this, W / 2, GRID_Y + 2 * ROW_H - 4, '', COLOR.white).setOrigin(0.5, 0);
+    this.weaponName = text(this, W / 2, GRID_Y + 2 * ROW_H, '', COLOR.white).setOrigin(0.5, 0);
+    [0, 1].forEach((slot) => this.slotRow(slot, LEVEL_Y + slot * 20));
     this.refreshSlots();
 
-    button(this, 14, 258, W - 28, 18, 'QUIT TO MENU', () => this.d.quit(), COLOR.red);
+    button(this, 14, 276, W - 28, 16, 'QUIT TO MENU', () => this.d.quit(), COLOR.red);
 
     // The config button again, lit, in the same place: tap to resume.
     const { x, y, size } = CONFIG_BOX;
@@ -85,6 +91,27 @@ export class TestMenuScene extends Phaser.Scene {
     box.on('pointerdown', () => this.openPicker(id, x, y));
   }
 
+  // A slot's number, its weapon, and that weapon's level as buttons 1 to 5.
+  private slotRow(slot: number, y: number) {
+    text(this, 14, y + 4, `${slot + 1}`, COLOR.cyan);
+    const icon = this.add.image(32, y + 8, 'icon_pulse').setScale(2);
+    const levels = [];
+    for (let lv = 1; lv <= MAX_WEAPON_LEVEL; lv++) {
+      const x = 50 + (lv - 1) * 23;
+      const box = this.add.rectangle(x, y, 21, 16, 0x000000).setOrigin(0).setInteractive({ useHandCursor: true });
+      const label = text(this, x + 11, y + 4, `${lv}`).setOrigin(0.5, 0);
+      box.on('pointerdown', () => {
+        this.closePicker();
+        const id = this.d.state.weapons[slot];
+        if (!id) return;
+        this.d.setLevel(id, lv);
+        this.refreshSlots();
+      });
+      levels.push({ box, label });
+    }
+    this.slotRows.push({ icon, levels });
+  }
+
   // Slot buttons 1 and 2 under the tapped weapon.
   private openPicker(id: WeaponId, x: number, y: number) {
     this.closePicker();
@@ -113,6 +140,16 @@ export class TestMenuScene extends Phaser.Scene {
       const id = t.getData('id') as WeaponId;
       t.setText(w[0] === id ? '1' : w[1] === id ? '2' : '');
     }
-    this.weaponName.setText(`1 ${w[0] ? WEAPONS[w[0]].name : '-'}\n2 ${w[1] ? WEAPONS[w[1]].name : '-'}`).setAlign('center');
+    this.slotRows.forEach((row, slot) => {
+      const id = w[slot];
+      row.icon.setVisible(!!id);
+      if (id) row.icon.setTexture(WEAPONS[id].icon);
+      const cur = id ? weaponLevel(this.d.state, id) : 0;
+      row.levels.forEach(({ box, label }, i) => {
+        const c = !id ? COLOR.dim : i + 1 === cur ? COLOR.yellow : COLOR.gray;
+        box.setStrokeStyle(1, hexNum(c)).setFillStyle(i + 1 === cur ? 0x3c2800 : 0x000000);
+        label.setColor(c);
+      });
+    });
   }
 }
