@@ -74,7 +74,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   spread: {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
-    tune: { damage: 1, growth: 0.25, interval: 340, faster: 30, angle: 14, speed: 300 },
+    tune: { damage: 1, growth: 0.25, interval: 400, faster: 50, angle: 14, speed: 250 },
     stats(lv) {
       const t = this.tune!;
       return {
@@ -97,9 +97,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   homing: {
     name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
-    speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
+    speed: 150, fx: 'homing', splash: 30, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
-    tune: { damage: 2.5, growth: 0.75, interval: 720, interval3: 620, splash: 12, splashGain: 3, speed: 150, turn: 4 },
+    tune: { damage: 2.5, growth: 0.75, interval: 720, interval3: 620, splash: 30, splashGain: 5, speed: 150, turn: 4 },
     stats(lv) {
       const t = this.tune!;
       return {
