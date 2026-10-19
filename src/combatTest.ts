@@ -1,3 +1,4 @@
+import type { ItemId } from './data/items';
 import type { LevelDef, Wave } from './data/levels';
 import { newSave, type SaveData } from './save';
 
@@ -108,3 +109,10 @@ export class TestWaves {
 export type TestPanel = 'waves' | 'ship';
 export const TEST_BUTTONS = { y: 294, size: 22, x: { waves: 56, ship: 80 } as Record<TestPanel, number> };
 export const TEST_ICONS: Record<TestPanel, string> = { waves: 'iconSwords', ship: 'ship' };
+
+// Items never run out in test mode, so each waits this long (ms) before it can
+// be used again: about as long as it lasts, or a few seconds for one-shot ones.
+export const ITEM_COOLDOWN: Record<ItemId, number> = {
+  repair: 3000, fullrepair: 6000, shield: 7000, overdrive: 10000, nova: 6000, cluster: 2500, emp: 5000,
+  warp: 7000, decoy: 6000, booster: 3000, drone: 20000, rewind: 1000,
+};

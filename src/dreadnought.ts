@@ -65,6 +65,10 @@ export class Dreadnought {
   private get armed() { return this.turrets.some((p) => p.hp > 0); }
   private get angry() { return this.bridge.hp < this.bridge.max / 2; }
 
+  // Where Bio Seeker spores cling: the middle of the boss. (No aimPoint: homing
+  // shots fly on at whatever part is under them.)
+  center() { return this.dead ? null : { x: this.x, y: this.y }; }
+
   healthFraction() {
     const parts = [...this.turrets, this.bridge];
     return parts.reduce((n, p) => n + Math.max(0, p.hp), 0) / parts.reduce((n, p) => n + p.max, 0);
