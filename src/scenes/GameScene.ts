@@ -2539,7 +2539,7 @@ export class GameScene extends Phaser.Scene {
       }
       glow.setTexture(e.texture.key, e.frame.name).setPosition(e.x, e.y).setFlip(e.flipX, e.flipY)
         .setRotation(e.rotation).setScale(e.scaleX, e.scaleY).setVisible(e.visible && !d.cloaked)
-        .setTintFill(this.canRam(d) ? 0x00e8d8 : 0xe45c10).setAlpha(0.5);
+        .setTintFill(this.canRam(d) ? 0x00e8d8 : 0xe45c10).setAlpha(0.75);
     }
   }
 
