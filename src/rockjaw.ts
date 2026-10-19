@@ -77,6 +77,10 @@ export class Rockjaw {
   private get armored() { return this.plates.some((p) => p.hp > 0); }
 
   // The health bar is the core; the plates have their own armor bar under it.
+  // Where Bio Seeker spores cling: the middle of the boss. (No aimPoint: homing
+  // shots fly on at whatever part is under them.)
+  center() { return this.dead ? null : { x: this.x, y: this.y }; }
+
   healthFraction() { return Math.max(0, this.core.hp) / this.core.max; }
 
   armorFraction() {

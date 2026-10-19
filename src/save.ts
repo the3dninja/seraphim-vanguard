@@ -37,6 +37,7 @@ function migrate(data: any): SaveData | null {
     const { gearSlots, ...rest } = data;
     const out = { ...newSave(), ...rest };
     if (!Array.isArray(data.gear)) out.gear = Array(gearSlots ?? 0).fill(null);
+    rearToGear(out);
     return out;
   }
   if (data?.v === 1) {
@@ -54,6 +55,27 @@ export function loadSave(): SaveData | null {
     return migrate(JSON.parse(raw));
   } catch {
     return null;
+  }
+}
+
+// Rear Guard was a weapon and is now gear: an equipped one goes to storage
+// (where its id now reads as gear), and its level carries over.
+function rearToGear(s: SaveData) {
+  const w = s.weapons as (string | null)[];
+  const i = w.indexOf('rear');
+  if (i >= 0) {
+    w[i] = null;
+    s.storage.push('rear');
+    // Slot 1 always holds a weapon: move a later one up, or fall back to the Pulse Blaster.
+    if (!w[0]) {
+      const j = w.findIndex((x) => !!x);
+      if (j > 0) { w[0] = w[j]; w[j] = null; } else w[0] = 'pulse';
+    }
+  }
+  const lv = (s.weaponLevels as Record<string, number>).rear;
+  if (lv) {
+    delete (s.weaponLevels as Record<string, number>).rear;
+    s.gearLevels.rear = lv;
   }
 }
 

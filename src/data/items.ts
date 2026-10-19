@@ -1,11 +1,11 @@
 // Prices and stats are placeholders for playtesting, not final numbers.
 
 export type WeaponId = 'pulse' | 'spread' | 'twin' | 'homing' | 'plasma' | 'ion' | 'wave' | 'rail' | 'flak'
-  | 'side' | 'rear' | 'bio';
+  | 'side' | 'bio';
 export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' | 'cluster' | 'emp' | 'warp'
   | 'decoy' | 'booster' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
-  | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner';
+  | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear';
 export type KitId = 'wkit' | 'gkit';
 
 // Every weapon deals one damage type. Enemies take double damage from types
@@ -21,8 +21,9 @@ export interface Shot { dx: number; deg: number } // x offset from the nose, deg
 // homing steers at the nearest enemy, pierce passes through enemies, arc
 // chains to nearby enemies on a hit and fades at short range, wave weaves and
 // passes through cover, rail charges then fires a fast piercing lance, flak
-// bursts into shrapnel partway up, burn sets the target burning.
-export type WeaponFx = 'homing' | 'pierce' | 'arc' | 'wave' | 'rail' | 'flak' | 'burn';
+// bursts into shrapnel partway up, latch homes slowly and clings to what it
+// hits, burning it, seek steers only at enemies in a cone ahead of the shot.
+export type WeaponFx = 'homing' | 'pierce' | 'arc' | 'wave' | 'rail' | 'flak' | 'latch' | 'seek';
 
 export interface WeaponDef {
   name: string;
@@ -39,7 +40,8 @@ export interface WeaponDef {
   splash?: number; // explosive splash radius in px
   // Stats at each upgrade level, 1 to 5. Damage rises every level; levels 3
   // and 5 also bring the weapon's signature bump.
-  stats: (level: number) => { interval: number; shots: Shot[]; damage: number };
+  // `splash` overrides the fixed splash radius when it grows with level.
+  stats: (level: number) => { interval: number; shots: Shot[]; damage: number; splash?: number };
 }
 
 export const MAX_WEAPON_LEVEL = 5;
@@ -68,9 +70,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   spread: {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
-    desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN.',
+    desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
     stats: (lv) => ({
-      interval: lv >= 3 ? 220 : 260,
+      interval: 340 - (lv - 1) * 30,
       shots: lv >= 5 ? fan(-28, -14, 0, 14, 28) : fan(-14, 0, 14),
       damage: levelDamage(1, lv),
     }),
@@ -87,11 +89,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   homing: {
     name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
-    speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND SPLASH. LOW FIRE RATE.',
+    speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
+    // Damage climbs faster than other weapons (75% a level) and the blast grows.
     stats: (lv) => ({
       interval: lv >= 3 ? 620 : 720,
       shots: lv >= 5 ? fan(-30, 0, 30) : lv >= 3 ? fan(-25, 25) : fan(0),
-      damage: levelDamage(2.5, lv),
+      damage: 2.5 * (1 + 0.75 * (lv - 1)),
+      splash: 12 + (lv - 1) * 3,
     }),
   },
   plasma: {
@@ -105,7 +109,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   ion: {
     name: 'ION ARC', price: 320, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
-    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS.',
+    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. STUNS FROM LV 3.',
     stats: (lv) => ({
       interval: lv >= 3 ? 240 : 300,
       shots: lv >= 5 ? fan(-10, 0, 10) : fan(0),
@@ -132,7 +136,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   flak: {
     name: 'FLAK CANNON', price: 270, score: 7, icon: 'icon_flak', texture: 'flak', dtype: 'explosive', where: 'level', from: 8,
-    speed: 220, fx: 'flak', desc: 'EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS.',
+    speed: 220, fx: 'flak', desc: 'EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS. AT LV 5 A DIRECT HIT BURSTS TOO.',
     stats: (lv) => ({
       interval: lv >= 3 ? 560 : 650,
       shots: lv >= 5 ? fan(-6, 6) : fan(0),
@@ -140,28 +144,20 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     }),
   },
   side: {
-    name: 'SIDE WINDERS', price: 170, score: 3, icon: 'icon_side', texture: 'sidebolt', dtype: 'kinetic', where: 'level', from: 4,
-    desc: 'KINETIC. FIRES LEFT AND RIGHT, NOT FORWARD. HITS FLANKERS.',
+    name: 'SIDE WINDERS', price: 170, score: 3, icon: 'icon_side', texture: 'sidemissile', dtype: 'explosive', where: 'level', from: 4,
+    speed: 260, fx: 'seek', desc: 'EXPLOSIVE. FAST LITTLE MISSILES OUT TO THE SIDES THAT SEEK ENEMIES THERE. TINY BLAST.',
     stats: (lv) => ({
-      interval: lv >= 3 ? 165 : 200,
+      interval: lv >= 3 ? 260 : 300,
       shots: lv >= 5 ? fan(-90, -60, 60, 90) : fan(-90, 90),
       damage: levelDamage(1, lv),
-    }),
-  },
-  rear: {
-    name: 'REAR GUARD', price: 180, score: 4, icon: 'icon_rear', texture: 'laser', dtype: 'laser', where: 'level', from: 6,
-    speed: 360, desc: 'LASER. FIRES BACKWARD AT ENEMIES BELOW. PAIRS WITH ANOTHER WEAPON.',
-    stats: (lv) => ({
-      interval: lv >= 3 ? 150 : 180,
-      shots: lv >= 5 ? fan(165, 180, 195) : fan(180),
-      damage: levelDamage(1, lv),
+      splash: 5 + lv,
     }),
   },
   bio: {
     name: 'BIO SEEKER', price: 380, score: 9, icon: 'icon_bio', texture: 'sporeshot', dtype: 'plasma', where: 'base', from: 11,
-    speed: 160, fx: 'burn', desc: 'PLASMA. BURNING SPORES. MORE AS IT LEVELS. GREAT VS THE HOLLOW.',
+    speed: 160, fx: 'latch', desc: 'PLASMA. SEEKING SPORES THAT CLING ON AND BURN. MORE CLING AS IT LEVELS. GREAT VS THE HOLLOW.',
     // Grows faster than other weapons: 35% more damage a level, a second spore
-    // at level 3 and a third at level 5.
+    // at level 3 and a third at level 5. Spores cling and burn (see bioLatch).
     stats: (lv) => ({
       interval: lv >= 4 ? 400 : lv >= 3 ? 440 : 500,
       shots: lv >= 5 ? fan(-16, 0, 16) : lv >= 3 ? fan(-10, 10) : fan(0),
@@ -174,7 +170,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   repair: { name: 'REPAIR KIT', price: 15, icon: 'icon_repair', cap: 3, desc: 'RESTORES 2 HEALTH.' },
   shield: { name: 'SHIELD CELL', price: 30, icon: 'icon_shield', cap: 2, desc: 'BLOCKS ALL DAMAGE FOR 5 SECONDS.' },
   overdrive: { name: 'OVERDRIVE CELL', price: 20, icon: 'icon_overdrive', cap: 3, desc: 'DOUBLE FIRE RATE FOR 8 SECONDS.' },
-  cluster: { name: 'CLUSTER BOMB', price: 45, icon: 'icon_cluster', cap: 2, desc: 'DROPS 5 BOMBLETS IN A CONE AHEAD.' },
+  cluster: { name: 'CLUSTER BOMB', price: 45, icon: 'icon_cluster', cap: 2, desc: 'DROPS 5 HEAVY BOMBLETS IN A CONE AHEAD. HALF DAMAGE TO BOSSES.' },
   emp: { name: 'EMP PULSE', price: 50, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 3 SECONDS.' },
   decoy: { name: 'DECOY FLARE', price: 25, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.' },
   booster: { name: 'CREDIT BOOSTER', price: 60, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.' },
@@ -243,7 +239,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   afterburner: {
     name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
-    desc: 'TAP: A SPEED BOOST. RAMMING LIGHT ENEMIES WHILE IT BURNS DESTROYS THEM.', levelUp: 'LONGER BURN, HARDER RAM.',
+    desc: 'TAP: A SPEED BOOST. RAMMING LIGHT ENEMIES WHILE IT BURNS DESTROYS THEM.', levelUp: 'LONGER BURN, HARDER RAM. RAMS BIG SHIPS AT LV 5.',
   },
   roll: {
     name: 'BARREL ROLL', price: 420, score: 7, icon: 'icon_roll', from: 10, where: 'level', active: true,
@@ -255,11 +251,11 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   antimissile: {
     name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
-    desc: 'A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU.', levelUp: 'FASTER, WIDER. 2 TARGETS AT LV 5.',
+    desc: 'A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU, LEVEL AND AHEAD FIRST.', levelUp: 'FASTER, WIDER. ARCS ON TO A 2ND AT LV 5.',
   },
   incendiary: {
     name: 'INCENDIARY AMMO', price: 400, score: 6, icon: 'icon_incendiary', from: 9, where: 'base',
-    desc: 'AUGMENT. KINETIC WEAPONS ALSO SET TARGETS BURNING (PLASMA).', levelUp: 'HOTTER BURN.',
+    desc: 'AUGMENT. KINETIC SHOTS GLOW HOT AND SCORCH WHAT THEY HIT. FROM LV 3 THEY SET IT BURNING.', levelUp: 'HOTTER. BURNS AT LV 3, LONGER AT 4 AND 5.',
   },
   ioncoat: {
     name: 'ION COATING', price: 450, score: 7, icon: 'icon_ioncoat', from: 9, where: 'level',
@@ -272,6 +268,10 @@ export const GEAR: Record<GearId, GearDef> = {
   overcharge: {
     name: 'OVERCHARGER', price: 550, score: 9, icon: 'icon_overcharge', from: 11, where: 'level',
     desc: 'AUGMENT. EVERY 5TH VOLLEY IS A CHARGED SHOT WITH TRIPLE DAMAGE.', levelUp: 'EVERY 4TH AT LV 3, EVERY 3RD AT LV 5.',
+  },
+  rear: {
+    name: 'REAR GUARD', price: 320, score: 4, icon: 'icon_rear', from: 6, where: 'level',
+    desc: 'THE WEAPON IN THE SAME NUMBERED SLOT ALSO FIRES BACKWARD.', levelUp: 'THE BACKWARD SHOTS HIT HARDER.',
   },
   scanner: {
     name: 'TARGET SCANNER', price: 300, score: 5, icon: 'icon_scanner', from: 9, where: 'base',
@@ -292,11 +292,13 @@ export const gearStats = {
   roll: (lv: number) => ({ cooldown: 3600 - (lv - 1) * 250, spin: 520 + lv * 80 }),
   burst: (lv: number) => ({ cooldown: 5000 - (lv - 1) * 500, shots: 12 + (lv - 1) * 2, damage: 1 + (lv - 1) * 0.2 }),
   antimissile: (lv: number) => ({ interval: 900 - (lv - 1) * 120, radius: 40 + lv * 4, targets: lv >= 5 ? 2 : 1 }),
-  incendiary: (lv: number) => ({ burn: 0.3 + lv * 0.1 }),
+  // Levels 1 and 2 scorch (extra plasma damage on the hit); from 3 the hit also burns, longer each level.
+  incendiary: (lv: number) => ({ scorch: 0.2 + lv * 0.1, burn: 0.3 + lv * 0.1, burnTime: lv >= 3 ? 1000 + (lv - 2) * 1000 : 0 }),
   ioncoat: (lv: number) => ({ stun: (lv - 1) * 150 }),
   shaped: (lv: number) => ({ splash: lv * 2 }),
   overcharge: (lv: number) => ({ every: lv >= 5 ? 3 : lv >= 3 ? 4 : 5 }),
   scanner: (lv: number) => ({ bonus: 0.15 + (lv - 1) * 0.05 }),
+  rear: (lv: number) => ({ damage: 0.5 + (lv - 1) * 0.125 }), // share of the paired weapon's damage
 };
 
 export const isWeapon = (id: string): id is WeaponId => id in WEAPONS;

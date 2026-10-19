@@ -151,6 +151,7 @@ export const SPRITES3: Record<string, string[]> = {
   flak: ['.YY.', 'YWWY', 'YWWY', '.YY.'],
   shrap: ['YO', 'OY'],
   sidebolt: ['W', 'L', 'L'],
+  sidemissile: ['W', 'L', 'L', 'Y'], // Side Winder missile: thin, with a hot tail
   sporeshot: ['.TN.', 'TWTN', 'NTTN', '.NN.'],
   bomblet: ['.GG.', 'GDDG', 'GDRG', '.GG.'],
   allyion: ['C', 'A', 'C'],

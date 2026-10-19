@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { clearSave, loadSave, newSave } from '../save';
 import { ask, button, starfield, text } from '../ui';
+import { testSave } from '../combatTest';
+
+let testJumpDone = false; // ?test opens combat test once; quitting it comes back here
 
 export class TitleScene extends Phaser.Scene {
   private scroll!: ReturnType<typeof starfield>;
@@ -17,6 +20,16 @@ export class TitleScene extends Phaser.Scene {
     text(this, W / 2, 112, 'VANGUARD', COLOR.cyan, 16).setOrigin(0.5);
     const ship = this.add.image(W / 2, 170, 'ship').setScale(2);
     this.tweens.add({ targets: ship, y: 165, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+
+    // ?test: combat test mode, straight away the first time, then from a button.
+    if (new URLSearchParams(location.search).has('test')) {
+      if (!testJumpDone) {
+        testJumpDone = true;
+        this.scene.start('Game', { state: testSave(), test: true });
+        return;
+      }
+      button(this, 30, 270, 120, 22, 'COMBAT TEST', () => this.go('Game', { state: testSave(), test: true }), COLOR.yellow);
+    }
 
     const save = loadSave();
     if (save) {
