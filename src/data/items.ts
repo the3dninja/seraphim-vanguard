@@ -41,7 +41,10 @@ export interface WeaponDef {
   // Stats at each upgrade level, 1 to 5. Damage rises every level; levels 3
   // and 5 also bring the weapon's signature bump.
   // `splash` overrides the fixed splash radius when it grows with level.
-  stats: (level: number) => { interval: number; shots: Shot[]; damage: number; splash?: number };
+  stats: (this: WeaponDef, level: number) => { interval: number; shots: Shot[]; damage: number; splash?: number; speed?: number };
+  // Numbers the Tuner (?tune) can change while playing. Where a weapon has
+  // these, its stats read them, so changing one changes the weapon.
+  tune?: Record<string, number>;
 }
 
 export const MAX_WEAPON_LEVEL = 5;
@@ -71,11 +74,16 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   spread: {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
-    stats: (lv) => ({
-      interval: 340 - (lv - 1) * 30,
-      shots: lv >= 5 ? fan(-28, -14, 0, 14, 28) : fan(-14, 0, 14),
-      damage: levelDamage(1, lv),
-    }),
+    tune: { damage: 1, growth: 0.25, interval: 340, faster: 30, angle: 14, speed: 300 },
+    stats(lv) {
+      const t = this.tune!;
+      return {
+        interval: t.interval - (lv - 1) * t.faster,
+        shots: lv >= 5 ? fan(-2 * t.angle, -t.angle, 0, t.angle, 2 * t.angle) : fan(-t.angle, 0, t.angle),
+        damage: t.damage * (1 + t.growth * (lv - 1)),
+        speed: t.speed,
+      };
+    },
   },
   twin: {
     name: 'TWIN LASER', price: 150, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
@@ -91,12 +99,17 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
     speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
-    stats: (lv) => ({
-      interval: lv >= 3 ? 620 : 720,
-      shots: lv >= 5 ? fan(-30, 0, 30) : lv >= 3 ? fan(-25, 25) : fan(0),
-      damage: 2.5 * (1 + 0.75 * (lv - 1)),
-      splash: 12 + (lv - 1) * 3,
-    }),
+    tune: { damage: 2.5, growth: 0.75, interval: 720, interval3: 620, splash: 12, splashGain: 3, speed: 150, turn: 4 },
+    stats(lv) {
+      const t = this.tune!;
+      return {
+        interval: lv >= 3 ? t.interval3 : t.interval,
+        shots: lv >= 5 ? fan(-30, 0, 30) : lv >= 3 ? fan(-25, 25) : fan(0),
+        damage: t.damage * (1 + t.growth * (lv - 1)),
+        splash: t.splash + (lv - 1) * t.splashGain,
+        speed: t.speed,
+      };
+    },
   },
   plasma: {
     name: 'PLASMA LOBBER', price: 280, score: 5, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
@@ -110,11 +123,19 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   ion: {
     name: 'ION ARC', price: 320, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
     speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. STUNS FROM LV 3.',
-    stats: (lv) => ({
-      interval: lv >= 3 ? 240 : 300,
-      shots: lv >= 5 ? fan(-10, 0, 10) : fan(0),
-      damage: levelDamage(1.4, lv),
-    }),
+    // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
+    tune: {
+      damage: 1.4, growth: 0.25, interval: 300, interval3: 240, jumps: 2, jumpRange: 46, jumpDamage: 0.7,
+      stun: 300, stunGain: 150, life: 320,
+    },
+    stats(lv) {
+      const t = this.tune!;
+      return {
+        interval: lv >= 3 ? t.interval3 : t.interval,
+        shots: lv >= 5 ? fan(-10, 0, 10) : fan(0),
+        damage: t.damage * (1 + t.growth * (lv - 1)),
+      };
+    },
   },
   wave: {
     name: 'WAVE BEAM', price: 250, score: 5, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
@@ -158,11 +179,15 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     speed: 160, fx: 'latch', desc: 'PLASMA. SEEKING SPORES THAT CLING ON AND BURN. MORE CLING AS IT LEVELS. GREAT VS THE HOLLOW.',
     // Grows faster than other weapons: 35% more damage a level, a second spore
     // at level 3 and a third at level 5. Spores cling and burn (see bioLatch).
-    stats: (lv) => ({
-      interval: lv >= 4 ? 400 : lv >= 3 ? 440 : 500,
-      shots: lv >= 5 ? fan(-16, 0, 16) : lv >= 3 ? fan(-10, 10) : fan(0),
-      damage: 1.1 * (1 + 0.35 * (lv - 1)),
-    }),
+    tune: { damage: 1.1, growth: 0.35, interval: 500, interval3: 440, interval4: 400, burn: 1.1, burnTime: 1500, burnGain: 500, cling: 1 },
+    stats(lv) {
+      const t = this.tune!;
+      return {
+        interval: lv >= 4 ? t.interval4 : lv >= 3 ? t.interval3 : t.interval,
+        shots: lv >= 5 ? fan(-16, 0, 16) : lv >= 3 ? fan(-10, 10) : fan(0),
+        damage: t.damage * (1 + t.growth * (lv - 1)),
+      };
+    },
   },
 };
 
