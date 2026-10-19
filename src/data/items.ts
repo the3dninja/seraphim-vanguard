@@ -107,10 +107,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   homing: {
     name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
-    speed: 150, fx: 'homing', splash: 30, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
+    speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
     tune: {
-      damage: [2.5, 1.875], interval: [720, -25], splash: [30, 5], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
+      damage: [2.5, 1.875], interval: [720, -25], splash: [12, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
     },
     stats(lv) {
       const t = this.tune!;

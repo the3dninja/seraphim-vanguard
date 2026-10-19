@@ -10,8 +10,7 @@ export const TUNE_HISTORY: TuneRevision[] = [
   {
     n: 1, date: '2026-10-19',
     changes: [
-      { path: 'weapons.homing.splash', from: 12, to: 30 },
-      { path: 'weapons.homing.splash.perLv', from: 3, to: 5 },
+      { path: 'weapons.homing.splash.perLv', from: 3, to: 2 },
       { path: 'weapons.spread.interval.perLv', from: -30, to: -50 },
       { path: 'weapons.spread.interval', from: 340, to: 400 },
       { path: 'weapons.spread.speed', from: 300, to: 250 },
