@@ -31,6 +31,7 @@ export interface TuneEntry {
   id: string;
   name: string;
   desc: string;
+  image?: { key: string; tint?: number }; // its in-game look: a texture, tinted as in the game
   flat: FlatValue[];
   taken: TakenTable[];
   values: Record<string, Tuned>; // the live numbers the game reads: [at level 1, change per level]
@@ -124,12 +125,12 @@ const words = (k: string) => k.replace(/([A-Z])/g, ' $1').toUpperCase();
 const TAKEN_LABEL = 'DAMAGE TAKEN % BY TYPE (100 NORMAL, 200 DOUBLE, 50 HALF, 0 IMMUNE)';
 
 const weapons: TuneEntry[] = (Object.keys(WEAPONS) as WeaponId[]).map((id) => ({
-  cat: 'weapons', id, name: WEAPONS[id].name, desc: WEAPONS[id].desc, flat: [price(WEAPONS[id])], taken: [],
+  cat: 'weapons', id, name: WEAPONS[id].name, desc: WEAPONS[id].desc, image: { key: WEAPONS[id].icon }, flat: [price(WEAPONS[id])], taken: [],
   values: WEAPONS[id].tune ?? {}, levels: WEAPONS[id].levels ?? {},
 }));
 
 const gear: TuneEntry[] = (Object.keys(GEAR) as GearId[]).map((id) => ({
-  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, flat: [price(GEAR[id])], taken: [],
+  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id])], taken: [],
   values: GEAR_TUNE[id].tune, levels: GEAR_TUNE[id].levels ?? {},
 }));
 
@@ -138,28 +139,31 @@ const items: TuneEntry[] = [
     const def = ITEMS[id];
     const tune = def.tune ?? {};
     return {
-      cat: 'items', id, name: def.name, desc: def.desc, taken: [], values: {}, levels: {},
+      cat: 'items', id, name: def.name, desc: def.desc, image: { key: def.icon }, taken: [], values: {}, levels: {},
       flat: [price(def), ...Object.keys(tune).map((key) => ({
         key, ...(ITEM_PROPS[`${id}.${key}`] ?? ITEM_PROPS[key] ?? { label: key.toUpperCase(), step: 1 }), obj: tune, prop: key,
       }))],
     };
   }),
   ...(Object.keys(KITS) as KitId[]).map((id): TuneEntry => ({
-    cat: 'items', id, name: KITS[id].name, desc: KITS[id].desc, flat: [price(KITS[id])], taken: [], values: {}, levels: {},
+    cat: 'items', id, name: KITS[id].name, desc: KITS[id].desc, image: { key: KITS[id].icon }, flat: [price(KITS[id])], taken: [], values: {}, levels: {},
   })),
 ];
 
 // Names and write-ups from the Bestiary, plus the shot-down hazards it leaves out.
 const BEAST = new Map(BESTIARY.flatMap((c) => c.entries).map((b) => [b.id as string, b]));
-const EXTRA: Record<string, { name: string; desc: string }> = {
+const EXTRA: Record<string, { name: string; desc: string; texture?: string; tint?: number }> = {
   mine: { name: 'NET MINE', desc: 'DROPPED BY TRAPPERS. A NET SLOWS YOUR SHIP.' },
   bomb: { name: 'BOMB', desc: 'DROPPED BY BOMBERS.' },
   pmine: { name: 'PROXIMITY MINE', desc: 'SEEDED BY MINE LAYERS. BURSTS WHEN YOU GET CLOSE.' },
   boulder: { name: 'BOULDER', desc: 'THROWN BY ROCKJAW.' },
-  barrier: { name: 'HIVE BARRIER CELL', desc: 'THE FLESHY CELLS OF THE ORGANIC BARRIERS IN THE HIVE.' },
-  cargo: { name: 'CARGO HAULER', desc: 'THE DERELICT HAULER OF A TREASURE ENDING. BREAK IT OPEN FOR CREDITS.' },
+  barrier: { name: 'HIVE BARRIER CELL', texture: 'barriercell', desc: 'THE FLESHY CELLS OF THE ORGANIC BARRIERS IN THE HIVE.' },
+  cargo: { name: 'CARGO HAULER', texture: 'cargoship', desc: 'THE DERELICT HAULER OF A TREASURE ENDING. BREAK IT OPEN FOR CREDITS.' },
 };
-const named = (id: string) => BEAST.get(id) ?? EXTRA[id] ?? { name: id.toUpperCase(), desc: '' };
+const named = (id: string) => {
+  const b: { name: string; desc: string; texture?: string; tint?: number } = BEAST.get(id) ?? EXTRA[id] ?? { name: id.toUpperCase(), desc: '' };
+  return { name: b.name, desc: b.desc, image: b.texture ? { key: b.texture, tint: b.tint } : undefined };
+};
 
 const foes: TuneEntry[] = (Object.keys(ENEMY_STATS) as FoeKind[]).map((id) => {
   const s = ENEMY_STATS[id];
@@ -178,7 +182,7 @@ const foes: TuneEntry[] = (Object.keys(ENEMY_STATS) as FoeKind[]).map((id) => {
     );
   }
   return {
-    cat: 'enemies', id, ...named(id), flat, taken: s.mimic ? [] : [{ key: 'taken', label: TAKEN_LABEL, taken: s.taken }], values: {}, levels: {},
+    cat: 'enemies', id, ...named(id), image: { key: s.texture }, flat, taken: s.mimic ? [] : [{ key: 'taken', label: TAKEN_LABEL, taken: s.taken }], values: {}, levels: {},
   };
 });
 

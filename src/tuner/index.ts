@@ -56,6 +56,9 @@ const CSS = `
 #tuner .body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 0 10px 10px; }
 #tuner .card { border: 1px solid #3c3c3c; padding: 8px; margin-bottom: 8px; max-width: 520px; margin-inline: auto; }
 #tuner .card h2 { font-size: 10px; margin: 0 0 4px; font-weight: normal; color: #fc7460; }
+#tuner .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+#tuner .card .head h2 { margin: 0; }
+#tuner .card .pic { flex: none; image-rendering: pixelated; }
 #tuner .desc { color: #bcbcbc; margin-bottom: 6px; }
 #tuner .stat { padding: 5px 0 3px; border-top: 1px solid #1c1c1c; }
 #tuner .stat .lbl { color: #bcbcbc; }
@@ -114,7 +117,17 @@ export function installTuner(game: Phaser.Game) {
   open.textContent = 'TUNER';
   document.body.append(open);
 
+  // The tab open and how far down each tab was scrolled, so the Tuner reopens where it was left.
   let cat: TuneCat = 'weapons';
+  const scrolls: Partial<Record<TuneCat, number>> = {};
+  const keepScroll = () => {
+    const body = root.querySelector('.body');
+    if (body && view === 'cards') scrolls[cat] = body.scrollTop;
+  };
+  const restoreScroll = () => {
+    const body = root.querySelector('.body');
+    if (body) body.scrollTop = scrolls[cat] ?? 0;
+  };
   let view: 'cards' | 'export' | 'history' = 'cards';
   const draft: Record<string, number> = {}; // edits not applied yet
   const current = (path: string) => draft[path] ?? stored.applied[path] ?? GAME_VALUES.get(path)!;
@@ -140,8 +153,10 @@ export function installTuner(game: Phaser.Game) {
     view = 'cards';
     document.body.append(root);
     render();
+    restoreScroll();
   };
   const hide = () => {
+    keepScroll();
     root.remove();
     if (game.input.keyboard) game.input.keyboard.enabled = true;
     game.resume();
@@ -158,7 +173,7 @@ export function installTuner(game: Phaser.Game) {
     const top = el('div', 'top');
     top.append(el('h1', '', view === 'export' ? 'EXPORT' : view === 'history' ? 'HISTORY' : 'TUNER'));
     const close = el('button', '', view === 'cards' ? 'CLOSE' : 'BACK');
-    close.addEventListener('click', () => { if (view === 'cards') hide(); else { view = 'cards'; render(); } });
+    close.addEventListener('click', () => { if (view === 'cards') hide(); else { view = 'cards'; render(); restoreScroll(); } });
     top.append(close);
     root.append(top);
 
@@ -167,7 +182,7 @@ export function installTuner(game: Phaser.Game) {
       const tabs = el('div', 'tabs');
       for (const c of CATS) {
         const b = el('button', c.id === cat ? 'on' : '', c.label);
-        b.addEventListener('click', () => { cat = c.id; render(); });
+        b.addEventListener('click', () => { keepScroll(); cat = c.id; render(); restoreScroll(); });
         tabs.append(b);
       }
       root.append(tabs);
@@ -191,15 +206,19 @@ export function installTuner(game: Phaser.Game) {
     };
     add('apply', 'APPLY', apply, pending > 0);
     add('clear', 'CLEAR', clear, pending + tuned > 0);
-    add('export', 'EXPORT', () => { view = 'export'; render(); });
-    add('hist', 'HISTORY', () => { view = 'history'; render(); });
+    add('export', 'EXPORT', () => { keepScroll(); view = 'export'; render(); });
+    add('hist', 'HISTORY', () => { keepScroll(); view = 'history'; render(); });
     foot.append(btns);
     root.append(foot);
   }
 
   function card(e: TuneEntry) {
     const c = el('div', 'card');
-    c.append(el('h2', '', e.name));
+    const head = el('div', 'head');
+    const pic = e.image && picture(e.image.key, e.image.tint);
+    if (pic) head.append(pic);
+    head.append(el('h2', '', e.name));
+    c.append(head);
     if (e.desc) c.append(el('div', 'desc', e.desc));
     // Single numbers first, each a row of its own.
     for (const f of e.flat) {
@@ -242,6 +261,58 @@ export function installTuner(game: Phaser.Game) {
       if (lk !== 'shots' && !(after && after in e.values)) c.append(levelGrid(e, lk));
     }
     return c;
+  }
+
+  // A card's picture: the game's own texture, drawn 3x, tinted the way the game tints it.
+  const pics = new Map<string, string>();
+  function picture(key: string, tint?: number) {
+    if (key === 'barriercell') return barrierCell();
+    if (!game.textures.exists(key)) return null;
+    const id = `${key}:${tint ?? ''}`;
+    if (!pics.has(id)) {
+      const src = game.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const cv = document.createElement('canvas');
+      cv.width = src.width;
+      cv.height = src.height;
+      const ctx = cv.getContext('2d')!;
+      ctx.drawImage(src, 0, 0);
+      if (tint !== undefined) {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = `#${tint.toString(16).padStart(6, '0')}`;
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(src, 0, 0);
+      }
+      pics.set(id, cv.toDataURL());
+    }
+    const tex = game.textures.get(key).getSourceImage();
+    return pictureImg(pics.get(id)!, tex.width, tex.height);
+  }
+
+  // Up to 3x, no taller than 48 px or wider than 120 px.
+  function pictureImg(src: string, w: number, h: number) {
+    const k = Math.min(3, 48 / h, 120 / w);
+    const img = el('img', 'pic');
+    img.src = src;
+    img.alt = '';
+    img.style.width = `${Math.round(w * k)}px`;
+    img.style.height = `${Math.round(h * k)}px`;
+    return img;
+  }
+
+  // A Hive barrier cell has no texture (the game draws it each frame), so it's drawn here the same way.
+  function barrierCell() {
+    const cv = document.createElement('canvas');
+    cv.width = 30;
+    cv.height = 12;
+    const ctx = cv.getContext('2d')!;
+    ctx.fillStyle = '#6c0c3c';
+    ctx.beginPath(); ctx.roundRect(1, 0, 28, 12, 4); ctx.fill();
+    ctx.fillStyle = '#a40080';
+    ctx.beginPath(); ctx.roundRect(3, 2, 24, 7, 3); ctx.fill();
+    ctx.fillStyle = '#f878f8';
+    ctx.fillRect(5, 3, 4, 1);
+    return pictureImg(cv.toDataURL(), cv.width, cv.height);
   }
 
   // A number set level by level: a box for each of levels 1 to 5.
