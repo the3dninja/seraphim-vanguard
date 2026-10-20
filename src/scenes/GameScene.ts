@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
+  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
@@ -95,6 +95,10 @@ const ion = () => WEAPONS.ion.tune!;
 const arcLife = (lv: number) => atLv(ion().life, lv) / 1000;
 // Ion Arc stuns from level 3: ms of stun at each level.
 const ionStun = (lv: number) => atLv(ion().stun, lv, 3);
+// Ion Arc's chance (%) to stun with each hit and each chain jump.
+const ionStunChance = (lv: number) => atLv(ion().stunChance, lv, 3);
+// Whether a stun with this chance (%, none = always) lands.
+const rollStun = (chance: number | undefined) => chance === undefined || Math.random() * 100 < chance;
 const FLAK_FUSE = 0.42; // s before a flak shell bursts
 const BOMB_FUSE = 0.6; // s before a cluster bomblet goes off
 // A one-line radio call as each act 3 level starts.
@@ -1995,12 +1999,13 @@ export class GameScene extends Phaser.Scene {
       const splash = stats.splash ?? def.splash;
       const volley = (deg: number, dx: number, i: number, dmg: number) => {
         const back = Math.abs(deg) > 90;
-        const b = this.shot(this.player.x + dx, this.player.y + (back ? 7 : -7), def.texture, deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
+        const b = this.shot(this.player.x + dx, this.player.y + (back ? 7 : -7), shotTexture(def, lv), deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
         if (def.fx) this.setFx(b, def.fx);
         if (splash) b.setData('splash', splash + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0));
         if (stats.splashDamage) b.setData('splashDmg', stats.splashDamage * (charged ? 3 : 1));
         if (incend) { b.setData('incend', incend); this.shotInfo.get(b)!.incend = incend; }
         if (stun) b.setData('stun', stun);
+        if (stun && def.fx === 'arc') b.setData('stunChance', ionStunChance(lv));
         if (def.fx === 'pierce' || def.fx === 'rail') b.setData('hits', new Set());
         if (def.fx === 'wave') b.setData('ox', b.x).setData('phase', i % 2 ? Math.PI : 0);
         if (def.fx === 'arc') b.setData('life', arcLife(lv));
@@ -2224,6 +2229,7 @@ export class GameScene extends Phaser.Scene {
     const splash = b.getData('splash') as number | undefined;
     const splashDmg = b.getData('splashDmg') as number | undefined;
     const stun = b.getData('stun') as number | undefined;
+    const stunChance = b.getData('stunChance') as number | undefined;
     const incend = b.getData('incend') as number | undefined;
     const chain = fx === 'arc' || !!b.getData('chain');
     // Piercing shots hit each enemy once and fly on.
@@ -2246,7 +2252,7 @@ export class GameScene extends Phaser.Scene {
       d.shieldImg = null;
       return;
     }
-    if (stun && !ENEMY_STATS[d.kind].organic) d.stun = Math.max(d.stun, stun);
+    if (stun && !ENEMY_STATS[d.kind].organic && rollStun(stunChance)) d.stun = Math.max(d.stun, stun);
     if (incend) {
       const st = gearStats.incendiary(incend);
       if (st.burnTime) { d.burn = Math.max(d.burn, st.burnTime); d.burnDmg = st.burn; d.burnTick = Math.min(d.burnTick || 400, 400); }
@@ -2256,7 +2262,7 @@ export class GameScene extends Phaser.Scene {
     this.incendHit(b, dead ? null : e);
     if (fx === 'latch' && !dead) this.bioLatch(e, b);
     if (this.plasmaSplash(b, (b.x + e.x) / 2, (b.y + e.y) / 2) && !dead) this.plasmaFlash(e);
-    if (chain) this.chainArc(e, dmg, dtype, stun ?? 0, lv);
+    if (chain) this.chainArc(e, dmg, dtype, stun ?? 0, lv, stunChance);
     if (splash) this.splash(e.x, e.y, splash, splashDmg ?? dmg / 2, dtype, dead ? null : e);
   }
 
@@ -2352,9 +2358,14 @@ export class GameScene extends Phaser.Scene {
 
   // Explosive splash: everything else within `r` takes `dmg`.
   private splash(x: number, y: number, r: number, dmg: number, dtype: DType, skip: unknown) {
-    // The ring shows exactly how far it reaches.
-    const ring = this.add.circle(x, y, r, 0xf8b800, 0.3).setStrokeStyle(1, 0xfcfcfc, 0.8).setDepth(12);
-    this.tweens.add({ targets: ring, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    // A glow that reaches exactly as far as the blast: faint at the edge,
+    // stepping brighter toward a hot center.
+    const glow = this.add.graphics({ x, y }).setDepth(12);
+    glow.fillStyle(0xf8b800, 0.14).fillCircle(0, 0, r);
+    glow.fillStyle(0xf8b800, 0.14).fillCircle(0, 0, r * 0.72);
+    glow.fillStyle(0xfce0a8, 0.18).fillCircle(0, 0, r * 0.46);
+    glow.fillStyle(0xfcfcfc, 0.25).fillCircle(0, 0, r * 0.22);
+    this.tweens.add({ targets: glow, alpha: 0, duration: 260, onComplete: () => glow.destroy() });
     for (const o of this.enemies.getChildren().slice() as Phaser.Physics.Arcade.Sprite[]) {
       if (o === skip || !o.active || (o.getData('e') as EnemyData).cloaked) continue;
       if (Phaser.Math.Distance.Between(x, y, o.x, o.y) <= r) this.damageEnemy(o, dmg, dtype);
@@ -2372,7 +2383,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Ion Arc: lightning jumps from the target to the nearest enemies (two unless tuned).
-  private chainArc(from: Phaser.Physics.Arcade.Sprite, dmg: number, dtype: DType, stun: number, lv: number) {
+  private chainArc(from: Phaser.Physics.Arcade.Sprite, dmg: number, dtype: DType, stun: number, lv: number, stunChance?: number) {
     let at = { x: from.x, y: from.y };
     const done = new Set<unknown>([from]);
     const t = ion();
@@ -2387,7 +2398,7 @@ export class GameScene extends Phaser.Scene {
       this.zaps.push({ x1: at.x, y1: at.y, x2: next.x, y2: next.y, t: 120, color: DTYPE_COLOR.ion });
       at = { x: next.x, y: next.y };
       const d = next.getData('e') as EnemyData;
-      if (stun && !ENEMY_STATS[d.kind].organic) d.stun = Math.max(d.stun, stun);
+      if (stun && !ENEMY_STATS[d.kind].organic && rollStun(stunChance)) d.stun = Math.max(d.stun, stun);
       this.damageEnemy(next, dmg * jumpDamage, dtype);
     }
   }

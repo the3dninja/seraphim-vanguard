@@ -37,6 +37,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   jumpRange: { label: 'CHAIN JUMP RANGE (PX)', step: 2 },
   jumpDamage: { label: 'CHAIN DAMAGE (0.7 = 70% OF HIT)', step: 0.05 },
   stun: { label: 'STUN MS (STARTS AT LV 3)', step: 50, from: 3 },
+  stunChance: { label: 'STUN CHANCE % PER HIT AND JUMP (STARTS AT LV 3)', step: 5, from: 3 },
   life: { label: 'BOLT LIFE MS (SETS RANGE)', step: 20 },
   burn: { label: 'BURN DPS (1.1 = 110% OF HIT)', step: 0.1 },
   burnTime: { label: 'BURN MS', step: 100 },
