@@ -31,6 +31,7 @@ export interface WeaponDef {
   desc: string;
   icon: string;
   texture: string;
+  levelTextures?: Record<number, string>; // a different shot look from that level on
   dtype: DType;
   where: 'start' | 'base' | 'level'; // Base vendor stock, or an in-level vendor exclusive
   from: number; // first level whose vendors stock it
@@ -93,6 +94,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   spread: {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
+    levelTextures: { 3: 'pellet3', 5: 'pellet5' },
     tune: { damage: [1, 0.5], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
     shotCount: [3, 3, 4, 4, 5],
     stats(lv) {
@@ -147,12 +149,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   ion: {
     name: 'ION ARC', price: 320, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
-    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. STUNS FROM LV 3.',
+    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. CAN STUN FROM LV 3.',
     // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
     tune: {
       damage: [1, 0.5], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
-      stun: [750, 250], life: [400, -25], angle: [10, 0],
+      stun: [750, 250], stunChance: [40, 10], life: [400, -25], angle: [10, 0],
     },
+    levelTextures: { 3: 'arc3', 5: 'arc5' },
     shotCount: [1, 1, 2, 2, 3],
     stats(lv) {
       const t = this.tune!;
@@ -352,6 +355,13 @@ export const gearStats = {
   scanner: (lv: number) => ({ bonus: 0.15 + (lv - 1) * 0.05 }),
   rear: (lv: number) => ({ damage: 0.5 + (lv - 1) * 0.125 }), // share of the paired weapon's damage
 };
+
+// A weapon's shot look at a level.
+export function shotTexture(def: WeaponDef, lv: number) {
+  let tex = def.texture;
+  for (const [from, t] of Object.entries(def.levelTextures ?? {})) if (lv >= Number(from)) tex = t;
+  return tex;
+}
 
 export const isWeapon = (id: string): id is WeaponId => id in WEAPONS;
 export const isItem = (id: string): id is ItemId => id in ITEMS;

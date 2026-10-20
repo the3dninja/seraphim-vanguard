@@ -146,6 +146,9 @@ export const SPRITES3: Record<string, string[]> = {
   missile: ['.W.', 'GLG', 'GLG', 'GLG', 'R.R', 'Y.Y'],
   blob: ['.TTTT.', 'TTWWTT', 'TWWTTT', 'TTTTTN', 'TTTTNN', '.NNNN.'],
   arc: ['.W.', 'C..', '.C.', '..C', '.C.', 'C..'],
+  // Ion Arc from level 3, thicker and brighter, and brighter again at level 5.
+  arc3: ['.WW.', 'CA..', '.CA.', '..AC', '.CA.', 'CA..'],
+  arc5: ['..WW.', '.WAC.', 'CWA..', '.CWA.', '..AWC', '.CWA.', 'CWA..'],
   wavebolt: ['.R.', 'RWR', '.R.'],
   rail: ['.W.', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', 'AWA', '.A.'],
   flak: ['.YY.', 'YWWY', 'YWWY', '.YY.'],

@@ -97,6 +97,9 @@ const SPRITES: Record<string, string[]> = {
   ],
   bullet: ['W', 'Y', 'Y', 'Y'],
   pellet: ['YY', 'YY'],
+  // Spread Gun pellets from level 3, then bigger and brighter at level 5.
+  pellet3: ['.Y.', 'YWY', '.Y.'],
+  pellet5: ['.qq.', 'qWWq', 'qWWq', '.qq.'],
   ebullet: ['.MM.', 'MWWM', 'MWWM', '.MM.'],
   px: ['WW', 'WW'],
   heart: ['.RR.RR.', 'RWRRRRR', 'RRRRRRR', '.RRRRR.', '..RRR..', '...R...'],
