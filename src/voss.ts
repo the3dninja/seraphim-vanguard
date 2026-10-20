@@ -102,7 +102,7 @@ export class Voss {
         if (this.shield <= 0) {
           this.shieldDownAt = g.time.now;
           g.sparks.explode(16, this.x, this.y);
-          g.tipOnce('vshield', 'S.hp.shield DOWN!');
+          g.tipOnce('vshield', 'SHIELD DOWN!');
         }
         continue;
       }
@@ -110,7 +110,7 @@ export class Voss {
       g.flash(this.ship);
       if (this.hull <= 0) { this.burst(); return; }
     }
-    if (this.shield > 0 && !this.bursting) g.tipOnce('vion', 'ION BREAKS\nHIS S.hp.shield FAST');
+    if (this.shield > 0 && !this.bursting) g.tipOnce('vion', 'ION BREAKS\nHIS SHIELD FAST');
   }
 
   // The hull cracks and the parasite tears itself free.
@@ -130,7 +130,7 @@ export class Voss {
       g.tweens.add({ targets: this.parasite, scale: 1, duration: 600, ease: 'Back.easeOut' });
       g.tweens.add({ targets: this, py: this.y + 34, duration: 700, ease: 'Sine.easeOut' });
       g.tweens.add({ targets: this, y: this.y - 16, duration: 1500 });
-      toast(g, 'THE S.hp.parasite!', 120, 900);
+      toast(g, 'THE PARASITE!', 120, 900);
       g.tipOnce('parasite', 'PLASMA BURNS IT');
     });
   }

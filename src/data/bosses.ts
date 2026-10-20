@@ -11,19 +11,19 @@ const t = (kinetic: number, laser: number, plasma: number, ion: number, explosiv
   ({ kinetic, laser, plasma, ion, explosive });
 
 export const BOSS_STATS: Record<BossStatsKind, BossStats> = {
-  rockjaw: { hp: { core: 65, plate: 24, midPlate: 30 }, taken: { body: t(100, 100, 100, 100, 200) } },
+  rockjaw: { hp: { core: 75, plate: 24, midPlate: 30 }, taken: { body: t(50, 100, 100, 150, 200) } },
   // Rockjaw's icy kin, tougher all over.
-  frostjaw: { hp: { core: 176, plate: 65, midPlate: 81 }, taken: { body: t(100, 100, 100, 100, 200) } },
+  frostjaw: { hp: { core: 175, plate: 65, midPlate: 80 }, taken: { body: t(50, 150, 100, 100, 200) } },
   dreadnought: {
-    hp: { outerTurret: 25, innerTurret: 32, bridge: 90 },
-    taken: { body: t(100, 100, 200, 200, 100) },
+    hp: { outerTurret: 25, innerTurret: 35, bridge: 125 },
+    taken: { body: t(100, 50, 50, 200, 200) },
   },
-  watcher: { hp: { body: 420 }, taken: { body: t(100, 100, 100, 200, 100) } },
-  hollowwatcher: { hp: { body: 2184 }, taken: { body: t(100, 100, 100, 200, 100) } },
+  watcher: { hp: { body: 420 }, taken: { body: t(100, 50, 50, 200, 200) } },
+  hollowwatcher: { hp: { body: 2184 }, taken: { body: t(50, 150, 100, 200, 50) } },
   // The shield also takes half of what this table says, and comes back at 60%.
   voss: {
     hp: { shield: 100, hull: 420, parasite: 510 },
-    taken: { hull: t(100, 100, 200, 200, 100), shield: t(100, 100, 100, 200, 100), parasite: t(50, 100, 200, 100, 100) },
+    taken: { hull: t(100, 50, 50, 200, 200), shield: t(100, 100, 100, 200, 100), parasite: t(50, 100, 200, 100, 100) },
   },
   // The queens heal: the more health they have, the faster.
   queen: { hp: { body: 2400 }, taken: { body: t(50, 100, 200, 100, 100) } },

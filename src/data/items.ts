@@ -207,15 +207,15 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   cluster: { name: 'CLUSTER BOMB', price: 45, icon: 'icon_cluster', cap: 2, desc: 'DROPS 5 HEAVY BOMBLETS IN A CONE AHEAD. HALF DAMAGE TO BOSSES.',
     tune: { bomblets: 5, angle: 15, damage: 16, splash: 18, bossShare: 0.5 },
   },
-  emp: { name: 'EMP PULSE', price: 50, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 3 SECONDS.', tune: { stun: 3000 } },
+  emp: { name: 'EMP PULSE', price: 50, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 5 SECONDS.', tune: { stun: 5000 } },
   decoy: { name: 'DECOY FLARE', price: 25, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.', tune: { time: 5000 } },
   booster: { name: 'CREDIT BOOSTER', price: 60, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.', tune: { bonus: 1.5 } },
   drone: { name: 'REPAIR DRONE', price: 55, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.',
     tune: { heal: 1, every: 4000, time: 20000 },
   },
   fullrepair: { name: 'FULL REPAIR', price: 90, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
-  nova: { name: 'NOVA BOMB', price: 120, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.', tune: { damage: 12 } },
-  warp: { name: 'TIME WARP', price: 100, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 4 SECONDS.', tune: { time: 4000, slow: 0.5 } },
+  nova: { name: 'NOVA BOMB', price: 120, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.', tune: { damage: 16 } },
+  warp: { name: 'TIME WARP', price: 100, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 5 SECONDS.', tune: { time: 5000, slow: 0.5 } },
   rewind: {
     name: 'REWIND BEACON', price: 400, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
     desc: 'IF YOUR SHIP IS DESTROYED, RESTART AT THE LAST VENDOR WITH FULL HEALTH.',
@@ -261,7 +261,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   deflector: {
     name: 'DEFLECTOR', price: 450, score: 6, icon: 'icon_deflector', from: 6, where: 'level',
-    desc: 'ABSORBS 1 HIT, THEN RECHARGES IN 8 SECONDS.', levelUp: 'FASTER RECHARGE. 2 HITS AT LV 3.',
+    desc: 'ABSORBS 1 HIT, THEN RECHARGES IN 8 SECONDS.', levelUp: 'FASTER RECHARGE. 2 HITS AT LV 3, 3 AT LV 5.',
   },
   satellite: {
     name: 'SATELLITE', price: 600, score: 7, icon: 'icon_satellite', from: 6, where: 'level',
@@ -289,15 +289,15 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   antimissile: {
     name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
-    desc: 'A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU, LEVEL AND AHEAD FIRST.', levelUp: 'FASTER, WIDER. ARCS ON TO A 2ND AT LV 5.',
+    desc: 'A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU, LEVEL AND AHEAD FIRST.', levelUp: 'FASTER, WIDER. ARCS ON TO A 2ND AT LV 3, A 3RD AT LV 5.',
   },
   incendiary: {
     name: 'INCENDIARY AMMO', price: 400, score: 6, icon: 'icon_incendiary', from: 9, where: 'base',
-    desc: 'AUGMENT. KINETIC SHOTS GLOW HOT AND SCORCH WHAT THEY HIT. FROM LV 3 THEY SET IT BURNING.', levelUp: 'HOTTER. BURNS AT LV 3, LONGER AT 4 AND 5.',
+    desc: 'AUGMENT. KINETIC SHOTS GLOW HOT, SCORCH WHAT THEY HIT AND SET IT BURNING.', levelUp: 'HOTTER, AND IT BURNS LONGER.',
   },
   ioncoat: {
     name: 'ION COATING', price: 450, score: 7, icon: 'icon_ioncoat', from: 9, where: 'level',
-    desc: 'AUGMENT. LASER WEAPONS DEAL ION DAMAGE, SO THEY BREAK SHIELDS.', levelUp: 'ADDS A BRIEF STUN, LONGER EACH LEVEL.',
+    desc: 'AUGMENT. LASER WEAPONS DEAL ION DAMAGE, SO THEY BREAK SHIELDS, AND STUN BRIEFLY.', levelUp: 'A LONGER STUN EACH LEVEL.',
   },
   shaped: {
     name: 'SHAPED CHARGES', price: 420, score: 6, icon: 'icon_shaped', from: 10, where: 'base',
@@ -305,7 +305,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   overcharge: {
     name: 'OVERCHARGER', price: 550, score: 9, icon: 'icon_overcharge', from: 11, where: 'level',
-    desc: 'AUGMENT. EVERY 5TH VOLLEY IS A CHARGED SHOT WITH TRIPLE DAMAGE.', levelUp: 'EVERY 4TH AT LV 3, EVERY 3RD AT LV 5.',
+    desc: 'AUGMENT. EVERY 6TH VOLLEY IS A CHARGED SHOT WITH TRIPLE DAMAGE.', levelUp: 'EVERY 5TH AT LV 3, EVERY 4TH AT LV 5.',
   },
   rear: {
     name: 'REAR GUARD', price: 320, score: 4, icon: 'icon_rear', from: 6, where: 'level',
@@ -323,19 +323,19 @@ export const GEAR: Record<GearId, GearDef> = {
 export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: Record<string, number[]> }> = {
   plating: { tune: { health: [2, 1] } },
   magnet: { tune: { radius: [44, 8], pull: [85, 15] } },
-  deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 2] } },
-  satellite: { tune: { interval: [650, -70], damage: [0.5, 0.15] }, levels: { drones: [1, 1, 1, 1, 2] } },
+  deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 3] } },
+  satellite: { tune: { interval: [650, -70], damage: [1, 0.15] }, levels: { drones: [1, 1, 1, 1, 2] } },
   dodge: { tune: { cooldown: [3000, -300], safe: [410, 60], dist: [42, 0] } },
   blink: { tune: { cooldown: [4200, -400], dist: [50, 6] } },
   afterburner: { tune: { cooldown: [5500, -300], burn: [2100, 300], ram: [3, 1] } },
-  roll: { tune: { cooldown: [3600, -250], spin: [600, 80] } },
+  roll: { tune: { cooldown: [3600, -250], spin: [600, 120] } },
   burst: { tune: { cooldown: [5000, -500], shots: [12, 2], damage: [1, 0.2] } },
-  antimissile: { tune: { interval: [900, -120], radius: [44, 4] }, levels: { targets: [1, 1, 1, 1, 2] } },
+  antimissile: { tune: { interval: [900, -75], radius: [44, 4] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
-  incendiary: { tune: { scorch: [0.3, 0.1], burn: [0.4, 0.1] }, levels: { burnTime: [0, 0, 2000, 3000, 4000] } },
-  ioncoat: { tune: { stun: [0, 150] } },
-  shaped: { tune: { splash: [2, 2] } },
-  overcharge: { tune: {}, levels: { every: [5, 5, 4, 4, 3] } },
+  incendiary: { tune: { scorch: [0.5, 0.25], burn: [0.5, 0.25] }, levels: { burnTime: [500, 1000, 2000, 3000, 4000] } },
+  ioncoat: { tune: { stun: [150, 150] } },
+  shaped: { tune: { splash: [6, 2] } },
+  overcharge: { tune: {}, levels: { every: [6, 6, 5, 5, 4] } },
   scanner: { tune: { bonus: [0.15, 0.05] } },
   rear: { tune: { damage: [0.5, 0.125] } }, // share of the paired weapon's damage
 };
