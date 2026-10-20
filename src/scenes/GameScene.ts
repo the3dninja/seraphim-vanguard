@@ -3,7 +3,7 @@ import { COLOR, W, H } from '../config';
 import {
   DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
-import { ENEMY_STATS, typeMultiplier, type FoeKind } from '../data/enemies';
+import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
 import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
@@ -44,8 +44,7 @@ export interface EnemyData {
   shield: number; // Bulwark: shield health left
   shieldImg: Phaser.GameObjects.Image | null;
   cloaked: boolean; // Phantom: can't be hit or rammed while cloaked
-  weak: DType[];
-  resist: DType[];
+  taken: Taken; // damage taken by type, in %
   burn: number; // ms of burning left
   burnDmg: number; // damage per burn tick
   burnTick: number; // ms to the next burn tick
@@ -88,18 +87,15 @@ const BOSS_NAMES = {
 };
 const EGG_HATCH = 5500; // ms before an egg hatches into larvae
 const GEAR_KEYS = ['Q', 'E'];
-const ALL_TYPES: DType[] = ['kinetic', 'laser', 'plasma', 'ion', 'explosive'];
 // Ion Arc's numbers live in its Tuner values (WEAPONS.ion.tune).
 const ion = () => WEAPONS.ion.tune!;
 // s an Ion Arc bolt lasts, which sets its range.
 const arcLife = (lv: number) => atLv(ion().life, lv) / 1000;
-// Ion Arc stuns from level 3: ms of stun at each level.
-const ionStun = (lv: number) => atLv(ion().stun, lv, 3);
-// Ion Arc's chance (%) to stun with each hit and each chain jump.
-const ionStunChance = (lv: number) => atLv(ion().stunChance, lv, 3);
+// Ion Arc's stun: ms at each level, and its chance (%) with each hit and each chain jump.
+const ionStun = (lv: number) => atLv(ion().stun, lv);
+const ionStunChance = (lv: number) => WEAPONS.ion.levels!.stunChance[lv - 1];
 // Whether a stun with this chance (%, none = always) lands.
 const rollStun = (chance: number | undefined) => chance === undefined || Math.random() * 100 < chance;
-const FLAK_FUSE = 0.42; // s before a flak shell bursts
 const BOMB_FUSE = 0.6; // s before a cluster bomblet goes off
 // A one-line radio call as each act 3 level starts.
 const RADIO: Record<number, string> = {
@@ -683,34 +679,37 @@ export class GameScene extends Phaser.Scene {
       case 'repair':
       case 'fullrepair':
         if (this.health >= this.maxHp) { toast(this, 'HEALTH IS FULL', H / 2 + 30, 600); return; }
-        this.health = item.id === 'repair' ? Math.min(this.maxHp, this.health + 2) : this.maxHp;
+        this.health = item.id === 'repair' ? Math.min(this.maxHp, this.health + Math.round(ITEMS.repair.tune!.heal)) : this.maxHp;
         break;
-      case 'shield': this.shieldUntil = now + 5000; break;
-      case 'overdrive': this.overdriveUntil = now + 8000; break;
+      case 'shield': this.shieldUntil = now + ITEMS.shield.tune!.time; break;
+      case 'overdrive': this.overdriveUntil = now + ITEMS.overdrive.tune!.time; break;
       case 'nova': this.nova(); break;
-      case 'cluster':
-        for (let i = 0; i < 5; i++) {
-          const b = this.shot(this.player.x, this.player.y - 6, 'bomblet', -30 + i * 15, 160, 16, 'explosive');
-          this.setFx(b, 'bomb').setData('splash', 18);
+      case 'cluster': {
+        const t = ITEMS.cluster.tune!;
+        const n = Math.max(1, Math.round(t.bomblets));
+        for (let i = 0; i < n; i++) {
+          const b = this.shot(this.player.x, this.player.y - 6, 'bomblet', (i - (n - 1) / 2) * t.angle, 160, t.damage, 'explosive');
+          this.setFx(b, 'bomb').setData('splash', t.splash);
         }
         break;
+      }
       case 'emp': this.emp(); break;
       case 'warp':
-        this.warpUntil = now + 4000;
+        this.warpUntil = now + ITEMS.warp.tune!.time;
         this.cameras.main.flash(200, 60, 60, 160);
         break;
       case 'decoy':
         this.flare?.destroy();
         this.flare = this.add.image(this.player.x, this.player.y - 10, 'flare').setDepth(9.8);
-        this.flareUntil = now + 5000;
+        this.flareUntil = now + ITEMS.decoy.tune!.time;
         break;
       case 'booster':
         this.boostSegment = this.segment;
         toast(this, 'DOUBLE CREDITS!', H / 2 + 30, 900);
         break;
       case 'drone':
-        this.healUntil = now + 20000;
-        this.healAt = now + 4000;
+        this.healUntil = now + ITEMS.drone.tune!.time;
+        this.healAt = now + ITEMS.drone.tune!.every;
         this.healDrone ??= this.add.image(0, 0, 'healdrone').setDepth(10);
         break;
       case 'rewind':
@@ -729,7 +728,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyBullets.clear(true, true);
     for (const e of this.enemies.getChildren().slice() as Phaser.Physics.Arcade.Sprite[]) {
       if (e.y < -10) continue;
-      this.damageEnemy(e, 12, null);
+      this.damageEnemy(e, ITEMS.nova.tune!.damage, null);
     }
   }
 
@@ -740,7 +739,7 @@ export class GameScene extends Phaser.Scene {
     for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
       const d = e.getData('e') as EnemyData;
       if (ENEMY_STATS[d.kind].organic) continue;
-      d.stun = 3000;
+      d.stun = ITEMS.emp.tune!.stun;
       if (d.shieldImg) { d.shieldImg.destroy(); d.shieldImg = null; d.shield = 0; }
       if (d.cloaked) { d.cloaked = false; d.hold = 3000; e.setAlpha(1); }
     }
@@ -874,7 +873,7 @@ export class GameScene extends Phaser.Scene {
       kind, hp: stats.hp, t: 0, baseX: x, fireIn: Phaser.Math.Between(900, 2200),
       dir: x < W / 2 ? 1 : -1, wait: 0, stopY: Phaser.Math.Between(46, 80), hold: 5000,
       step: 0, aim: 0, charge: 0, beam: 0, shield: 0, shieldImg: null, cloaked: false,
-      weak: stats.weak, resist: stats.resist, burn: 0, burnDmg: 0, burnTick: 0, stun: 0,
+      taken: stats.taken, burn: 0, burnDmg: 0, burnTick: 0, stun: 0,
     };
     e.setData('e', data);
     this.setupHollow(e, data);
@@ -961,8 +960,8 @@ export class GameScene extends Phaser.Scene {
         // It shrugs off whatever the ship's first weapon deals.
         const w = this.state.weapons[0];
         const own = w ? this.weaponType(w) : 'kinetic';
-        d.resist = [own];
-        d.weak = ALL_TYPES.filter((t) => t !== own);
+        const m = ENEMY_STATS.mimic.mimic!;
+        d.taken = Object.fromEntries(DTYPES.map((t) => [t, t === own ? m.own : m.others])) as Taken;
         d.stopY = Phaser.Math.Between(40, 64);
         d.hold = 7000;
         d.fireIn = 900;
@@ -1863,8 +1862,12 @@ export class GameScene extends Phaser.Scene {
       this.healDrone.setPosition(p.x + Math.cos(a) * 12, p.y - 10 + Math.sin(a) * 3).setVisible(flying);
       if (now >= this.healUntil) { this.healDrone.destroy(); this.healDrone = null; }
       else if (now >= this.healAt && this.phase === 'action') {
-        this.healAt = now + 4000;
-        if (this.health < this.maxHp) { this.health++; this.refreshHud(); this.flash(this.healDrone); }
+        this.healAt = now + ITEMS.drone.tune!.every;
+        if (this.health < this.maxHp) {
+          this.health = Math.min(this.maxHp, this.health + Math.round(ITEMS.drone.tune!.heal));
+          this.refreshHud();
+          this.flash(this.healDrone);
+        }
       }
     }
 
@@ -1987,7 +1990,7 @@ export class GameScene extends Phaser.Scene {
         if (rear) this.beams.fillCircle(this.player.x, this.player.y + 8, 1 + k * 2);
       }
       if (this.fireTimers[slot] > 0) return;
-      this.fireTimers[slot] = fast ? stats.interval / 2 : stats.interval;
+      this.fireTimers[slot] = fast ? stats.interval / ITEMS.overdrive.tune!.rate : stats.interval;
       // The Overcharger makes every few volleys a charged one.
       this.volleys[slot] = (this.volleys[slot] ?? 0) + 1;
       const charged = hasGear(s, 'overcharge') && this.volleys[slot] % gearStats.overcharge(gearLevel(s, 'overcharge')).every === 0;
@@ -2044,18 +2047,18 @@ export class GameScene extends Phaser.Scene {
         case 'seek': {
           // Side Winder missiles only chase enemies in a cone off their own side.
           const tg = this.nearestTarget(b.x, b.y, b.getData('dir') as number, 0.8);
-          if (tg) this.steer(b, tg, 7 * dt);
+          if (tg) this.steer(b, tg, atLv(WEAPONS.side.tune!.turn, this.shotInfo.get(b)?.lv ?? 1) * dt);
           break;
         }
         case 'wave':
-          b.x = (b.getData('ox') as number) + Math.sin(t * 14 + (b.getData('phase') as number)) * 9;
+          b.x = (b.getData('ox') as number) + Math.sin(t * 14 + (b.getData('phase') as number)) * atLv(WEAPONS.wave.tune!.weave, this.shotInfo.get(b)?.lv ?? 1);
           break;
         case 'arc':
           if (t > ((b.getData('life') as number) ?? arcLife(1))) b.destroy();
           else b.setAlpha(Math.floor(t * 40) % 2 ? 1 : 0.6);
           break;
         case 'flak':
-          if (t > FLAK_FUSE) this.flakBurst(b, null);
+          if (t * 1000 > atLv(WEAPONS.flak.tune!.fuse, this.shotInfo.get(b)?.lv ?? 1)) this.flakBurst(b, null);
           break;
         case 'shrap':
           if (t > 0.35) b.destroy();
@@ -2099,11 +2102,15 @@ export class GameScene extends Phaser.Scene {
   // A Flak Cannon shell bursting into shrapnel, fanned around the way it was
   // flying. Shrapnel skips `ignore`, the enemy a direct hit already struck.
   private flakBurst(b: Phaser.Physics.Arcade.Image, ignore: unknown) {
-    const dmg = (b.getData('dmg') as number) * 0.8;
+    const lv = this.shotInfo.get(b)?.lv ?? 1;
+    const t = WEAPONS.flak.tune!;
+    const dmg = (b.getData('dmg') as number) * atLv(t.shrapDamage, lv);
     const v = b.body!.velocity;
     const heading = Phaser.Math.RadToDeg(Math.atan2(v.y, v.x)) + 90;
-    for (let i = 0; i < 7; i++) {
-      const p = this.shot(b.x, b.y, 'shrap', heading - 60 + i * 20, 200, dmg, 'explosive', this.shotInfo.get(b)?.lv);
+    // 120 degrees of shrapnel, spaced evenly.
+    const n = Math.max(1, Math.round(atLv(t.shrapnel, lv)));
+    for (let i = 0; i < n; i++) {
+      const p = this.shot(b.x, b.y, 'shrap', heading + (n > 1 ? -60 + (i * 120) / (n - 1) : 0), 200, dmg, 'explosive', lv);
       this.setFx(p, 'shrap');
       if (ignore) p.setData('ignore', ignore);
     }
@@ -2159,9 +2166,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Damage after weaknesses and resistances, Shaped Charges and the Target Scanner.
-  typedDamage(dmg: number, dtype: DType | null, weak: DType[], resist: DType[]) {
+  typedDamage(dmg: number, dtype: DType | null, taken: Taken) {
     if (!dtype) return dmg;
-    let m = typeMultiplier(dtype, weak, resist);
+    let m = typeMultiplier(dtype, taken);
     if (m < 1 && dtype === 'explosive' && hasGear(this.state, 'shaped')) m = 1;
     if (m > 1 && hasGear(this.state, 'scanner')) m *= 1 + gearStats.scanner(gearLevel(this.state, 'scanner')).bonus;
     return dmg * m;
@@ -2192,8 +2199,8 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // What a player shot does to a boss part with these weaknesses.
-  shotDamage(b: Phaser.GameObjects.Image, weak: DType[], resist: DType[]) {
+  // What a player shot does to a boss part that takes damage like this.
+  shotDamage(b: Phaser.GameObjects.Image, taken: Taken) {
     const info = this.shotInfo.get(b);
     const fx = info?.fx;
     if (fx !== 'tick') {
@@ -2203,8 +2210,8 @@ export class GameScene extends Phaser.Scene {
       if (fx === 'latch') this.bioLatch(null, b);
     }
     // Cluster bomblets hit bosses half as hard as other enemies.
-    const dmg = (info?.dmg ?? 1) * (fx === 'bomb' ? 0.5 : 1) + this.scorch(b);
-    return this.typedDamage(dmg, info?.dtype ?? 'kinetic', weak, resist);
+    const dmg = (info?.dmg ?? 1) * (fx === 'bomb' ? ITEMS.cluster.tune!.bossShare : 1) + this.scorch(b);
+    return this.typedDamage(dmg, info?.dtype ?? 'kinetic', taken);
   }
 
   private hitEnemy(b: Phaser.Physics.Arcade.Image, e: Phaser.Physics.Arcade.Sprite) {
@@ -2350,7 +2357,7 @@ export class GameScene extends Phaser.Scene {
   private damageEnemy(e: Phaser.Physics.Arcade.Sprite, dmg: number, dtype: DType | null) {
     if (!e.active) return true;
     const d = e.getData('e') as EnemyData;
-    d.hp -= this.typedDamage(dmg, dtype, d.weak, d.resist);
+    d.hp -= this.typedDamage(dmg, dtype, d.taken);
     if (d.hp <= 0) { this.killEnemy(e, true); return true; }
     this.flash(e);
     return false;
@@ -2424,9 +2431,10 @@ export class GameScene extends Phaser.Scene {
     if (!hasGear(this.state, 'scanner') || this.phase !== 'action') return;
     for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
       const d = e.getData('e') as EnemyData;
-      if (d.cloaked || !d.weak.length) continue;
-      d.weak.slice(0, 4).forEach((t, i) => {
-        this.beams.fillStyle(DTYPE_COLOR[t], 1).fillRect(Math.round(e.x - d.weak.length * 2 + i * 4), Math.round(e.y - e.height / 2 - 4), 3, 2);
+      const weak = weakTo(d.taken);
+      if (d.cloaked || !weak.length) continue;
+      weak.slice(0, 4).forEach((t, i) => {
+        this.beams.fillStyle(DTYPE_COLOR[t], 1).fillRect(Math.round(e.x - weak.length * 2 + i * 4), Math.round(e.y - e.height / 2 - 4), 3, 2);
       });
     }
   }
@@ -2437,7 +2445,7 @@ export class GameScene extends Phaser.Scene {
     this.sparks.explode(10, e.x, e.y);
     const stats = ENEMY_STATS[d.kind];
     if (!this.test) this.state.kills[d.kind] = (this.state.kills[d.kind] ?? 0) + 1;
-    if (drop && Math.random() < stats.dropChance) this.dropCoin(e.x, e.y, Phaser.Math.Between(...stats.credits));
+    if (drop && Math.random() < stats.dropChance) this.dropCoin(e.x, e.y, Math.round(Phaser.Math.FloatBetween(...stats.credits)));
     const { x, y } = e;
     e.destroy();
     // Spore Pods and Husks burst into seekers when shot down.
@@ -2478,7 +2486,7 @@ export class GameScene extends Phaser.Scene {
   // Act 3 drops are worth a little more, and a Credit Booster adds half again.
   dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = 26) {
     if (this.state.level >= 9) value = Math.round(value * (1 + (this.state.level - 8) * 0.06));
-    if (this.boostSegment === this.segment) value = Math.round(value * 1.5);
+    if (this.boostSegment === this.segment) value = Math.round(value * ITEMS.booster.tune!.bonus);
     const key = value >= 25 ? 'ingot4' : value >= 10 ? 'ingot3' : value >= 5 ? 'ingot2' : 'ingot1';
     const c = this.coins.create(x, y, key) as Phaser.Physics.Arcade.Image;
     c.setData('v', value);
@@ -2730,14 +2738,13 @@ export class GameScene extends Phaser.Scene {
       dreadnought: () => new Dreadnought(this, done),
       watcher: () => new Watcher(this, done),
       voss: () => new Voss(this, done),
-      queen: () => new BroodQueen(this, done, { hp: 4 }),
+      queen: () => new BroodQueen(this, done),
       mind: () => new HollowMind(this, done),
       sporeheart: () => new Sporeheart(this, done),
       wyrm: () => new Wyrm(this, done),
-      // 1.8x Rockjaw, then half again for the armor and the core alike.
-      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', hp: 2.7, shards: true }),
-      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, hp: 5.2 }),
-      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, hp: 8.8 }),
+      frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', stats: 'frostjaw', shards: true }),
+      hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, stats: 'hollowwatcher' }),
+      broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, stats: 'broodmother' }),
     };
     this.boss = make[kind]();
     this.bossBar = this.add.graphics().setDepth(900);
@@ -3122,7 +3129,7 @@ export class GameScene extends Phaser.Scene {
     const speed = this.phase === 'arrival' ? 0.4 : 1;
     // Time Warp: enemies, their shots and hazards run at half speed.
     const slow = now < this.warpUntil;
-    const edt = slow ? dt / 2 : dt;
+    const edt = slow ? dt * ITEMS.warp.tune!.slow : dt;
     this.scroll(dt, speed);
     if (this.scenery) this.scenery.tilePositionY -= 11 * speed * dt;
     if (this.planet) this.planet.y += 1.2 * dt;

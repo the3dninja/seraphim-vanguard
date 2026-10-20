@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { W } from './config';
 import { bossDeath, shipIn, shotsIn, type BossOpts } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
+import { BOSS_STATS, type BossStats } from './data/bosses';
 
 const HOME_Y = 62;
-const MAX_HP = 600;
-const REGEN = 20; // health a second while she isn't being hit
+// Health a second she heals while she isn't being hit, for each 600 health she has.
+const REGEN = 20;
 const REGEN_AFTER = 1500; // ms without a hit before she starts healing
 const REWARD = 175;
 
@@ -18,6 +19,7 @@ export class BroodQueen {
   private x = W / 2;
   private y = -30;
   private max: number;
+  private stats: BossStats;
   private hp: number;
   private t = 0;
   private entering = true;
@@ -30,7 +32,8 @@ export class BroodQueen {
   private img: Phaser.GameObjects.Image;
 
   constructor(private g: GameScene, private onDefeated: () => void, opts: BossOpts = {}) {
-    this.max = MAX_HP * (opts.hp ?? 1);
+    this.stats = BOSS_STATS[opts.stats ?? 'queen'];
+    this.max = this.stats.hp.body;
     this.hp = this.max;
     this.img = g.add.image(this.x, this.y, 'queen').setDepth(9.9); // in front of the dark
     if (opts.tint) this.img.setData('baseTint', opts.tint).setTint(opts.tint);
@@ -107,7 +110,7 @@ export class BroodQueen {
 
     // She heals if left alone.
     if (g.time.now - this.lastHit > REGEN_AFTER && this.hp < this.max) {
-      this.hp = Math.min(this.max, this.hp + REGEN * (this.max / MAX_HP) * dt);
+      this.hp = Math.min(this.max, this.hp + REGEN * (this.max / 600) * dt);
       if (Math.floor(this.t / 400) % 2 === 0 && this.mode !== 'warn') this.img.setTint(0x58d854);
       else if (this.mode !== 'warn') this.g.restTint(this.img);
       g.tipOnce('regen', 'KEEP HITTING HER\nOR SHE HEALS');
@@ -122,7 +125,7 @@ export class BroodQueen {
       if (this.dead) return;
       o.destroy();
       if (this.entering) { g.tink(o.x, o.y); continue; }
-      this.hp -= g.shotDamage(o, ['plasma'], ['kinetic']);
+      this.hp -= g.shotDamage(o, this.stats.taken.body);
       this.lastHit = g.time.now;
       g.flash(this.img);
       if (this.hp <= 0) this.defeat();

@@ -3,15 +3,12 @@ import { W, H } from './config';
 import { bossDeath, shipIn, shotsIn } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
+import { BOSS_STATS } from './data/bosses';
 
+const S = BOSS_STATS.mind; // health and damage taken, live from the Tuner
 const CORE_Y = 70;
 const HIDE_Y = -8; // where it pulls back to between phases, mostly off screen
 const EYES = 6;
-const EYE_HP = 60;
-const MEMBRANE = 400;
-const CORE_HP = 520;
-const HORROR_HP = 560;
-const TOTAL = EYES * EYE_HP + MEMBRANE + CORE_HP + HORROR_HP;
 const REWARD = 450;
 const WALL_EVERY = 2600; // ms between tentacle walls in phase 2
 const WALL_GAP = 42;
@@ -52,9 +49,9 @@ export class HollowMind {
   private core: Phaser.GameObjects.Image;
   private membraneImg: Phaser.GameObjects.Image;
   private eyes: Eye[] = [];
-  private membrane = MEMBRANE;
-  private hp = CORE_HP;
-  private horror = HORROR_HP;
+  private membrane = S.hp.membrane;
+  private hp = S.hp.core;
+  private horror = S.hp.horror;
   private fireIn = 800;
   private nextEye = 0;
   private walls: TWall[] = [];
@@ -79,7 +76,7 @@ export class HollowMind {
     this.core = g.add.image(this.x, this.y, 'mindcore').setDepth(8);
     this.membraneImg = g.add.image(this.x, this.y, 'membrane').setDepth(8.5).setVisible(false);
     for (let i = 0; i < EYES; i++) {
-      this.eyes.push({ img: g.add.image(this.x, this.y, 'eye').setDepth(8.6), hp: EYE_HP, a: (i / EYES) * Math.PI * 2 });
+      this.eyes.push({ img: g.add.image(this.x, this.y, 'eye').setDepth(8.6), hp: S.hp.eye, a: (i / EYES) * Math.PI * 2 });
     }
     // The red that bleeds over the screen in phase 4: over enemies, under shots and the ship.
     this.red = g.add.rectangle(0, 0, W, H, 0x881400, 0).setOrigin(0).setDepth(4);
@@ -91,7 +88,7 @@ export class HollowMind {
 
   healthFraction() {
     const eyes = this.eyes.reduce((n, e) => n + Math.max(0, e.hp), 0);
-    return (eyes + Math.max(0, this.membrane) + Math.max(0, this.hp) + Math.max(0, this.horror)) / TOTAL;
+    return (eyes + Math.max(0, this.membrane) + Math.max(0, this.hp) + Math.max(0, this.horror)) / (EYES * S.hp.eye + S.hp.membrane + S.hp.core + S.hp.horror);
   }
 
   aimPoint() {
@@ -343,7 +340,7 @@ export class HollowMind {
         if (e.hp <= 0) continue;
         for (const o of shotsIn(g, e.img.x, e.img.y, 6, 6)) {
           o.destroy();
-          e.hp -= g.shotDamage(o, ['plasma', 'explosive'], ['kinetic']);
+          e.hp -= g.shotDamage(o, S.taken.body);
           g.flash(e.img);
           if (e.hp <= 0) {
             g.sparks.explode(14, e.img.x, e.img.y);
@@ -358,7 +355,7 @@ export class HollowMind {
       if (this.dead) return;
       o.destroy();
       if (this.phase === 1 || this.hiding) { g.tink(o.x, o.y); continue; }
-      const dmg = g.shotDamage(o, ['plasma', 'explosive'], ['kinetic']);
+      const dmg = g.shotDamage(o, S.taken.body);
       if (this.phase === 2) {
         this.membrane -= dmg;
         g.flash(this.membraneImg);

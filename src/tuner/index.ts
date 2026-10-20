@@ -1,11 +1,14 @@
 import type Phaser from 'phaser';
 import { FONT } from '../config';
 import { TUNE_HISTORY, type TuneChange } from '../data/tuneHistory';
-import { atLv, MAX_WEAPON_LEVEL } from '../data/items';
-import { BY_PATH, CATS, ENTRIES, GAME_VALUES, PROPS, pathOf, shotsPath, type TuneCat, type TuneEntry } from './entries';
+import { DTYPES } from '../data/enemies';
+import { DTYPE_COLOR, atLv, MAX_WEAPON_LEVEL } from '../data/items';
+import {
+  BY_PATH, CATS, ENTRIES, GAME_VALUES, flatPath, levelPath, levelPropOf, pathOf, propOf, type TuneCat, type TuneEntry,
+} from './entries';
 
-// The Tuner (?tune, or with ?test): a page over the game for changing weapon
-// numbers while playing. Edits wait until APPLY, then take effect at once.
+// The Tuner (?tune, or with ?test): a page over the game for changing the
+// numbers of weapons, gear, items and foes while playing. Edits wait until APPLY, then take effect at once.
 // EXPORT lists only the values that differ from the game, as text to paste
 // back in the project so they can be written into the code. CLEAR puts every
 // value back to the game's. HISTORY lists exports already added to the game
@@ -53,6 +56,9 @@ const CSS = `
 #tuner .body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 0 10px 10px; }
 #tuner .card { border: 1px solid #3c3c3c; padding: 8px; margin-bottom: 8px; max-width: 520px; margin-inline: auto; }
 #tuner .card h2 { font-size: 10px; margin: 0 0 4px; font-weight: normal; color: #fc7460; }
+#tuner .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+#tuner .card .head h2 { margin: 0; }
+#tuner .card .pic { flex: none; image-rendering: pixelated; }
 #tuner .desc { color: #bcbcbc; margin-bottom: 6px; }
 #tuner .stat { padding: 5px 0 3px; border-top: 1px solid #1c1c1c; }
 #tuner .stat .lbl { color: #bcbcbc; }
@@ -98,7 +104,7 @@ export function installTuner(game: Phaser.Game) {
 
   // Put the live values to the game's, then the applied ones on top.
   const setLive = () => {
-    for (const [path, { arr, i }] of BY_PATH) arr[i] = stored.applied[path] ?? GAME_VALUES.get(path)!;
+    for (const [path, { obj, prop }] of BY_PATH) obj[prop] = stored.applied[path] ?? GAME_VALUES.get(path)!;
   };
   setLive();
 
@@ -111,7 +117,17 @@ export function installTuner(game: Phaser.Game) {
   open.textContent = 'TUNER';
   document.body.append(open);
 
+  // The tab open and how far down each tab was scrolled, so the Tuner reopens where it was left.
   let cat: TuneCat = 'weapons';
+  const scrolls: Partial<Record<TuneCat, number>> = {};
+  const keepScroll = () => {
+    const body = root.querySelector('.body');
+    if (body && view === 'cards') scrolls[cat] = body.scrollTop;
+  };
+  const restoreScroll = () => {
+    const body = root.querySelector('.body');
+    if (body) body.scrollTop = scrolls[cat] ?? 0;
+  };
   let view: 'cards' | 'export' | 'history' = 'cards';
   const draft: Record<string, number> = {}; // edits not applied yet
   const current = (path: string) => draft[path] ?? stored.applied[path] ?? GAME_VALUES.get(path)!;
@@ -137,8 +153,10 @@ export function installTuner(game: Phaser.Game) {
     view = 'cards';
     document.body.append(root);
     render();
+    restoreScroll();
   };
   const hide = () => {
+    keepScroll();
     root.remove();
     if (game.input.keyboard) game.input.keyboard.enabled = true;
     game.resume();
@@ -155,7 +173,7 @@ export function installTuner(game: Phaser.Game) {
     const top = el('div', 'top');
     top.append(el('h1', '', view === 'export' ? 'EXPORT' : view === 'history' ? 'HISTORY' : 'TUNER'));
     const close = el('button', '', view === 'cards' ? 'CLOSE' : 'BACK');
-    close.addEventListener('click', () => { if (view === 'cards') hide(); else { view = 'cards'; render(); } });
+    close.addEventListener('click', () => { if (view === 'cards') hide(); else { view = 'cards'; render(); restoreScroll(); } });
     top.append(close);
     root.append(top);
 
@@ -164,12 +182,11 @@ export function installTuner(game: Phaser.Game) {
       const tabs = el('div', 'tabs');
       for (const c of CATS) {
         const b = el('button', c.id === cat ? 'on' : '', c.label);
-        b.addEventListener('click', () => { cat = c.id; render(); });
+        b.addEventListener('click', () => { keepScroll(); cat = c.id; render(); restoreScroll(); });
         tabs.append(b);
       }
       root.append(tabs);
       const list = ENTRIES.filter((e) => e.cat === cat);
-      if (!list.length) body.append(el('div', 'note', 'NOTHING TO TUNE HERE YET. WEAPONS COME FIRST AS A TRIAL.'));
       for (const e of list) body.append(card(e));
     } else if (view === 'export') exportView(body);
     else historyView(body);
@@ -189,20 +206,36 @@ export function installTuner(game: Phaser.Game) {
     };
     add('apply', 'APPLY', apply, pending > 0);
     add('clear', 'CLEAR', clear, pending + tuned > 0);
-    add('export', 'EXPORT', () => { view = 'export'; render(); });
-    add('hist', 'HISTORY', () => { view = 'history'; render(); });
+    add('export', 'EXPORT', () => { keepScroll(); view = 'export'; render(); });
+    add('hist', 'HISTORY', () => { keepScroll(); view = 'history'; render(); });
     foot.append(btns);
     root.append(foot);
   }
 
   function card(e: TuneEntry) {
     const c = el('div', 'card');
-    c.append(el('h2', '', e.name), el('div', 'desc', e.desc));
-    if (e.shots) c.append(shotsGrid(e));
+    const head = el('div', 'head');
+    const pic = e.image && picture(e.image.key, e.image.tint);
+    if (pic) head.append(pic);
+    head.append(el('h2', '', e.name));
+    c.append(head);
+    if (e.desc) c.append(el('div', 'desc', e.desc));
+    // Single numbers first, each a row of its own.
+    for (const f of e.flat) {
+      const stat = el('div', 'stat');
+      stat.append(stepper(flatPath(e, f.key), f.label, f.step, () => {}));
+      c.append(stat);
+    }
+    for (const t of e.taken) {
+      c.append(grid(t.label, DTYPES.map((d) => ({ path: `${flatPath(e, t.key)}.${d}`, label: d.slice(0, 3).toUpperCase(), color: DTYPE_COLOR[d] })),
+        { min: 0, max: 10000 }));
+    }
+    const levelKeys = Object.keys(e.levels);
+    if (e.levels.shots) c.append(levelGrid(e, 'shots'));
     // Spread sits under the shot counts it fans out.
     const keys = Object.keys(e.values).sort((a, b) => Number(b === 'angle') - Number(a === 'angle'));
     for (const key of keys) {
-      const prop = PROPS[key] ?? { label: key.toUpperCase(), step: 1 };
+      const prop = propOf(e, key);
       const from = prop.from ?? 1;
       const stat = el('div', 'stat');
       // What the pair works out to at each level, as it stands with edits.
@@ -219,35 +252,101 @@ export function installTuner(game: Phaser.Game) {
       );
       showLevels();
       c.append(stat);
+      // Numbers set level by level that belong with this one go right under it.
+      for (const lk of levelKeys) if (levelPropOf(e, lk).after === key) c.append(levelGrid(e, lk));
+    }
+    // The other numbers set level by level go at the bottom.
+    for (const lk of levelKeys) {
+      const after = levelPropOf(e, lk).after;
+      if (lk !== 'shots' && !(after && after in e.values)) c.append(levelGrid(e, lk));
     }
     return c;
   }
 
-  // Shots per volley at each level: a box for each of levels 1 to 5.
-  function shotsGrid(e: TuneEntry) {
+  // A card's picture: the game's own texture, drawn 3x, tinted the way the game tints it.
+  const pics = new Map<string, string>();
+  function picture(key: string, tint?: number) {
+    if (key === 'barriercell') return barrierCell();
+    if (!game.textures.exists(key)) return null;
+    const id = `${key}:${tint ?? ''}`;
+    if (!pics.has(id)) {
+      const src = game.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const cv = document.createElement('canvas');
+      cv.width = src.width;
+      cv.height = src.height;
+      const ctx = cv.getContext('2d')!;
+      ctx.drawImage(src, 0, 0);
+      if (tint !== undefined) {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = `#${tint.toString(16).padStart(6, '0')}`;
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(src, 0, 0);
+      }
+      pics.set(id, cv.toDataURL());
+    }
+    const tex = game.textures.get(key).getSourceImage();
+    return pictureImg(pics.get(id)!, tex.width, tex.height);
+  }
+
+  // Up to 3x, no taller than 48 px or wider than 120 px.
+  function pictureImg(src: string, w: number, h: number) {
+    const k = Math.min(3, 48 / h, 120 / w);
+    const img = el('img', 'pic');
+    img.src = src;
+    img.alt = '';
+    img.style.width = `${Math.round(w * k)}px`;
+    img.style.height = `${Math.round(h * k)}px`;
+    return img;
+  }
+
+  // A Hive barrier cell has no texture (the game draws it each frame), so it's drawn here the same way.
+  function barrierCell() {
+    const cv = document.createElement('canvas');
+    cv.width = 30;
+    cv.height = 12;
+    const ctx = cv.getContext('2d')!;
+    ctx.fillStyle = '#6c0c3c';
+    ctx.beginPath(); ctx.roundRect(1, 0, 28, 12, 4); ctx.fill();
+    ctx.fillStyle = '#a40080';
+    ctx.beginPath(); ctx.roundRect(3, 2, 24, 7, 3); ctx.fill();
+    ctx.fillStyle = '#f878f8';
+    ctx.fillRect(5, 3, 4, 1);
+    return pictureImg(cv.toDataURL(), cv.width, cv.height);
+  }
+
+  // A number set level by level: a box for each of levels 1 to 5.
+  function levelGrid(e: TuneEntry, key: string) {
+    const prop = levelPropOf(e, key);
+    return grid(prop.label, Array.from({ length: MAX_WEAPON_LEVEL }, (_, n) => ({ path: levelPath(e, key, n + 1), label: `LV ${n + 1}` })), prop);
+  }
+
+  // A row of boxes, each one number, with what the game ships under it where they differ.
+  function grid(label: string, cells: { path: string; label: string; color?: number }[], prop: { min: number; max: number; whole?: boolean }) {
     const stat = el('div', 'stat');
-    stat.append(el('div', 'lbl', 'SHOTS PER VOLLEY'));
-    const grid = el('div', 'shots');
-    for (let lv = 1; lv <= MAX_WEAPON_LEVEL; lv++) {
-      const path = shotsPath(e, lv);
+    stat.append(el('div', 'lbl', label));
+    const row = el('div', 'shots');
+    for (const { path, label: name, color } of cells) {
       const cell = el('label', 'cell');
       const input = el('input');
       input.type = 'text';
-      input.inputMode = 'numeric';
+      input.inputMode = 'decimal';
       input.value = fmt(current(path));
       cell.classList.toggle('draft', path in draft);
       cell.classList.toggle('tuned', !(path in draft) && path in stored.applied);
       input.addEventListener('change', () => {
-        const v = Math.round(parseFloat(input.value));
-        setValue(path, Number.isFinite(v) ? Math.max(1, v) : current(path));
+        let v = parseFloat(input.value);
+        if (prop.whole) v = Math.round(v);
+        setValue(path, Number.isFinite(v) ? Math.min(prop.max, Math.max(prop.min, v)) : current(path));
       });
-      cell.append(el('span', '', `LV ${lv}`), input);
-      grid.append(cell);
+      const tag = el('span', '', name);
+      if (color !== undefined) tag.style.color = `#${color.toString(16).padStart(6, '0')}`;
+      cell.append(tag, input);
+      row.append(cell);
     }
-    stat.append(grid);
-    const changed = Array.from({ length: MAX_WEAPON_LEVEL }, (_, i) => shotsPath(e, i + 1))
-      .filter((path) => current(path) !== GAME_VALUES.get(path))
-      .map((path) => `LV ${path.slice(-1)} ${fmt(GAME_VALUES.get(path)!)}`);
+    stat.append(row);
+    const changed = cells.filter(({ path }) => current(path) !== GAME_VALUES.get(path))
+      .map(({ path, label: name }) => `${name} ${fmt(GAME_VALUES.get(path)!)}`);
     if (changed.length) stat.append(el('div', 'game', `GAME: ${changed.join(', ')}`));
     return stat;
   }
@@ -329,9 +428,15 @@ export function installTuner(game: Phaser.Game) {
   const describe = (path: string) => {
     const at = BY_PATH.get(path);
     if (!at) return path;
-    if (at.key === 'shots') return `${at.entry.name}: shots per volley, lv ${at.i + 1}`;
-    const from = PROPS[at.key]?.from ?? 1;
-    return `${at.entry.name}: ${(PROPS[at.key]?.label ?? at.key).toLowerCase()}, ${at.i ? 'per lv' : `at lv ${from}`}`;
+    const name = at.entry.name;
+    if (at.kind === 'flat') return `${name}: ${at.label!.toLowerCase()}`;
+    if (at.kind === 'taken') {
+      const part = at.key === 'taken' ? '' : ` (${at.key.slice(0, -5).replace(/([A-Z])/g, ' $1').toLowerCase()})`;
+      return `${name}: damage taken %${part}, ${at.prop}`;
+    }
+    if (at.kind === 'level') return `${name}: ${levelPropOf(at.entry, at.key).label.toLowerCase()}, lv ${at.i + 1}`;
+    const from = propOf(at.entry, at.key).from ?? 1;
+    return `${name}: ${propOf(at.entry, at.key).label.toLowerCase()}, ${at.i ? 'per lv' : `at lv ${from}`}`;
   };
   const exportText = (x: LocalExport) => [
     `TUNER EXPORT ${x.date}`,
