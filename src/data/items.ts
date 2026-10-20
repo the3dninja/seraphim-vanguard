@@ -49,6 +49,9 @@ export interface WeaponDef {
   // level 1 and how much it changes each level. Where a weapon has these, its
   // stats read them, so changing one changes the weapon.
   tune?: Record<string, Tuned>;
+  // Shots per volley at levels 1 to 5, for the Tuner. Where a weapon has these,
+  // its shots fan out tune.angle degrees apart (one shot flies straight).
+  shotCount?: number[];
 }
 
 export type Tuned = [lv1: number, perLv: number];
@@ -59,6 +62,13 @@ export const atLv = ([base, per]: Tuned, lv: number, from = 1) => (lv < from ? 0
 export const MAX_WEAPON_LEVEL = 5;
 const levelDamage = (base: number, level: number) => base * (1 + 0.25 * (level - 1));
 const fan = (...degs: number[]): Shot[] => degs.map((deg) => ({ dx: 0, deg }));
+// A tuned weapon's volley at a level: its shot count fanned out `angle` degrees
+// apart, centred on straight ahead.
+const tunedFan = (def: WeaponDef, lv: number) => {
+  const n = Math.max(1, Math.round(def.shotCount![lv - 1]));
+  const a = atLv(def.tune!.angle, lv);
+  return fan(...Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * a));
+};
 
 export interface ItemDef {
   name: string;
@@ -84,12 +94,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
     tune: { damage: [1, 0.5], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
+    shotCount: [3, 3, 3, 3, 5],
     stats(lv) {
       const t = this.tune!;
-      const a = atLv(t.angle, lv);
       return {
         interval: atLv(t.interval, lv),
-        shots: lv >= 5 ? fan(-2 * a, -a, 0, a, 2 * a) : fan(-a, 0, a),
+        shots: tunedFan(this, lv),
         damage: atLv(t.damage, lv),
         speed: atLv(t.speed, lv),
       };
@@ -111,12 +121,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
     tune: {
       damage: [2.5, 0.5], interval: [720, -25], splash: [15, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
+      angle: [70, -10],
     },
+    shotCount: [1, 1, 2, 2, 3],
     stats(lv) {
       const t = this.tune!;
       return {
         interval: atLv(t.interval, lv),
-        shots: lv >= 5 ? fan(-30, 0, 30) : lv >= 3 ? fan(-25, 25) : fan(0),
+        shots: tunedFan(this, lv),
         damage: atLv(t.damage, lv),
         splash: atLv(t.splash, lv),
         splashDamage: atLv(t.splashDamage, lv),
@@ -139,13 +151,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
     tune: {
       damage: [1, 0.35], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
-      stun: [300, 150], life: [400, -25],
+      stun: [300, 150], life: [400, -25], angle: [10, 0],
     },
+    shotCount: [1, 1, 1, 1, 3],
     stats(lv) {
       const t = this.tune!;
       return {
         interval: atLv(t.interval, lv),
-        shots: lv >= 5 ? fan(-10, 0, 10) : fan(0),
+        shots: tunedFan(this, lv),
         damage: atLv(t.damage, lv),
       };
     },
@@ -192,12 +205,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     speed: 160, fx: 'latch', desc: 'PLASMA. SEEKING SPORES THAT CLING ON AND BURN. MORE CLING AS IT LEVELS. GREAT VS THE HOLLOW.',
     // Grows faster than other weapons: 35% more damage a level, a second spore
     // at level 3 and a third at level 5. Spores cling and burn (see bioLatch).
-    tune: { damage: [0.5, 0.5], interval: [350, -25], burn: [1.5, 0.75], burnTime: [2000, 750], cling: [2, 1] },
+    tune: { damage: [0.5, 0.5], interval: [350, -25], burn: [1.5, 0.75], burnTime: [2000, 750], cling: [2, 1], angle: [24, -2] },
+    shotCount: [1, 1, 2, 2, 3],
     stats(lv) {
       const t = this.tune!;
       return {
         interval: atLv(t.interval, lv),
-        shots: lv >= 5 ? fan(-16, 0, 16) : lv >= 3 ? fan(-10, 10) : fan(0),
+        shots: tunedFan(this, lv),
         damage: atLv(t.damage, lv),
       };
     },
