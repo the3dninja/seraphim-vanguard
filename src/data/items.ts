@@ -83,7 +83,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   spread: {
     name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
-    tune: { damage: [1, 0.25], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
+    tune: { damage: [1, 0.5], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
     stats(lv) {
       const t = this.tune!;
       const a = atLv(t.angle, lv);
@@ -107,10 +107,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   homing: {
     name: 'HOMING MISSILES', price: 220, score: 4, icon: 'icon_homing', texture: 'missile', dtype: 'explosive', where: 'level', from: 3,
-    speed: 150, fx: 'homing', splash: 12, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
+    speed: 150, fx: 'homing', splash: 15, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
     tune: {
-      damage: [2.5, 1.875], interval: [720, -25], splash: [12, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
+      damage: [2.5, 0.5], interval: [720, -25], splash: [15, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
     },
     stats(lv) {
       const t = this.tune!;
@@ -138,8 +138,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. STUNS FROM LV 3.',
     // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
     tune: {
-      damage: [1.4, 0.35], interval: [300, -15], jumps: [2, 0], jumpRange: [46, 0], jumpDamage: [0.7, 0],
-      stun: [300, 150], life: [320, 25.6],
+      damage: [1, 0.35], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
+      stun: [300, 150], life: [400, -25],
     },
     stats(lv) {
       const t = this.tune!;
@@ -192,7 +192,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     speed: 160, fx: 'latch', desc: 'PLASMA. SEEKING SPORES THAT CLING ON AND BURN. MORE CLING AS IT LEVELS. GREAT VS THE HOLLOW.',
     // Grows faster than other weapons: 35% more damage a level, a second spore
     // at level 3 and a third at level 5. Spores cling and burn (see bioLatch).
-    tune: { damage: [1.1, 0.385], interval: [500, -25], burn: [1.1, 0], burnTime: [2000, 500], cling: [2, 1] },
+    tune: { damage: [0.5, 0.5], interval: [350, -25], burn: [1.5, 0.75], burnTime: [2000, 750], cling: [2, 1] },
     stats(lv) {
       const t = this.tune!;
       return {
