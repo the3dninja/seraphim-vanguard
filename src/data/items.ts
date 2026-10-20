@@ -50,9 +50,10 @@ export interface WeaponDef {
   // level 1 and how much it changes each level. Where a weapon has these, its
   // stats read them, so changing one changes the weapon.
   tune?: Record<string, Tuned>;
-  // Shots per volley at levels 1 to 5, for the Tuner. Where a weapon has these,
-  // its shots fan out tune.angle degrees apart (one shot flies straight).
-  shotCount?: number[];
+  // Numbers the Tuner sets level by level, 1 to 5. `shots` is shots per volley:
+  // where a weapon has it, its shots fan out tune.angle degrees apart (one shot
+  // flies straight).
+  levels?: Record<string, number[]>;
 }
 
 export type Tuned = [lv1: number, perLv: number];
@@ -66,7 +67,7 @@ const fan = (...degs: number[]): Shot[] => degs.map((deg) => ({ dx: 0, deg }));
 // A tuned weapon's volley at a level: its shot count fanned out `angle` degrees
 // apart, centred on straight ahead.
 const tunedFan = (def: WeaponDef, lv: number) => {
-  const n = Math.max(1, Math.round(def.shotCount![lv - 1]));
+  const n = Math.max(1, Math.round(def.levels!.shots[lv - 1]));
   const a = atLv(def.tune!.angle, lv);
   return fan(...Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * a));
 };
@@ -96,7 +97,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
     levelTextures: { 3: 'pellet3', 5: 'pellet5' },
     tune: { damage: [1, 0.5], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
-    shotCount: [3, 3, 4, 4, 5],
+    levels: { shots: [3, 3, 4, 4, 5] },
     stats(lv) {
       const t = this.tune!;
       return {
@@ -125,7 +126,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       damage: [2, 0.5], interval: [720, -25], splash: [15, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
       angle: [70, -10],
     },
-    shotCount: [1, 1, 2, 2, 3],
+    levels: { shots: [1, 1, 2, 2, 3] },
     stats(lv) {
       const t = this.tune!;
       return {
@@ -149,14 +150,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   ion: {
     name: 'ION ARC', price: 320, score: 6, icon: 'icon_ion', texture: 'arc', dtype: 'ion', where: 'base', from: 5,
-    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. CAN STUN FROM LV 3.',
+    speed: 330, fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. CAN STUN.',
     // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
     tune: {
       damage: [1, 0.5], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
-      stun: [750, 250], stunChance: [40, 10], life: [400, -25], angle: [10, 0],
+      stun: [250, 250], life: [400, -25], angle: [10, 0],
     },
     levelTextures: { 3: 'arc3', 5: 'arc5' },
-    shotCount: [1, 1, 2, 2, 3],
+    levels: { shots: [1, 1, 2, 2, 3], stunChance: [20, 30, 40, 50, 60] },
     stats(lv) {
       const t = this.tune!;
       return {
@@ -209,7 +210,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Light hits that grow by spore count (one more each level) and a harder,
     // longer burn. Spores cling and burn (see bioLatch).
     tune: { damage: [0.5, 0], interval: [350, 0], burn: [2, 1], burnTime: [3000, 500], cling: [3, 1], angle: [24, 0] },
-    shotCount: [1, 2, 3, 4, 5],
+    levels: { shots: [1, 2, 3, 4, 5] },
     stats(lv) {
       const t = this.tune!;
       return {

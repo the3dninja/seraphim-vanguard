@@ -93,10 +93,9 @@ const ALL_TYPES: DType[] = ['kinetic', 'laser', 'plasma', 'ion', 'explosive'];
 const ion = () => WEAPONS.ion.tune!;
 // s an Ion Arc bolt lasts, which sets its range.
 const arcLife = (lv: number) => atLv(ion().life, lv) / 1000;
-// Ion Arc stuns from level 3: ms of stun at each level.
-const ionStun = (lv: number) => atLv(ion().stun, lv, 3);
-// Ion Arc's chance (%) to stun with each hit and each chain jump.
-const ionStunChance = (lv: number) => atLv(ion().stunChance, lv, 3);
+// Ion Arc's stun: ms at each level, and its chance (%) with each hit and each chain jump.
+const ionStun = (lv: number) => atLv(ion().stun, lv);
+const ionStunChance = (lv: number) => WEAPONS.ion.levels!.stunChance[lv - 1];
 // Whether a stun with this chance (%, none = always) lands.
 const rollStun = (chance: number | undefined) => chance === undefined || Math.random() * 100 < chance;
 const FLAK_FUSE = 0.42; // s before a flak shell bursts
