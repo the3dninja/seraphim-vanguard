@@ -3,6 +3,9 @@ import { DREAD_H, DREAD_W, dreadBottom } from './art';
 import { COLOR, W } from './config';
 import type { GameScene } from './scenes/GameScene';
 import { text, toast } from './ui';
+import { BOSS_STATS } from './data/bosses';
+
+const S = BOSS_STATS.dreadnought; // health and damage taken, live from the Tuner
 
 // A piece of the Dreadnought that can be shot: four turrets, then the bridge.
 interface Part {
@@ -51,9 +54,10 @@ export class Dreadnought {
       img: g.add.image(0, -100, key).setDepth(9),
       dx, dy: dreadBottom(dx) - DREAD_H / 2 - dyUp, w: 10, hp, max: hp, spread, fireIn: 1000 + Math.abs(dx) * 12,
     });
-    this.turrets = [part('kturret', -66, 25, false, 7), part('kturret', -34, 32, true, 7),
-      part('kturret', 34, 32, true, 7), part('kturret', 66, 25, false, 7)];
-    this.bridge = { ...part('kbridge', 0, 90, false, 9), w: 16 };
+    const { outerTurret: outer, innerTurret: inner, bridge } = S.hp;
+    this.turrets = [part('kturret', -66, outer, false, 7), part('kturret', -34, inner, true, 7),
+      part('kturret', 34, inner, true, 7), part('kturret', 66, outer, false, 7)];
+    this.bridge = { ...part('kbridge', 0, bridge, false, 9), w: 16 };
     this.shieldImg = g.add.image(0, -100, 'kshield').setDepth(10);
     this.place();
     g.tweens.add({
@@ -193,7 +197,7 @@ export class Dreadnought {
         if (hit === this.bridge && !this.armed) g.flash(this.shieldImg);
         continue;
       }
-      hit.hp -= g.shotDamage(o, ['ion', 'plasma'], []);
+      hit.hp -= g.shotDamage(o, S.taken.body);
       g.flash(hit.img);
       if (hit.hp <= 0) {
         if (hit === this.bridge) this.defeat();

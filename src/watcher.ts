@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { W } from './config';
 import { bossDeath, type BossOpts } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
+import { BOSS_STATS, type BossStats } from './data/bosses';
 import { toast } from './ui';
 
 const ENTER_Y = 66;
-const MAX_HP = 420;
 const REWARD = 175; // credits, dropped as a shower of gold
 const CLOAKED = 1500; // ms spent cloaked and moving between reveals
 const SHOWN = 2600; // ms visible after each reveal
@@ -44,6 +44,7 @@ export class Watcher {
   private dead = false;
   private shown = true;
   private max: number;
+  private stats: BossStats;
   private hp: number;
   private copies: Copy[] = [];
   private real: Copy;
@@ -55,7 +56,8 @@ export class Watcher {
   private spreadIn = 1600;
 
   constructor(private g: GameScene, private onDefeated: () => void, private opts: BossOpts = {}) {
-    this.max = MAX_HP * (opts.hp ?? 1);
+    this.stats = BOSS_STATS[opts.stats ?? 'watcher'];
+    this.max = this.stats.hp.body;
     this.hp = this.max;
     this.real = this.copy(W / 2, true);
     g.tweens.add({
@@ -235,7 +237,7 @@ export class Watcher {
         if (!this.warnedDecoy) { this.warnedDecoy = true; toast(g, 'DECOY!', 120, 600); }
         continue;
       }
-      this.hp -= g.shotDamage(o, ['ion'], []);
+      this.hp -= g.shotDamage(o, this.stats.taken.body);
       g.flash(c.img);
       if (this.hp <= 0) { this.defeat(); return; }
       if (!this.mirror && this.hp <= this.max / 3) { this.startMirror(); return; }

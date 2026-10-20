@@ -3,17 +3,15 @@ import { W } from './config';
 import { bossDeath, shipIn, shotsIn } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
+import { BOSS_STATS } from './data/bosses';
 
+const S = BOSS_STATS.sporeheart; // health and damage taken, live from the Tuner
 const HOME_Y = 66;
-const CORE_HP = 520;
-const PETAL_HP = 70;
 const PETALS = 4;
 const REWARD = 225;
 const CLOSED = 3400; // ms the petals stay shut
 const OPENING = 450;
 const OPEN = 2600; // ms the core is bare
-const WEAK = ['plasma', 'explosive'] as const;
-const RESIST = ['kinetic'] as const;
 
 interface Petal { img: Phaser.GameObjects.Image; hp: number; a: number }
 
@@ -28,7 +26,7 @@ export class Sporeheart {
   private t = 0;
   private entering = true;
   private dead = false;
-  private hp = CORE_HP;
+  private hp = S.hp.core;
   private core: Phaser.GameObjects.Image;
   private petals: Petal[] = [];
   private cycle = 0; // ms into closed > opening > open > closing
@@ -42,7 +40,7 @@ export class Sporeheart {
     this.core = g.add.image(this.x, this.y, 'sporeheart').setDepth(8);
     for (let i = 0; i < PETALS; i++) {
       const a = (i / PETALS) * Math.PI * 2 + Math.PI / 4;
-      this.petals.push({ img: g.add.image(this.x, this.y, 'petal').setDepth(8.5).setRotation(a + Math.PI / 2), hp: PETAL_HP, a });
+      this.petals.push({ img: g.add.image(this.x, this.y, 'petal').setDepth(8.5).setRotation(a + Math.PI / 2), hp: S.hp.petal, a });
     }
     g.tweens.add({
       targets: this, y: HOME_Y, duration: 2400, ease: 'Sine.easeOut', delay: 500,
@@ -53,9 +51,9 @@ export class Sporeheart {
   private get bare() { return this.petals.every((p) => p.hp <= 0); }
 
   // The health bar is the core; the petals have their own armor bar under it.
-  healthFraction() { return Math.max(0, this.hp) / CORE_HP; }
+  healthFraction() { return Math.max(0, this.hp) / S.hp.core; }
 
-  armorFraction() { return this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0) / (PETALS * PETAL_HP); }
+  armorFraction() { return this.petals.reduce((n, p) => n + Math.max(0, p.hp), 0) / (PETALS * S.hp.petal); }
 
   aimPoint() { return this.dead ? null : { x: this.x, y: this.y }; }
 
@@ -114,7 +112,7 @@ export class Sporeheart {
       if (p.hp <= 0) continue;
       for (const o of shotsIn(g, p.img.x, p.img.y, 6, 6)) {
         o.destroy();
-        p.hp -= g.shotDamage(o, [...WEAK], [...RESIST]);
+        p.hp -= g.shotDamage(o, S.taken.body);
         g.flash(p.img);
         if (p.hp <= 0) {
           g.sparks.explode(14, p.img.x, p.img.y);
@@ -128,7 +126,7 @@ export class Sporeheart {
       if (this.dead) return;
       o.destroy();
       if (this.open < 0.7) { g.tink(o.x, o.y); continue; }
-      this.hp -= g.shotDamage(o, [...WEAK], [...RESIST]);
+      this.hp -= g.shotDamage(o, S.taken.body);
       g.flash(this.core);
       if (this.hp <= 0) { this.defeat(); return; }
     }

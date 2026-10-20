@@ -3,12 +3,11 @@ import { W } from './config';
 import { bossDeath, shipIn, shotsIn } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
+import { BOSS_STATS } from './data/bosses';
 
+const S = BOSS_STATS.voss; // health and damage taken, live from the Tuner
 const ENTER_Y = 58;
-const SHIELD = 100; // shield health; ion breaks it fast
 const SHIELD_BACK = 6500; // ms the shield stays down
-const HULL = 420;
-const PARASITE = 510;
 const REWARD = 450;
 
 // Emperor Voss, Possessed: the level 10 boss. Phase 1 is the Emperor's
@@ -22,9 +21,9 @@ export class Voss {
   private t = 0;
   private entering = true;
   private dead = false;
-  private shield = SHIELD;
+  private shield = S.hp.shield;
   private shieldDownAt = 0;
-  private hull = HULL;
+  private hull = S.hp.hull;
   private phase2 = false;
   private bursting = false; // the parasite tearing free; nothing can be hit
   private ship: Phaser.GameObjects.Image;
@@ -32,7 +31,7 @@ export class Voss {
   private parasite: Phaser.GameObjects.Image | null = null;
   private px = W / 2; // parasite position
   private py = ENTER_Y + 4;
-  private hp = PARASITE;
+  private hp = S.hp.parasite;
   private fireIn = 1200;
   private ringIn = 3500;
   private lunge = { step: 0, t: 0, tx: 0, ty: 0 }; // 0 idle, 1 warning, 2 diving, 3 coming back
@@ -49,7 +48,7 @@ export class Voss {
   }
 
   healthFraction() {
-    return Math.max(0, (this.phase2 ? 0 : this.hull) + Math.max(0, this.hp)) / (HULL + PARASITE);
+    return Math.max(0, (this.phase2 ? 0 : this.hull) + Math.max(0, this.hp)) / (S.hp.hull + S.hp.parasite);
   }
 
   aimPoint() {
@@ -73,7 +72,7 @@ export class Voss {
     const g = this.g;
     const ms = dt * 1000;
     if (this.shield <= 0 && g.time.now >= this.shieldDownAt + SHIELD_BACK) {
-      this.shield = SHIELD * 0.6;
+      this.shield = S.hp.shield * 0.6;
       g.flash(this.ring);
     }
     if (g.phase === 'action') {
@@ -97,21 +96,21 @@ export class Voss {
       if (this.dead || this.bursting) { o.destroy(); continue; }
       o.destroy();
       if (this.shield > 0) {
-        this.shield -= g.shotDamage(o, ['ion'], []) * 0.5;
+        this.shield -= g.shotDamage(o, S.taken.shield) * 0.5;
         g.flash(this.ring);
         g.tink(o.x, o.y);
         if (this.shield <= 0) {
           this.shieldDownAt = g.time.now;
           g.sparks.explode(16, this.x, this.y);
-          g.tipOnce('vshield', 'SHIELD DOWN!');
+          g.tipOnce('vshield', 'S.hp.shield DOWN!');
         }
         continue;
       }
-      this.hull -= g.shotDamage(o, ['ion', 'plasma'], []);
+      this.hull -= g.shotDamage(o, S.taken.hull);
       g.flash(this.ship);
       if (this.hull <= 0) { this.burst(); return; }
     }
-    if (this.shield > 0 && !this.bursting) g.tipOnce('vion', 'ION BREAKS\nHIS SHIELD FAST');
+    if (this.shield > 0 && !this.bursting) g.tipOnce('vion', 'ION BREAKS\nHIS S.hp.shield FAST');
   }
 
   // The hull cracks and the parasite tears itself free.
@@ -131,7 +130,7 @@ export class Voss {
       g.tweens.add({ targets: this.parasite, scale: 1, duration: 600, ease: 'Back.easeOut' });
       g.tweens.add({ targets: this, py: this.y + 34, duration: 700, ease: 'Sine.easeOut' });
       g.tweens.add({ targets: this, y: this.y - 16, duration: 1500 });
-      toast(g, 'THE PARASITE!', 120, 900);
+      toast(g, 'THE S.hp.parasite!', 120, 900);
       g.tipOnce('parasite', 'PLASMA BURNS IT');
     });
   }
@@ -185,7 +184,7 @@ export class Voss {
     for (const o of shotsIn(g, this.px, this.py, 19, 13)) {
       if (this.dead) return;
       o.destroy();
-      this.hp -= g.shotDamage(o, ['plasma'], ['kinetic']);
+      this.hp -= g.shotDamage(o, S.taken.parasite);
       g.flash(p);
       if (this.hp <= 0) this.defeat();
     }

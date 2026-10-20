@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { BossStatsKind } from './data/bosses';
 import type { GameScene } from './scenes/GameScene';
 
 // The end of a boss: a string of blasts over its body, then a shower of gold.
@@ -30,4 +31,5 @@ export const shipIn = (g: GameScene, x: number, y: number, hw: number, hh: numbe
 
 // Side missions bring back a mini boss in a new color, with more or less health.
 // skin: the body's texture. shards: Frostjaw sheds and fires ice shards.
-export interface BossOpts { tint?: number; hp?: number; skin?: string; shards?: boolean }
+// `stats` names the BOSS_STATS entry for a boss's health and damage taken.
+export interface BossOpts { tint?: number; stats?: BossStatsKind; skin?: string; shards?: boolean }

@@ -1,5 +1,6 @@
 import type { SaveData } from '../save';
-import { ENEMY_STATS, type FoeKind } from './enemies';
+import { BOSS_STATS } from './bosses';
+import { ENEMY_STATS, resists, weakTo, type FoeKind } from './enemies';
 import type { DType } from './items';
 import { LEVELS, metEnemies, type BossKind, type LevelDef } from './levels';
 import { SIDES } from './sides';
@@ -21,12 +22,14 @@ export interface BeastCategory { name: string; entries: BeastEntry[] }
 
 const foe = (id: FoeKind, name: string, desc: string): BeastEntry => {
   const s = ENEMY_STATS[id];
-  return { id, name, texture: s.texture, weak: s.weak, resist: s.resist, desc };
+  return { id, name, texture: s.texture, weak: weakTo(s.taken), resist: resists(s.taken), desc };
 };
 
-const boss = (id: BossKind, name: string, texture: string, kind: 'BOSS' | 'MINI BOSS',
-  weak: DType[], resist: DType[], desc: string, tint?: number): BeastEntry =>
-  ({ id, name, texture, tint, boss: kind, weak, resist, desc });
+// A boss shows what its main part takes (the first damage table).
+const boss = (id: BossKind, name: string, texture: string, kind: 'BOSS' | 'MINI BOSS', desc: string, tint?: number): BeastEntry => {
+  const taken = Object.values(BOSS_STATS[id].taken)[0];
+  return { id, name, texture, tint, boss: kind, weak: weakTo(taken), resist: resists(taken), desc };
+};
 
 export const BESTIARY: BeastCategory[] = [
   {
@@ -50,9 +53,9 @@ export const BESTIARY: BeastCategory[] = [
   {
     name: 'KESSEL BEASTS',
     entries: [
-      boss('rockjaw', 'ROCKJAW', 'rockjaw', 'MINI BOSS', ['explosive'], [],
+      boss('rockjaw', 'ROCKJAW', 'rockjaw', 'MINI BOSS',
         'A LIVING ASTEROID OF THE KESSEL BELT. BREAK OFF ITS THREE ARMOR PLATES TO REACH THE CORE.'),
-      boss('frostjaw', 'FROSTJAW', 'frostjaw', 'MINI BOSS', ['explosive'], [],
+      boss('frostjaw', 'FROSTJAW', 'frostjaw', 'MINI BOSS',
         'ROCKJAW\'S ICY KIN, DEEP IN THE GLACIER VAULT. TOUGHER, AND IT SHEDS SHARDS OF ICE.'),
     ],
   },
@@ -63,11 +66,11 @@ export const BESTIARY: BeastCategory[] = [
       foe('bulwark', 'BULWARK', 'A VOSSARI GUARD SHIP BEHIND A SHIELD THAT SOAKS UP SHOTS UNTIL IT BREAKS.'),
       foe('carrier', 'CARRIER', 'A VOSSARI CARRIER. IT PARKS AND LAUNCHES DARTS, FOUR AT A TIME.'),
       foe('phantom', 'PHANTOM', 'A VOSSARI STEALTH SHIP. SHOTS PASS THROUGH IT WHILE CLOAKED. HIT IT AS IT FIRES.'),
-      boss('dreadnought', 'DREADNOUGHT', 'dread', 'BOSS', ['ion', 'plasma'], [],
+      boss('dreadnought', 'DREADNOUGHT', 'dread', 'BOSS',
         'ADMIRAL KADE\'S FLAGSHIP. DESTROY ITS FOUR TURRETS, THEN HIT THE BRIDGE WHILE ITS SHIELD IS DOWN.'),
-      boss('watcher', 'THE WATCHER', 'watcher', 'MINI BOSS', ['ion'], [],
+      boss('watcher', 'THE WATCHER', 'watcher', 'MINI BOSS',
         'A VOSSARI SPY FRIGATE. IT HIDES AMONG DECOYS, AND ONLY THE REAL ONE TAKES DAMAGE.'),
-      boss('voss', 'EMPEROR VOSS', 'vossship', 'BOSS', ['ion', 'plasma'], [],
+      boss('voss', 'EMPEROR VOSS', 'vossship', 'BOSS',
         'THE EMPEROR, POSSESSED. BREAK HIS SHIELD AND HULL, AND THE HOLLOW PARASITE INSIDE TEARS FREE.'),
     ],
   },
@@ -82,17 +85,17 @@ export const BESTIARY: BeastCategory[] = [
       foe('mimic', 'MIMIC', 'IT WEARS YOUR SHIP\'S SHAPE, AND SHRUGS OFF WHATEVER YOUR FIRST WEAPON DEALS.'),
       foe('egg', 'EGG', 'A HOLLOW EGG. BURN IT BEFORE IT HATCHES, OR THREE LARVAE CRAWL OUT.'),
       foe('larva', 'LARVA', 'A FRESH HATCHLING. WEAK ALONE, BUT THEY COME IN THREES.'),
-      boss('queen', 'BROOD QUEEN', 'queen', 'MINI BOSS', ['plasma'], ['kinetic'],
+      boss('queen', 'BROOD QUEEN', 'queen', 'MINI BOSS',
         'THE MOTHER OF BLACK BLOOM. SHE LAYS PODS AND CHARGES, AND HEALS IF YOU STOP HITTING HER.'),
-      boss('hollowwatcher', 'HOLLOW WATCHER', 'watcher', 'MINI BOSS', ['ion'], [],
+      boss('hollowwatcher', 'HOLLOW WATCHER', 'watcher', 'MINI BOSS',
         'A WATCHER TAKEN BY THE HOLLOW. THE SAME TRICKS, AND FAR HARDER TO KILL.', 0xd800cc),
-      boss('broodmother', 'BROOD MATRIARCH', 'queen', 'MINI BOSS', ['plasma'], ['kinetic'],
+      boss('broodmother', 'BROOD MATRIARCH', 'queen', 'MINI BOSS',
         'AN ELDER BROOD QUEEN, SLOW TO DIE AND QUICK TO HEAL.', 0x58d854),
-      boss('sporeheart', 'THE SPOREHEART', 'sporeheart', 'MINI BOSS', ['plasma', 'explosive'], ['kinetic'],
+      boss('sporeheart', 'THE SPOREHEART', 'sporeheart', 'MINI BOSS',
         'A GIANT POD DEEP IN THE HIVE. SHOOT OFF ITS PETALS, THEN HIT THE CORE WHILE IT\'S OPEN.'),
-      boss('wyrm', 'THE BROOD WYRM', 'wyrmhead', 'MINI BOSS', ['plasma', 'explosive'], ['kinetic'],
+      boss('wyrm', 'THE BROOD WYRM', 'wyrmhead', 'MINI BOSS',
         'A GREAT SERPENT OF THE HIVE. ONLY THE HEAD CAN KILL IT. IT LAYS EGGS AND DIVES.'),
-      boss('mind', 'THE HOLLOW MIND', 'mindcore', 'BOSS', ['plasma', 'explosive'], ['kinetic'],
+      boss('mind', 'THE HOLLOW MIND', 'mindcore', 'BOSS',
         'THE WILL BEHIND THE HOLLOW. SHOOT ITS EYES, BREAK ITS MEMBRANE AND BURN ITS CORE.'),
     ],
   },

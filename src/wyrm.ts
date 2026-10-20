@@ -3,15 +3,13 @@ import { W, H } from './config';
 import { bossDeath, shotsIn } from './bossfx';
 import type { GameScene } from './scenes/GameScene';
 import { toast } from './ui';
+import { BOSS_STATS } from './data/bosses';
 
+const S = BOSS_STATS.wyrm; // health and damage taken, live from the Tuner
 const SEGMENTS = 10;
 const SPACING = 6; // px along the trail between segments
-const HEAD_HP = 620;
-const SEG_HP = 34;
 const REWARD = 225;
 const DIVE_EVERY = 7500; // ms between dives at the ship
-const WEAK = ['plasma', 'explosive'] as const;
-const RESIST = ['kinetic'] as const;
 
 interface Seg { img: Phaser.GameObjects.Image; hp: number }
 
@@ -27,7 +25,7 @@ export class Wyrm {
   private trail: { x: number; y: number }[] = [];
   private head: Phaser.GameObjects.Image;
   private segs: Seg[] = [];
-  private hp = HEAD_HP;
+  private hp = S.hp.head;
   private entering = true;
   private dead = false;
   private path = 0; // where it is on its figure eight
@@ -40,12 +38,12 @@ export class Wyrm {
 
   constructor(private g: GameScene, private onDefeated: () => void) {
     this.head = g.add.image(this.hx, this.hy, 'wyrmhead').setDepth(8.6);
-    for (let i = 0; i < SEGMENTS; i++) this.segs.push({ img: g.add.image(this.hx, this.hy, 'wyrmseg').setDepth(8.5 - i * 0.01), hp: SEG_HP });
+    for (let i = 0; i < SEGMENTS; i++) this.segs.push({ img: g.add.image(this.hx, this.hy, 'wyrmseg').setDepth(8.5 - i * 0.01), hp: S.hp.segment });
     g.time.delayedCall(2200, () => { this.entering = false; });
   }
 
   healthFraction() {
-    return (Math.max(0, this.hp) + this.segs.reduce((n, s) => n + Math.max(0, s.hp), 0)) / (HEAD_HP + SEGMENTS * SEG_HP);
+    return (Math.max(0, this.hp) + this.segs.reduce((n, s) => n + Math.max(0, s.hp), 0)) / (S.hp.head + SEGMENTS * S.hp.segment);
   }
 
   aimPoint() { return this.dead ? null : { x: this.hx, y: this.hy }; }
@@ -129,7 +127,7 @@ export class Wyrm {
     for (const s of this.segs.slice()) {
       for (const o of shotsIn(g, s.img.x, s.img.y, 6, 6)) {
         o.destroy();
-        s.hp -= g.shotDamage(o, [...WEAK], [...RESIST]);
+        s.hp -= g.shotDamage(o, S.taken.body);
         g.flash(s.img);
         if (s.hp <= 0) {
           g.sparks.explode(12, s.img.x, s.img.y);
@@ -143,7 +141,7 @@ export class Wyrm {
     for (const o of shotsIn(g, this.hx, this.hy, 8, 8)) {
       if (this.dead) return;
       o.destroy();
-      this.hp -= g.shotDamage(o, [...WEAK], [...RESIST]);
+      this.hp -= g.shotDamage(o, S.taken.body);
       g.flash(this.head);
       if (this.hp <= 0) { this.defeat(); return; }
     }

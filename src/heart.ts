@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { W, H } from './config';
 import type { GameScene } from './scenes/GameScene';
+import { BOSS_STATS } from './data/bosses';
 
 // Level 15's living tunnel and organic barriers, drawn every frame.
 
@@ -111,9 +112,7 @@ interface Barrier { y: number; cells: Cell[]; t: number }
 
 const CELL_W = 30;
 const CELL_H = 12;
-const CELL_HP = 36;
-const WEAK = ['plasma', 'explosive'] as const;
-const RESIST = ['kinetic'] as const;
+const S = BOSS_STATS.barrier; // cell health and damage taken, live from the Tuner
 
 // Organic barriers: rows of fleshy cells that drift down and block the way.
 // Each cell takes a couple of seconds of fire to burst. A full barrier spans
@@ -137,7 +136,7 @@ export class Barriers {
       to = from + len;
     }
     const cells: Cell[] = [];
-    for (let i = from; i < to; i++) cells.push({ x0: i * CELL_W, x1: (i + 1) * CELL_W, hp: CELL_HP });
+    for (let i = from; i < to; i++) cells.push({ x0: i * CELL_W, x1: (i + 1) * CELL_W, hp: S.hp.cell });
     const b = { y: -CELL_H, cells, t: 0 };
     this.list.push(b);
     // Eggs ride on top of some cells.
@@ -159,7 +158,7 @@ export class Barriers {
       b.cells = b.cells.filter((c) => c.hp > 0);
       if (b.y > H + CELL_H || b.cells.length === 0) { this.list.splice(this.list.indexOf(b), 1); continue; }
       for (const c of b.cells) {
-        const hurt = 1 - c.hp / CELL_HP;
+        const hurt = 1 - c.hp / S.hp.cell;
         const wob = Math.sin(b.t / 300 + c.x0) * 1;
         const top = b.y - CELL_H / 2 + wob;
         gfx.fillStyle(0x6c0c3c, 1).fillRoundedRect(c.x0 + 1, top, c.x1 - c.x0 - 2, CELL_H, 4);
@@ -175,7 +174,7 @@ export class Barriers {
         if (!s.active) continue;
         const c = cellAt(s.x, s.y);
         if (!c) continue;
-        c.hp -= g.typedDamage((s.getData('dmg') as number) ?? 1, s.getData('dtype') ?? 'kinetic', [...WEAK], [...RESIST]);
+        c.hp -= g.typedDamage((s.getData('dmg') as number) ?? 1, s.getData('dtype') ?? 'kinetic', S.taken.body);
         g.tink(s.x, s.y);
         s.destroy();
         if (c.hp <= 0) {

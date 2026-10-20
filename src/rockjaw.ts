@@ -3,6 +3,7 @@ import { W } from './config';
 import type { GameScene } from './scenes/GameScene';
 import type { BossOpts } from './bossfx';
 import { toast } from './ui';
+import { BOSS_STATS, type BossStats } from './data/bosses';
 
 // A piece of the boss that can be shot: three armor plates and the core under them.
 interface Part {
@@ -50,6 +51,7 @@ export class Rockjaw {
   private patternIn = Phaser.Math.Between(...PATTERN_MS);
   private shedIn = 1500;
   private rate: number; // how much more often it fires than Rockjaw
+  private stats: BossStats;
 
   constructor(private g: GameScene, private onDefeated: () => void, private opts: BossOpts = {}) {
     const add = (key: string) => {
@@ -57,14 +59,15 @@ export class Rockjaw {
       if (opts.tint) img.setData('baseTint', opts.tint).setTint(opts.tint);
       return img;
     };
-    const hp = (n: number) => Math.round(n * (opts.hp ?? 1));
+    this.stats = BOSS_STATS[opts.stats ?? 'rockjaw'];
+    const { core, plate, midPlate } = this.stats.hp;
     this.rate = opts.shards ? 1.5 : 1;
     this.body = add(opts.skin ?? 'rockjaw');
-    this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: hp(65), max: hp(65), gun: false };
+    this.core = { img: add('core'), dx: 0, dy: 3, w: 10, h: 8, hp: core, max: core, gun: false };
     this.plates = [
-      { img: add('plateL'), dx: -19, dy: 5, w: 12, h: 11, hp: hp(24), max: hp(24), gun: true },
-      { img: add('plateL').setFlipX(true), dx: 19, dy: 5, w: 12, h: 11, hp: hp(24), max: hp(24), gun: true },
-      { img: add('plateC'), dx: 0, dy: 2, w: 14, h: 9, hp: hp(30), max: hp(30), gun: false },
+      { img: add('plateL'), dx: -19, dy: 5, w: 12, h: 11, hp: plate, max: plate, gun: true },
+      { img: add('plateL').setFlipX(true), dx: 19, dy: 5, w: 12, h: 11, hp: plate, max: plate, gun: true },
+      { img: add('plateC'), dx: 0, dy: 2, w: 14, h: 9, hp: midPlate, max: midPlate, gun: false },
     ];
     this.plates.forEach((p) => p.img.setDepth(9));
     this.place();
@@ -178,7 +181,7 @@ export class Rockjaw {
         }
         continue;
       }
-      hitPart.hp -= g.shotDamage(o, ['explosive'], []);
+      hitPart.hp -= g.shotDamage(o, this.stats.taken.body);
       g.flash(hitPart.img);
       if (hitPart.hp <= 0) {
         if (hitPart === this.core) this.defeat();
