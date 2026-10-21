@@ -202,22 +202,22 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   repair: { name: 'REPAIR KIT', price: 50, icon: 'icon_repair', cap: 3, desc: 'RESTORES 2 HEALTH.', tune: { heal: 2 } },
-  shield: { name: 'SHIELD CELL', price: 90, icon: 'icon_shield', cap: 2, desc: 'BLOCKS ALL DAMAGE FOR 5 SECONDS.', tune: { time: 5000 } },
-  overdrive: { name: 'OVERDRIVE CELL', price: 60, icon: 'icon_overdrive', cap: 3, desc: 'DOUBLE FIRE RATE FOR 8 SECONDS.', tune: { time: 8000, rate: 2 } },
-  cluster: { name: 'CLUSTER BOMB', price: 120, icon: 'icon_cluster', cap: 2, desc: 'DROPS 5 HEAVY BOMBLETS IN A CONE AHEAD. HALF DAMAGE TO BOSSES.',
-    tune: { bomblets: 5, angle: 15, damage: 16, splash: 18, bossShare: 0.5 },
+  shield: { name: 'SHIELD CELL', price: 75, icon: 'icon_shield', cap: 2, desc: 'BLOCKS ALL DAMAGE FOR 5 SECONDS.', tune: { time: 5000 } },
+  overdrive: { name: 'OVERDRIVE CELL', price: 75, icon: 'icon_overdrive', cap: 3, desc: 'DOUBLE FIRE RATE FOR 5 SECONDS.', tune: { time: 5000, rate: 2 } },
+  cluster: { name: 'CLUSTER BOMB', price: 100, icon: 'icon_cluster', cap: 2, desc: 'DROPS 10 BOMBLETS IN A CONE AHEAD. HALF DAMAGE TO BOSSES.',
+    tune: { bomblets: 10, angle: 7, damage: 10, splash: 10, bossShare: 0.5 },
   },
-  emp: { name: 'EMP PULSE', price: 130, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 5 SECONDS.', tune: { stun: 5000 } },
+  emp: { name: 'EMP PULSE', price: 75, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 5 SECONDS.', tune: { stun: 5000 } },
   decoy: { name: 'DECOY FLARE', price: 75, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.', tune: { time: 5000 } },
-  booster: { name: 'CREDIT BOOSTER', price: 150, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.', tune: { bonus: 1.5 } },
-  drone: { name: 'REPAIR DRONE', price: 140, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.',
+  booster: { name: 'CREDIT BOOSTER', price: 75, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.', tune: { bonus: 1.5 } },
+  drone: { name: 'REPAIR DRONE', price: 125, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.',
     tune: { heal: 1, every: 4000, time: 20000 },
   },
-  fullrepair: { name: 'FULL REPAIR', price: 180, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
-  nova: { name: 'NOVA BOMB', price: 220, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.', tune: { damage: 16 } },
-  warp: { name: 'TIME WARP', price: 180, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 5 SECONDS.', tune: { time: 5000, slow: 0.5 } },
+  fullrepair: { name: 'FULL REPAIR', price: 200, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
+  nova: { name: 'NOVA BOMB', price: 125, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.', tune: { damage: 16 } },
+  warp: { name: 'TIME WARP', price: 75, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 5 SECONDS.', tune: { time: 5000, slow: 0.5 } },
   rewind: {
-    name: 'REWIND BEACON', price: 400, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
+    name: 'REWIND BEACON', price: 250, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
     desc: 'IF YOUR SHIP IS DESTROYED, RESTART AT THE LAST VENDOR WITH FULL HEALTH.',
   },
 };
@@ -229,8 +229,8 @@ export const stackLabel = (it: { id: ItemId; count: number }) => `${it.count}/${
 // gear by a level. Apply right away or keep it in storage for later.
 export interface KitDef { name: string; price: number; score: number; desc: string; icon: string; target: 'weapon' | 'gear' }
 export const KITS: Record<KitId, KitDef> = {
-  wkit: { name: 'WEAPON KIT', price: 220, score: 5, icon: 'icon_wkit', target: 'weapon', desc: 'RAISES ANY ONE WEAPON BY 1 LEVEL, UP TO 5.' },
-  gkit: { name: 'GEAR KIT', price: 260, score: 6, icon: 'icon_gkit', target: 'gear', desc: 'RAISES ANY ONE GEAR BY 1 LEVEL, UP TO 5.' },
+  wkit: { name: 'WEAPON KIT', price: 250, score: 5, icon: 'icon_wkit', target: 'weapon', desc: 'RAISES ANY ONE WEAPON BY 1 LEVEL, UP TO 5.' },
+  gkit: { name: 'GEAR KIT', price: 250, score: 6, icon: 'icon_gkit', target: 'gear', desc: 'RAISES ANY ONE GEAR BY 1 LEVEL, UP TO 5.' },
 };
 
 // Special gear sits in gear slots. Passive gear works on its own; movement and

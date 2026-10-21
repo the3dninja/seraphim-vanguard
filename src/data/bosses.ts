@@ -11,29 +11,29 @@ const t = (kinetic: number, laser: number, plasma: number, ion: number, explosiv
   ({ kinetic, laser, plasma, ion, explosive });
 
 export const BOSS_STATS: Record<BossStatsKind, BossStats> = {
-  rockjaw: { hp: { core: 75, plate: 24, midPlate: 30 }, taken: { body: t(50, 100, 100, 150, 200) } },
+  rockjaw: { hp: { core: 75, plate: 24, midPlate: 30 }, taken: { body: t(100, 100, 100, 150, 200) } },
   // Rockjaw's icy kin, tougher all over.
-  frostjaw: { hp: { core: 135, plate: 65, midPlate: 80 }, taken: { body: t(50, 150, 100, 100, 200) } },
+  frostjaw: { hp: { core: 135, plate: 65, midPlate: 80 }, taken: { body: t(100, 150, 100, 100, 200) } },
   dreadnought: {
-    hp: { outerTurret: 25, innerTurret: 35, bridge: 125 },
-    taken: { body: t(100, 50, 50, 200, 200) },
+    hp: { outerTurret: 50, innerTurret: 75, bridge: 200 },
+    taken: { body: t(50, 75, 100, 150, 100) },
   },
-  watcher: { hp: { body: 420 }, taken: { body: t(100, 50, 50, 200, 200) } },
-  hollowwatcher: { hp: { body: 2184 }, taken: { body: t(50, 150, 100, 200, 50) } },
+  watcher: { hp: { body: 450 }, taken: { body: t(100, 100, 100, 200, 100) } },
+  hollowwatcher: { hp: { body: 2500 }, taken: { body: t(50, 50, 250, 50, 50) } },
   // The shield also takes half of what this table says, and comes back at 60%.
   voss: {
-    hp: { shield: 100, hull: 420, parasite: 510 },
-    taken: { hull: t(100, 50, 50, 200, 200), shield: t(100, 100, 100, 200, 100), parasite: t(50, 100, 200, 100, 100) },
+    hp: { shield: 150, hull: 450, parasite: 750 },
+    taken: { hull: t(100, 50, 100, 200, 100), shield: t(50, 200, 100, 200, 100), parasite: t(100, 100, 200, 100, 100) },
   },
   // The queens heal: the more health they have, the faster.
-  queen: { hp: { body: 2400 }, taken: { body: t(50, 100, 200, 100, 100) } },
-  broodmother: { hp: { body: 5280 }, taken: { body: t(50, 100, 200, 100, 100) } },
-  sporeheart: { hp: { core: 520, petal: 70 }, taken: { body: t(50, 100, 200, 100, 200) } },
-  wyrm: { hp: { head: 620, segment: 34 }, taken: { body: t(50, 100, 200, 100, 200) } },
+  queen: { hp: { body: 2500 }, taken: { body: t(150, 50, 150, 50, 150) } },
+  broodmother: { hp: { body: 7500 }, taken: { body: t(100, 100, 100, 100, 100) } },
+  sporeheart: { hp: { core: 750, petal: 100 }, taken: { body: t(150, 100, 150, 100, 150) } },
+  wyrm: { hp: { head: 750, segment: 50 }, taken: { body: t(150, 100, 150, 100, 150) } },
   mind: {
-    hp: { eye: 60, membrane: 400, core: 520, horror: 560 },
-    taken: { body: t(50, 100, 200, 100, 200) },
+    hp: { eye: 100, membrane: 500, core: 750, horror: 1000 },
+    taken: { body: t(150, 100, 150, 100, 150) },
   },
-  barrier: { hp: { cell: 36 }, taken: { body: t(50, 100, 200, 100, 200) } },
-  cargo: { hp: { body: 90 }, taken: { body: t(100, 100, 100, 100, 100) } },
+  barrier: { hp: { cell: 35 }, taken: { body: t(150, 100, 150, 100, 150) } },
+  cargo: { hp: { body: 100 }, taken: { body: t(100, 100, 100, 100, 100) } },
 };
