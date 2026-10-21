@@ -436,6 +436,52 @@ function makeScenery3(scene: Phaser.Scene, key: string, draw: (px: Px, rand: () 
 
 const wrapDy = (y: number, by: number) => Math.min(Math.abs(y - by), H - Math.abs(y - by));
 
+// Hollow space's weird purple star: a pale core, purple bands crawling with
+// green blotches, and a ragged dithered corona.
+function makePurpleStar(scene: Phaser.Scene) {
+  const r = 13, size = 44, c = size / 2;
+  canvas(scene, 'purplestar', size, size, (px) => {
+    const rand = rng(53);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c + 0.5, y - c + 0.5);
+      const a = Math.atan2(y - c, x - c);
+      if (d <= r) {
+        const band = Math.sin(d * 0.9 + Math.sin(a * 3) * 1.5);
+        let col = d < 4 ? '#fcfcfc' : d < 7 ? '#f878f8' : band > 0.3 ? '#d800cc' : band > -0.4 ? '#9878f8' : '#6844fc';
+        if (d > 5 && rand() < 0.07) col = rand() < 0.5 ? '#58d854' : '#005800';
+        px(x, y, col);
+      } else {
+        // The corona reaches further in some directions than others.
+        const reach = r + 4 + Math.sin(a * 5) * 2 + Math.sin(a * 2 + 1) * 2;
+        if (d <= reach && (x + y) % 2 === 0) px(x, y, d < r + 2.5 ? '#a40080' : '#3c1c7c');
+        else if (d <= reach + 3 && (x * 3 + y) % 5 === 0) px(x, y, '#3c1c7c');
+      }
+    }
+  });
+}
+
+// A purple-green nebula, dithered thin so it sits far back.
+function makeHollowNebula(scene: Phaser.Scene) {
+  const w = 150, h = 120;
+  canvas(scene, 'hollownebula', w, h, (px) => {
+    const rand = rng(77);
+    const puffs = Array.from({ length: 9 }, () => [20 + rand() * (w - 40), 20 + rand() * (h - 40), 14 + rand() * 22, rand()]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = 0, green = 0;
+      for (const [bx, by, r, k] of puffs) {
+        const f = Math.max(0, 1 - Math.hypot(x - bx, (y - by) * 1.2) / r);
+        v += f;
+        green += f * k;
+      }
+      if (v <= 0.15) continue;
+      const g = green / v > 0.55;
+      if (v > 0.9 && (x + y) % 2 === 0) px(x, y, g ? '#1c4c1c' : '#3c1c5c');
+      else if (v > 0.45 && (x + y * 3) % 4 === 0) px(x, y, g ? '#143414' : '#2c1444');
+      else if ((x * 5 + y * 3) % 9 === 0) px(x, y, g ? '#0c240c' : '#1c0c2c');
+    }
+  });
+}
+
 function makeSceneries3(scene: Phaser.Scene) {
   // Blight Colony: fungal blotches in sick green and purple.
   makeScenery3(scene, 'scenery_blight', (px, rand) => {
@@ -465,6 +511,27 @@ function makeSceneries3(scene: Phaser.Scene) {
       if (v > 1.4 && (x + y) % 2 === 0) px(x, y, '#3c1c7c');
       else if (v > 0.9 && (x + y) % 2 === 0) px(x, y, '#24104c');
       else if (v < -1.3 && (x * 3 + y) % 4 === 0) px(x, y, '#3c0c3c');
+    }
+  });
+  // Hollow space, out of the rift: sickly purple and green blotches webbed with veins.
+  makeScenery3(scene, 'scenery_beyond', (px, rand) => {
+    const blobs = Array.from({ length: 10 }, () => [rand() * W, rand() * H, 12 + rand() * 22, rand() < 0.5 ? 1 : 0]);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      for (const [bx, by, r, k] of blobs) {
+        const v = 1 - Math.hypot(x - bx, wrapDy(y, by)) / r;
+        if (v > 0.55 && (x + y) % 2 === 0) { px(x, y, k ? '#142c10' : '#24102c'); break; }
+        if (v > 0.2 && (x * 3 + y * 5) % 7 === 0) { px(x, y, k ? '#0c1c08' : '#180a20'); break; }
+      }
+    }
+    for (let i = 0; i < 12; i++) {
+      let x = rand() * W, y = rand() * H, a = rand() * Math.PI * 2;
+      for (let s = 0; s < 50; s++) {
+        a += (rand() - 0.5) * 0.7;
+        x += Math.cos(a);
+        y += Math.sin(a);
+        if (x < 0 || x >= W) break;
+        px(Math.round(x), ((Math.round(y) % H) + H) % H, s % 7 === 0 ? '#3c0c3c' : '#200820');
+      }
     }
   });
   // Hive Reef: branching coral growing in from the edges.
@@ -548,6 +615,8 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
   makeDarkness(scene);
   makeSporeCloud(scene);
   makeSceneries3(scene);
+  makePurpleStar(scene);
+  makeHollowNebula(scene);
   makePlanet('blightworld', 26, ['#58d854', '#9878f8', '#00a800', '#6844fc'], '#1c1c3c');
   // Side mission moons on the star map: small, each colored for its locale.
   const moons: [string, string[], string][] = [

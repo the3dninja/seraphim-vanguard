@@ -139,8 +139,9 @@ export function equipFromStorage(s: SaveData, index: number): boolean {
 // Credits spent upgrading a weapon or gear to its current level.
 export function upgradeSpend(s: SaveData, id: WeaponId | GearId) {
   const level = isWeapon(id) ? weaponLevel(s, id) : gearLevel(s, id);
+  const price = isWeapon(id) ? weaponUpgradePrice : gearUpgradePrice;
   let total = 0;
-  for (let lv = 2; lv <= level; lv++) total += weaponUpgradePrice(lv);
+  for (let lv = 2; lv <= level; lv++) total += price(lv);
   return total;
 }
 
@@ -165,7 +166,9 @@ export const MAX_ITEM_SLOTS = 3;
 export const MAX_GEAR_SLOTS = 2;
 
 // Placeholder prices for playtesting. Slot prices match the Ship screen.
-export const weaponUpgradePrice = (nextLevel: number) => 100 * nextLevel;
+// Weapon upgrades: 300, 500, 700 and 900 for levels 2 to 5. Gear: 200 to 500.
+export const weaponUpgradePrice = (nextLevel: number) => 200 * nextLevel - 100;
+export const gearUpgradePrice = (nextLevel: number) => 100 * nextLevel;
 export const hullPrice = (s: SaveData) => 100 * (s.maxHealth - 4);
 export const weaponSlotPrice = (n: number) => [0, 600][n] ?? 0;
 export const itemSlotPrice = (n: number) => [0, 300, 1000][n] ?? 0;
@@ -233,7 +236,7 @@ export function upgradesFor(s: SaveData): Upgrade[] {
     list.push({
       key: `glv:${id}`, name: GEAR[id].name, detail: `LV ${lv}>${lv + 1}`, icon: GEAR[id].icon,
       desc: GEAR[id].levelUp,
-      price: weaponUpgradePrice(lv + 1), apply: (st) => { st.gearLevels[id] = lv + 1; },
+      price: gearUpgradePrice(lv + 1), apply: (st) => { st.gearLevels[id] = lv + 1; },
     });
   }
   return list;
