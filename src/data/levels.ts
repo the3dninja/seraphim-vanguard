@@ -1,11 +1,14 @@
 export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'trapper' | 'driller' | 'lancer' | 'bulwark'
-  | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk' | 'egg' | 'larva';
+  | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk' | 'egg' | 'larva'
+  // Corrupted: Raider, Drone Swarm and Vossari ships overgrown by the Hollow (see corrupt.ts).
+  | 'cdart' | 'cweaver' | 'cgunboat' | 'cbomber' | 'ctrapper' | 'cdrone' | 'cdriller' | 'cminelayer'
+  | 'clancer' | 'cbulwark' | 'ccarrier' | 'cphantom';
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
 // Drillers come in from the side `x` names instead of the top (pair = one from each side).
 export type Pattern = 'line' | 'column' | 'vee' | 'pair' | 'single' | 'swarm';
 export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' | 'nebula' | 'forge' | 'relay'
-  | 'blight' | 'throne' | 'deep' | 'rift' | 'reef' | 'bloom' | 'gate' | 'heart' | 'mist';
+  | 'blight' | 'throne' | 'deep' | 'rift' | 'beyond' | 'reef' | 'bloom' | 'gate' | 'heart' | 'mist';
 // shard: falling ice. patch: an ice sheet that makes the ship slide. turret: a
 // capital ship gun that leans in from the screen edge and fires a burst.
 // lightning: a column flashes, then a bolt strikes down it. flare: a sweep of
@@ -63,6 +66,9 @@ export interface LevelDef {
   // After this segment the rift opens instead of the vendor arriving, and the
   // next segment is flown in alien space (level 11).
   riftAfter?: number;
+  // After this segment a second tear opens and lets the ship out of the rift
+  // into Hollow space, and then the vendor arrives (level 11).
+  riftExitAfter?: number;
   allies?: number; // wingmen flying with the ship (act 3)
   dark?: boolean; // only a pool of light around the ship (level 13)
   // Level 15: segments run straight into each other with no vendor stop.
@@ -81,6 +87,12 @@ export interface LevelDef {
 
 // Wave scripts with every delay scaled by `k`, to the nearest 50 ms.
 const shorten = (k: number, segs: Wave[][]) => segs.map((seg) => seg.map((w) => ({ ...w, delay: Math.round((w.delay * k) / 50) * 50 })));
+// Waves coming more and more often: delays scaled by `from` at the first
+// wave, closing in steadily to `to` at the last.
+export const ramp = (from: number, to: number, waves: Wave[]) => waves.map((w, i) => {
+  const k = from + (to - from) * (i / Math.max(1, waves.length - 1));
+  return { ...w, delay: Math.round((w.delay * k) / 50) * 50 };
+});
 
 export const isBuilt = (l: LevelDef | undefined): l is LevelDef => !!l && l.segments.length > 0;
 
@@ -570,89 +582,118 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  // Act 3. Level 11 starts in normal space with the new allies. When the
-  // vendor arrives, the rift tears open and pulls the vendor and the ship in.
-  // A shorter leg inside alien space follows, then the vendor stop, then a
-  // final leg half again as long as a level 6 to 10 segment.
+  // Act 3. Level 11 starts in normal space with the new allies, against Raiders
+  // the Hollow has overgrown. When the vendor arrives, the rift tears open and
+  // pulls the vendor and the ship in. Space rushes by inside it, thick with the
+  // Hollow, until a second tear lets the ship out into Hollow space, where
+  // the vendor waits. A final leg half again as long as a level 6 to 10
+  // segment follows, under a purple star.
   {
     name: 'THE RIFT',
     desc: 'A TEAR INTO ALIEN SPACE. GRAVITY BENDS SHOTS AND SHIPS. ALLIES JOIN YOU.',
     node: 'node_rift',
     theme: 'deep',
+    segmentThemes: ['deep', 'rift', 'beyond'],
     riftAfter: 0,
+    riftExitAfter: 1,
     allies: 2,
     segmentHazards: [[], [{ kind: 'well', every: [7000, 10000] }], [{ kind: 'well', every: [6000, 9000] }]],
     segments: [
       [
-        { delay: 2500, kind: 'gunboat', pattern: 'single', x: 0.75 },
+        { delay: 2500, kind: 'cgunboat', pattern: 'single', x: 0.75 },
         { delay: 1500, kind: 'spore', pattern: 'vee', count: 7, x: 0.7 },
         { delay: 3000, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'gunboat', pattern: 'single', x: 0.25 },
-        { delay: 2000, kind: 'weaver', pattern: 'pair', waitClear: true },
+        { delay: 2500, kind: 'cgunboat', pattern: 'single', x: 0.25 },
+        { delay: 2000, kind: 'cweaver', pattern: 'pair', waitClear: true },
         { delay: 2000, kind: 'spore', pattern: 'column', count: 5, x: 0.4 },
-        { delay: 2500, kind: 'dart', pattern: 'line', count: 6 },
+        { delay: 1500, kind: 'tendril', pattern: 'single', x: 0.75 },
+        { delay: 2500, kind: 'cdart', pattern: 'line', count: 6 },
         { delay: 3000, kind: 'spore', pattern: 'line', count: 5 },
         { delay: 2000, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'gunboat', pattern: 'pair', waitClear: true },
-        { delay: 1500, kind: 'dart', pattern: 'line', count: 6 },
-        { delay: 2500, kind: 'weaver', pattern: 'pair' },
+        { delay: 2500, kind: 'cgunboat', pattern: 'pair', waitClear: true },
+        { delay: 1500, kind: 'cdart', pattern: 'line', count: 6 },
+        { delay: 2500, kind: 'cweaver', pattern: 'pair' },
+        { delay: 1500, kind: 'spore', pattern: 'vee', count: 5, x: 0.35 },
         { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.6 },
-        { delay: 3000, kind: 'dart', pattern: 'column', count: 6, x: 0.2 },
-        { delay: 3000, kind: 'weaver', pattern: 'line', count: 4, waitClear: true },
-        { delay: 3000, kind: 'gunboat', pattern: 'single', x: 0.2 },
-        { delay: 1500, kind: 'weaver', pattern: 'line', count: 4 },
+        { delay: 3000, kind: 'cdart', pattern: 'column', count: 6, x: 0.2 },
+        { delay: 3000, kind: 'cweaver', pattern: 'line', count: 4, waitClear: true },
+        { delay: 3000, kind: 'cgunboat', pattern: 'single', x: 0.2 },
+        { delay: 1500, kind: 'cweaver', pattern: 'line', count: 4 },
+        { delay: 1500, kind: 'spore', pattern: 'column', count: 5, x: 0.8 },
         { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.5 },
         { delay: 3000, kind: 'tendril', pattern: 'line', count: 3, waitClear: true },
       ],
-      [
+      // Inside the rift: the Hollow comes a third more often, with a few
+      // Corrupted ships among them.
+      shorten(0.7, [[
         { delay: 2000, kind: 'spore', pattern: 'line', count: 6 },
         { delay: 1500, kind: 'spore', pattern: 'line', count: 6 },
         { delay: 2500, kind: 'tendril', pattern: 'pair' },
         { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.3 },
         { delay: 2500, kind: 'brood', pattern: 'single', x: 0.2, waitClear: true },
-        { delay: 3500, kind: 'tendril', pattern: 'pair' },
+        { delay: 3000, kind: 'cweaver', pattern: 'pair' },
         { delay: 3000, kind: 'tendril', pattern: 'pair' },
+        { delay: 2500, kind: 'spore', pattern: 'column', count: 5, x: 0.7 },
         { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.25 },
         { delay: 2500, kind: 'brood', pattern: 'single', x: 0.2 },
         { delay: 4000, kind: 'tendril', pattern: 'pair', waitClear: true },
-        { delay: 1500, kind: 'brood', pattern: 'single', x: 0.4 },
+        { delay: 1500, kind: 'clancer', pattern: 'single', x: 0.5 },
+        { delay: 2500, kind: 'spore', pattern: 'line', count: 6 },
+        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.4 },
         { delay: 3500, kind: 'tendril', pattern: 'pair' },
-        { delay: 3000, kind: 'tendril', pattern: 'pair' },
+        { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.6 },
+        { delay: 3000, kind: 'tendril', pattern: 'pair', waitClear: true },
+        { delay: 2000, kind: 'cgunboat', pattern: 'single', x: 0.3 },
+        { delay: 2500, kind: 'tendril', pattern: 'line', count: 3 },
+        { delay: 2500, kind: 'spore', pattern: 'column', count: 5, x: 0.75 },
+        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.6 },
         { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.4, waitClear: true },
-      ],
+      ]])[0],
+      // Hollow space: spores and a few Corrupted Raiders, then the Hollow
+      // closing in faster and faster, and a last beat of spores and Corrupted
+      // Scrap Drones.
       [
-        { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.5 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.8 },
-        { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.2 },
-        { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.7 },
-        { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.75 },
-        { delay: 2500, kind: 'tendril', pattern: 'pair', waitClear: true },
-        { delay: 2000, kind: 'spore', pattern: 'column', count: 5, x: 0.6 },
-        { delay: 1500, kind: 'tendril', pattern: 'pair' },
-        { delay: 3000, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'spore', pattern: 'vee', count: 5, x: 0.5 },
-        { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.3, waitClear: true },
-        { delay: 3000, kind: 'spore', pattern: 'line', count: 6 },
-        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.2 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.8 },
-        { delay: 4000, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'husk', pattern: 'single', x: 0.5, waitClear: true },
-        { delay: 3000, kind: 'brood', pattern: 'pair' },
-        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 3000, kind: 'husk', pattern: 'pair' },
-        { delay: 3500, kind: 'brood', pattern: 'pair' },
-        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.25 },
-        { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.8, waitClear: true },
-        { delay: 2000, kind: 'tendril', pattern: 'single', x: 0.6 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.7 },
-        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.6 },
-        { delay: 2000, kind: 'brood', pattern: 'pair', waitClear: true },
-        // Final wave
-        { delay: 1500, kind: 'tendril', pattern: 'single', x: 0.2 },
-        { delay: 1500, kind: 'husk', pattern: 'single', x: 0.5 },
         { delay: 2000, kind: 'spore', pattern: 'line', count: 6 },
-        { delay: 1200, kind: 'tendril', pattern: 'pair' },
+        { delay: 1200, kind: 'spore', pattern: 'column', count: 5, x: 0.25 },
+        { delay: 1000, kind: 'spore', pattern: 'column', count: 5, x: 0.75 },
+        { delay: 2000, kind: 'cdart', pattern: 'line', count: 4 },
+        { delay: 1500, kind: 'spore', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 2500, kind: 'cweaver', pattern: 'pair', waitClear: true },
+        ...ramp(1, 0.6, [
+          { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.5 },
+          { delay: 2500, kind: 'brood', pattern: 'single', x: 0.8 },
+          { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.2 },
+          { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.7 },
+          { delay: 2500, kind: 'tendril', pattern: 'pair', waitClear: true },
+          { delay: 2000, kind: 'spore', pattern: 'column', count: 5, x: 0.6 },
+          { delay: 1500, kind: 'tendril', pattern: 'pair' },
+          { delay: 3000, kind: 'tendril', pattern: 'pair' },
+          { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.3, waitClear: true },
+          { delay: 3000, kind: 'brood', pattern: 'single', x: 0.2 },
+          { delay: 3000, kind: 'husk', pattern: 'single', x: 0.8 },
+          { delay: 3500, kind: 'tendril', pattern: 'pair' },
+          { delay: 2500, kind: 'husk', pattern: 'single', x: 0.5, waitClear: true },
+          { delay: 3000, kind: 'brood', pattern: 'pair' },
+          { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
+          { delay: 3000, kind: 'husk', pattern: 'pair' },
+          { delay: 3000, kind: 'brood', pattern: 'pair' },
+          { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.25 },
+          { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.8, waitClear: true },
+          { delay: 2000, kind: 'tendril', pattern: 'single', x: 0.6 },
+          { delay: 2500, kind: 'brood', pattern: 'single', x: 0.7 },
+          { delay: 3000, kind: 'tendril', pattern: 'pair' },
+          { delay: 2500, kind: 'husk', pattern: 'single', x: 0.3 },
+          { delay: 2000, kind: 'brood', pattern: 'pair', waitClear: true },
+          { delay: 1500, kind: 'tendril', pattern: 'line', count: 3 },
+          { delay: 1500, kind: 'husk', pattern: 'single', x: 0.5 },
+          { delay: 2000, kind: 'tendril', pattern: 'pair', waitClear: true },
+        ]),
+        // Final beat
+        { delay: 2000, kind: 'spore', pattern: 'line', count: 6 },
+        { delay: 1200, kind: 'spore', pattern: 'vee', count: 7, x: 0.5 },
+        { delay: 1500, kind: 'cdrone', pattern: 'swarm', count: 2, x: 0.1 },
+        { delay: 800, kind: 'cdrone', pattern: 'swarm', count: 2, x: 0.9 },
       ],
     ],
   },

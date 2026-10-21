@@ -53,6 +53,23 @@ export const TEST_SEQUENCES: { name: string; waves: Wave[] }[] = [
     ],
   },
   {
+    name: 'CORRUPTED',
+    waves: [
+      { delay: 400, kind: 'cdart', pattern: 'line', count: 5 },
+      { delay: 2500, kind: 'cweaver', pattern: 'pair' },
+      { delay: 2500, kind: 'cgunboat', pattern: 'single' },
+      { delay: 3000, kind: 'cdrone', pattern: 'swarm', count: 6, x: 0.1 },
+      { delay: 2500, kind: 'cdriller', pattern: 'single', x: 0.2 },
+      { delay: 3000, kind: 'clancer', pattern: 'single', x: 0.6 },
+      { delay: 3000, kind: 'cbomber', pattern: 'single', x: 0.4 },
+      { delay: 3500, kind: 'ctrapper', pattern: 'single', x: 0.8 },
+      { delay: 3000, kind: 'cminelayer', pattern: 'single' },
+      { delay: 3500, kind: 'cbulwark', pattern: 'single' },
+      { delay: 3500, kind: 'ccarrier', pattern: 'single', x: 0.6 },
+      { delay: 3500, kind: 'cphantom', pattern: 'pair' },
+    ],
+  },
+  {
     name: 'HEAVIES',
     waves: [
       { delay: 400, kind: 'minelayer', pattern: 'single' },

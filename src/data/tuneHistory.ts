@@ -173,4 +173,21 @@ export const TUNE_HISTORY: TuneRevision[] = [
       { path: 'enemies.frostjaw.coreHp', from: 175, to: 135 },
     ],
   },
+  // Not a Tuner export: playtest feedback raising the cheaper items' prices.
+  {
+    n: 6, date: '2026-10-21',
+    changes: [
+      { path: 'items.booster.price', from: 60, to: 150 },
+      { path: 'items.cluster.price', from: 45, to: 120 },
+      { path: 'items.decoy.price', from: 25, to: 75 },
+      { path: 'items.drone.price', from: 55, to: 140 },
+      { path: 'items.emp.price', from: 50, to: 130 },
+      { path: 'items.fullrepair.price', from: 90, to: 180 },
+      { path: 'items.nova.price', from: 120, to: 220 },
+      { path: 'items.overdrive.price', from: 20, to: 60 },
+      { path: 'items.repair.price', from: 15, to: 50 },
+      { path: 'items.shield.price', from: 30, to: 90 },
+      { path: 'items.warp.price', from: 100, to: 180 },
+    ],
+  },
 ];

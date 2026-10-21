@@ -24,6 +24,7 @@ import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
+import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
 
@@ -49,6 +50,7 @@ export interface EnemyData {
   burnDmg: number; // damage per burn tick
   burnTick: number; // ms to the next burn tick
   stun: number; // ms stunned: no moving or firing
+  corrupt?: boolean; // a Corrupted ship, or a mine one laid
 }
 
 // Anything a boss class offers the scene.
@@ -186,6 +188,11 @@ export class GameScene extends Phaser.Scene {
   private zaps: Zap[] = [];
   private allies: Ally[] = [];
   private riftOpen = 0; // 0 to 1: how far the rift has torn open (level 11 cutscene)
+  private tearOpen = 0; // 0 to 1: how far the way out of the rift has opened (level 11)
+  private tearGfx: Phaser.GameObjects.Graphics | null = null;
+  private nebula: Phaser.GameObjects.Image | null = null; // Hollow space's nebula, behind the planet
+  private radioUntil = 0; // when the radio call on screen is gone
+  private corruptSeen = false; // the allies have remarked on the Corrupted
   private warps!: Warps; // Maw Gate: enemies warping in
   private warpsDone = new Set<number>(); // which one-off warp-ins have happened
   private warpIn: number | null = null; // ms to the next repeating warp-in
@@ -264,6 +271,11 @@ export class GameScene extends Phaser.Scene {
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
+    this.tearOpen = 0;
+    this.tearGfx = null;
+    this.nebula = null;
+    this.radioUntil = 0;
+    this.corruptSeen = false;
     this.warpsDone = new Set();
     this.warpIn = null;
     this.homeUntil = 0;
@@ -328,8 +340,7 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
-    const inRift = this.level.riftAfter !== undefined && this.segment > this.level.riftAfter;
-    this.setTheme(inRift ? 'rift' : this.segmentTheme(this.segment));
+    this.setTheme(this.segmentTheme(this.segment));
     if (this.level.storm) this.storm = new Storm(this, this.scenery ? 3 : 2);
     this.resetHazardTimers(4000);
 
@@ -406,7 +417,7 @@ export class GameScene extends Phaser.Scene {
   // fades in, so nothing goes black (level 15's legs).
   private setTheme(theme: Theme, fade = 0) {
     this.theme = theme;
-    const old = [this.scenery, this.planet, this.fog].filter((o): o is NonNullable<typeof o> => !!o);
+    const old = [this.scenery, this.planet, this.fog, this.nebula].filter((o): o is NonNullable<typeof o> => !!o);
     if (fade) {
       this.tweens.add({ targets: old, alpha: 0, duration: fade, onComplete: () => old.forEach((o) => o.destroy()) });
       const motes = this.motes;
@@ -419,6 +430,7 @@ export class GameScene extends Phaser.Scene {
     this.scenery = null;
     this.planet = null;
     this.fog = null;
+    this.nebula = null;
     this.motes = null;
     if (theme === 'mist') {
       // A haze over the action (under shots and the ship), and spores drifting through it.
@@ -433,11 +445,16 @@ export class GameScene extends Phaser.Scene {
     if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
     if (theme === 'forge') this.planet = this.add.image(150, -6, 'sun').setAlpha(0.85);
     if (theme === 'blight') this.planet = this.add.image(140, 40, 'blightworld').setAlpha(0.8);
+    // Hollow space, out of the rift: a weird purple star before a nebula.
+    if (theme === 'beyond') {
+      this.nebula = this.add.image(112, 70, 'hollownebula').setAlpha(0.9);
+      this.planet = this.add.image(40, 96, 'purplestar');
+    }
     // Just above the two star layers, under everything that flies.
-    if (this.scenery) this.children.moveTo(this.scenery, 2);
-    if (this.planet) this.children.moveTo(this.planet, this.scenery ? 3 : 2);
+    let depth = 2;
+    for (const o of [this.scenery, this.nebula, this.planet]) if (o) this.children.moveTo(o, depth++);
     if (fade) {
-      for (const o of [this.scenery, this.planet, this.fog]) {
+      for (const o of [this.scenery, this.planet, this.fog, this.nebula]) {
         if (!o) continue;
         const a = o.alpha;
         o.setAlpha(0);
@@ -446,7 +463,13 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // The scenery for a segment: level 15 changes it as it goes.
+  // How many times as fast as usual the background (and the rift's gravity
+  // wells, twice as fast) go by.
+  get rush() {
+    return this.theme === 'rift' ? 3 : 1;
+  }
+
+  // The scenery for a segment: level 15 and the rift change it as they go.
   private segmentTheme(seg: number): Theme {
     return this.level.segmentThemes?.[seg] ?? this.level.theme;
   }
@@ -463,6 +486,7 @@ export class GameScene extends Phaser.Scene {
 
   // A line from an ally or Base, at the top of the screen.
   radio(msg: string) {
+    this.radioUntil = this.time.now + 4500;
     const t = text(this, W / 2, 34, msg, COLOR.cyan).setOrigin(0.5, 0).setAlign('center').setDepth(1000);
     this.tweens.add({ targets: t, alpha: 0, delay: 4100, duration: 400, onComplete: () => t.destroy() });
   }
@@ -833,24 +857,29 @@ export class GameScene extends Phaser.Scene {
     // In the tunnel, positions across the screen become positions across the tunnel.
     const tx = (x: number) => (this.tunnel ? this.tunnel.mapX(x / W, 0) : x);
     const cx = tx((w.x ?? 0.5) * W);
+    // Corrupted ships fly their own take on each formation.
+    const put = (i: number, x: number, y: number) => {
+      const p = isCorrupt(w.kind) ? corruptFormation(w.pattern, i, n, x, y) : { x, y };
+      this.spawnEnemy(w.kind, p.x, p.y);
+    };
     switch (w.pattern) {
       case 'single':
-        this.spawnEnemy(w.kind, cx, -10);
+        put(0, cx, -10);
         break;
       case 'pair':
-        this.spawnEnemy(w.kind, tx(W * 0.3), -10);
-        this.spawnEnemy(w.kind, tx(W * 0.7), -10);
+        put(0, tx(W * 0.3), -10);
+        put(1, tx(W * 0.7), -10);
         break;
       case 'line':
-        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, tx(((i + 0.5) / n) * (W - 20) + 10), -10);
+        for (let i = 0; i < n; i++) put(i, tx(((i + 0.5) / n) * (W - 20) + 10), -10);
         break;
       case 'column':
-        for (let i = 0; i < n; i++) this.spawnEnemy(w.kind, cx, -10 - i * 16);
+        for (let i = 0; i < n; i++) put(i, cx, -10 - i * 16);
         break;
       case 'vee':
         for (let i = 0; i < n; i++) {
           const side = i - (n - 1) / 2;
-          this.spawnEnemy(w.kind, Phaser.Math.Clamp(cx + side * 16, 8, W - 8), -10 - Math.abs(side) * 12);
+          put(i, Phaser.Math.Clamp(cx + side * 16, 8, W - 8), -10 - Math.abs(side) * 12);
         }
         break;
       case 'swarm':
@@ -877,6 +906,10 @@ export class GameScene extends Phaser.Scene {
     };
     e.setData('e', data);
     this.setupHollow(e, data);
+    if (isCorrupt(kind)) {
+      setupCorrupt(this, e, data);
+      this.corruptCall(kind);
+    }
     // Weaver sine amplitude has to stay on screen.
     if (kind === 'weaver') data.baseX = Phaser.Math.Clamp(x, 34, W - 34);
     if (kind === 'gunboat') data.fireIn = 700;
@@ -930,6 +963,14 @@ export class GameScene extends Phaser.Scene {
       if (this.state.level === 5) this.tipOnce('bulwark', 'BREAK THE SHIELD\nTO HIT THE HULL');
     }
     return e;
+  }
+
+  // The first Corrupted ship of a flight gets a word from the allies.
+  private corruptCall(kind: string) {
+    if (this.test || this.corruptSeen || this.state.level !== 11 || this.side) return;
+    this.corruptSeen = true;
+    const msg = RAIDER_CORRUPT.has(kind) ? 'VEX: THOSE WERE RAIDERS.\nSOMETHING ATE THEM.' : 'REYES: THAT SHIP IS\nCOVERED IN GROWTHS!';
+    this.time.delayedCall(Math.max(600, this.radioUntil - this.time.now + 200), () => this.radio(msg));
   }
 
   // --- The Hollow (levels 9 to 15) ------------------------------------------
@@ -1121,7 +1162,7 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
-  private bulletSpeed() {
+  bulletSpeed() {
     return 70 + (this.state.level - 1) * 5; // slow and sparse early on
   }
 
@@ -1226,6 +1267,7 @@ export class GameScene extends Phaser.Scene {
             e.setTexture(this.fuseLit(d, dt, 1 - d.charge / MINE_FLASH) ? 'mineLit' : 'mine');
             if (d.charge <= 0 && firing) {
               this.netBurst(e.x, e.y);
+              if (d.corrupt) for (let i = 0; i < 6; i++) this.enemyShoot(e.x, e.y, (i / 6) * Math.PI * 2 + Math.PI / 6, 60);
               e.destroy();
               continue;
             }
@@ -1238,7 +1280,8 @@ export class GameScene extends Phaser.Scene {
             d.charge -= dt * 1000;
             e.setTexture(Math.floor(d.t * 14) % 2 ? 'pmineLit' : 'pmine');
             if (d.charge <= 0 && firing) {
-              for (let i = 0; i < 8; i++) this.enemyShoot(e.x, e.y, (i / 8) * Math.PI * 2, 60);
+              const n = d.corrupt ? 12 : 8;
+              for (let i = 0; i < n; i++) this.enemyShoot(e.x, e.y, (i / n) * Math.PI * 2, 60);
               this.sparks.explode(8, e.x, e.y);
               e.destroy();
               continue;
@@ -1293,6 +1336,9 @@ export class GameScene extends Phaser.Scene {
         case 'egg':
         case 'larva':
           if (this.updateHollow(e, d, dt, firing)) continue;
+          break;
+        default:
+          if (isCorrupt(d.kind) && updateCorrupt(this, e, d, dt, firing)) continue;
           break;
         case 'bulwark':
           // Lumbers down to its spot, fires aimed pairs, then creeps on down.
@@ -2450,7 +2496,7 @@ export class GameScene extends Phaser.Scene {
     e.destroy();
     // Spore Pods and Husks burst into seekers when shot down.
     if (drop && d.kind === 'spore') for (let i = 0; i < 3; i++) this.spawnEnemy('seeker', x + (i - 1) * 4, y);
-    if (drop && d.kind === 'husk') for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
+    if (drop && (d.kind === 'husk' || SEEDED.has(d.kind))) for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
     if (d.kind === 'bomb') this.bombBurst(x, y);
   }
 
@@ -2807,6 +2853,7 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'action') return;
     const midBoss = this.level.segmentBoss?.[this.segment];
     if (this.level.riftAfter === this.segment) this.riftSequence();
+    else if (this.level.riftExitAfter === this.segment) this.riftExit();
     else if (this.segment < this.level.segments.length - 1) {
       if (midBoss && !this.segBossDone) this.startBoss(midBoss);
       else if (this.level.vendorless) this.flowOn();
@@ -2950,7 +2997,7 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.once('camerafadeoutcomplete', () => {
         station.destroy();
         this.riftOpen = 0;
-        this.setTheme('rift');
+        this.setTheme(this.segmentTheme(this.segment + 1));
         this.player.setAngle(0).setScale(1).setAlpha(1).setPosition(W / 2, H - 50);
         this.allies.forEach((a) => a.img.setPosition(this.player.x + a.ox, H + 20));
         this.cameras.main.fadeIn(600);
@@ -2958,6 +3005,64 @@ export class GameScene extends Phaser.Scene {
         this.startNextSegment();
       });
     });
+  }
+
+  // Level 11, through the rift: a dimmer tear opens ahead of the ship and
+  // keeps opening until it's bigger than the screen, then the rift fades into
+  // Hollow space and the vendor arrives.
+  private riftExit() {
+    this.phase = 'arrival';
+    this.dragFrom = null;
+    this.player.setVisible(true);
+    this.enemyBullets.clear(true, true);
+    this.gatherCoins(() => {
+      this.clearForCutscene();
+      this.tweens.add({ targets: this.player, x: W / 2, y: Math.round(H * 0.7), duration: 1400, ease: 'Sine.easeInOut' });
+      this.time.delayedCall(800, () => this.radio('VEX: ANOTHER TEAR!\nPUNCH THROUGH IT!'));
+      this.cameras.main.shake(4200, 0.003);
+      this.tweens.add({
+        targets: this, tearOpen: 1, delay: 1200, duration: 3600, ease: 'Quad.easeIn',
+        onComplete: () => {
+          // Past the edges of the screen now: the dark beyond fades into Hollow space.
+          this.tearOpen = 0;
+          this.tearGfx?.clear();
+          const dark = this.add.rectangle(0, 0, W, H, 0x0c0814).setOrigin(0).setDepth(4.5);
+          this.setTheme(this.segmentTheme(this.segment + 1));
+          this.tweens.add({
+            targets: dark, alpha: 0, duration: 1800,
+            onComplete: () => {
+              dark.destroy();
+              this.radio('REYES: WE\'RE OUT. BUT\nTHIS ISN\'T OUR SPACE.');
+              this.time.delayedCall(1800, () => this.vendorArrival());
+            },
+          });
+        },
+      });
+    });
+  }
+
+  // The way out of the rift: a lens of dim purple around the dark beyond,
+  // drawn under the ship, that swells from a slit to past the screen's edges.
+  private drawTear() {
+    if (this.tearOpen <= 0) return;
+    if (!this.tearGfx) this.tearGfx = this.add.graphics().setDepth(4.5);
+    const g = this.tearGfx.clear();
+    const k = this.tearOpen;
+    const cy = H * 0.36;
+    const hw = 12 + k * W;
+    const hh = 1 + k * k * H * 1.7;
+    for (const [m, col] of [[1.12, 0x3c1c7c], [1.05, 0xa40080], [1, 0x0c0814]] as const) {
+      g.fillStyle(col, 1);
+      for (let x = -hw * m; x <= hw * m; x += 2) {
+        const h = Math.max(0, hh * m * (1 - (x / (hw * m)) ** 2) + Phaser.Math.Between(-1, 1));
+        g.fillRect(W / 2 + x, cy - h / 2 + Math.sin(x * 0.25) * 2, 2, h);
+      }
+    }
+    // Specks of the far side showing through.
+    for (let i = 0; i < 10 * k; i++) {
+      const x = W / 2 + Phaser.Math.FloatBetween(-0.6, 0.6) * hw, y = cy + Phaser.Math.FloatBetween(-0.3, 0.3) * hh;
+      g.fillStyle(Math.random() < 0.5 ? 0x58d854 : 0x9878f8, 0.7).fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
   }
 
   // The tear: a jagged, crackling slash that widens as `riftOpen` goes 0 to 1.
@@ -3130,9 +3235,12 @@ export class GameScene extends Phaser.Scene {
     // Time Warp: enemies, their shots and hazards run at half speed.
     const slow = now < this.warpUntil;
     const edt = slow ? dt * ITEMS.warp.tune!.slow : dt;
-    this.scroll(dt, speed);
-    if (this.scenery) this.scenery.tilePositionY -= 11 * speed * dt;
+    // Inside the rift, space rushes by three times as fast.
+    const rush = this.rush;
+    this.scroll(dt, speed * rush);
+    if (this.scenery) this.scenery.tilePositionY -= 11 * speed * rush * dt;
     if (this.planet) this.planet.y += 1.2 * dt;
+    if (this.nebula) this.nebula.y += 0.7 * dt;
     if (this.fog) { this.fog.tilePositionY -= 6 * dt; this.fog.tilePositionX += 2 * dt; }
     for (const p of this.patches.slice()) {
       p.y += 30 * speed * dt;
@@ -3181,6 +3289,7 @@ export class GameScene extends Phaser.Scene {
     this.drawRamGlow();
     this.drawScanner();
     this.drawRift();
+    this.drawTear();
     this.drawFleetBattle();
     if (slow) {
       // Undo half of each enemy shot's and hazard's movement this frame.

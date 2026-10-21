@@ -1,4 +1,4 @@
-import type { LevelDef, Wave } from './levels';
+import { ramp, type LevelDef, type Wave } from './levels';
 import type { SaveData } from '../save';
 
 // Side missions: extra levels beside levels 2, 4, 7, 8, 9, 12 and 14, for
@@ -143,19 +143,33 @@ export const SIDES: SideDef[] = [
       ],
     ],
   },
-  // Beside level 8: short, and the lights keep going out.
+  // Beside level 8: a medium run that keeps speeding up as the lights keep going out.
   {
     id: 's8b', anchor: 8, name: 'ECLIPSE STATION', node: 'moon_eclipse', theme: 'blockade',
-    desc: 'SHORT. THE STATION IS LOSING POWER AND THE LIGHTS KEEP GOING OUT.',
+    desc: 'A MEDIUM RUN. THE STATION IS LOSING POWER AND THE LIGHTS KEEP GOING OUT.',
     hazards: [{ kind: 'blackout', every: [9000, 12000] }, { kind: 'turret', every: [7000, 10000] }],
-    segments: [[
+    // A little more often than usual at first, and nearly twice as often by the end.
+    segments: [ramp(0.85, 0.5, [
       w(2500, 'phantom', 'pair'), w(2500, 'weaver', 'line', { count: 5 }),
       w(3000, 'carrier', 'single', { x: 0.5, waitClear: true }), w(2000, 'phantom', 'line', { count: 3 }),
       w(2500, 'lancer', 'pair'), w(3000, 'drone', 'swarm', { count: 10, x: 0.1 }),
       w(2500, 'bulwark', 'single', { x: 0.5, waitClear: true }), w(2000, 'phantom', 'pair'),
       w(1500, 'minelayer', 'single', { x: 0.5 }), w(3000, 'gunboat', 'pair'),
       w(2500, 'phantom', 'line', { count: 4 }), w(3000, 'carrier', 'pair', { waitClear: true }),
-    ]],
+      w(2500, 'lancer', 'line', { count: 3 }), w(2500, 'drone', 'swarm', { count: 10, x: 0.9 }),
+      w(2000, 'weaver', 'vee', { count: 5, x: 0.5 }), w(3000, 'bulwark', 'pair', { waitClear: true }),
+      w(2000, 'phantom', 'line', { count: 3 }), w(2500, 'minelayer', 'pair'),
+      w(2500, 'gunboat', 'line', { count: 3 }), w(2500, 'lancer', 'pair'),
+      w(2500, 'carrier', 'single', { x: 0.3 }), w(1500, 'carrier', 'single', { x: 0.7, waitClear: true }),
+      w(2000, 'drone', 'swarm', { count: 10, x: 0.1 }), w(0, 'drone', 'swarm', { count: 10, x: 0.9 }),
+      w(2500, 'phantom', 'line', { count: 4 }), w(2500, 'bulwark', 'single', { x: 0.3 }),
+      w(1500, 'bulwark', 'single', { x: 0.7 }), w(2500, 'lancer', 'line', { count: 3 }),
+      w(2500, 'weaver', 'line', { count: 5 }), w(2500, 'gunboat', 'pair', { waitClear: true }),
+      // The last push.
+      w(2000, 'phantom', 'pair'), w(1500, 'lancer', 'pair'),
+      w(2000, 'carrier', 'pair'), w(2000, 'minelayer', 'single', { x: 0.5 }),
+      w(2000, 'phantom', 'line', { count: 4 }), w(2500, 'bulwark', 'pair', { waitClear: true }),
+    ])],
   },
   // Beside level 9: the Emperor's armory, all presses and blast doors.
   {

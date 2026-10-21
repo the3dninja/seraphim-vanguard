@@ -137,7 +137,7 @@ export class Act3Hazards {
 
     for (const w of this.wells.slice()) {
       w.t += ms;
-      w.y += 24 * dt;
+      w.y += 24 * dt * (g.rush > 1 ? 2 : 1); // twice as fast inside the rift
       if (w.y > H + WELL_R) { this.wells.splice(this.wells.indexOf(w), 1); continue; }
       // Swirling rings of dots, faster toward the core.
       for (let ring = 0; ring < 4; ring++) {

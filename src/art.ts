@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { W, H } from './config';
 import { PAL3, generateArt3, mimicRows } from './art3';
 import { generateMenuIcons } from './menuIcons';
+import { generateCorruptArt } from './corrupt';
 
 // Placeholder pixel art, drawn from text grids so it can be tweaked without an editor.
 // Each character is one pixel; "." is transparent.
@@ -927,6 +928,7 @@ function makeSceneries(scene: Phaser.Scene) {
 export function generateArt(scene: Phaser.Scene) {
   for (const [key, rows] of Object.entries(SPRITES)) makeTexture(scene, key, rows);
   makeTexture(scene, 'mimic', mimicRows(SPRITES.ship));
+  generateCorruptArt(scene);
   generateArt3(scene, (key, rows) => makeTexture(scene, key, rows), (key, r, bands, shadow) => makePlanet(scene, key, r, bands, shadow));
   for (const key of ['ingot1', 'ingot2', 'ingot3', 'ingot4']) makeGlint(scene, key);
   makeRock(scene, 'rock', 9, 8, 7);
