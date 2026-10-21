@@ -13,7 +13,7 @@ const t = (kinetic: number, laser: number, plasma: number, ion: number, explosiv
 export const BOSS_STATS: Record<BossStatsKind, BossStats> = {
   rockjaw: { hp: { core: 75, plate: 24, midPlate: 30 }, taken: { body: t(50, 100, 100, 150, 200) } },
   // Rockjaw's icy kin, tougher all over.
-  frostjaw: { hp: { core: 175, plate: 65, midPlate: 80 }, taken: { body: t(50, 150, 100, 100, 200) } },
+  frostjaw: { hp: { core: 135, plate: 65, midPlate: 80 }, taken: { body: t(50, 150, 100, 100, 200) } },
   dreadnought: {
     hp: { outerTurret: 25, innerTurret: 35, bridge: 125 },
     taken: { body: t(100, 50, 50, 200, 200) },

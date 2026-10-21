@@ -167,4 +167,10 @@ export const TUNE_HISTORY: TuneRevision[] = [
       { path: 'items.warp.time', from: 4000, to: 5000 },
     ],
   },
+  {
+    n: 5, date: '2026-10-21',
+    changes: [
+      { path: 'enemies.frostjaw.coreHp', from: 175, to: 135 },
+    ],
+  },
 ];
