@@ -2047,8 +2047,10 @@ export class GameScene extends Phaser.Scene {
         : def.fx === 'arc' ? ionStun(lv) : 0;
       const splash = stats.splash ?? def.splash;
       const volley = (deg: number, dx: number, i: number, dmg: number) => {
-        const back = Math.abs(deg) > 90;
-        const b = this.shot(this.player.x + dx, this.player.y + (back ? 7 : -7), shotTexture(def, lv), deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
+        // Shots leave from the nose, or the tail if they fly backward. Side
+        // Winders all leave from the ship's middle, so each side fans from one point.
+        const dy = def.fx === 'seek' ? 0 : Math.abs(deg) > 90 ? 7 : -7;
+        const b = this.shot(this.player.x + dx, this.player.y + dy, shotTexture(def, lv), deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
         if (def.fx) this.setFx(b, def.fx);
         if (splash) b.setData('splash', splash + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0));
         if (stats.splashDamage) b.setData('splashDmg', stats.splashDamage * (charged ? 3 : 1));
