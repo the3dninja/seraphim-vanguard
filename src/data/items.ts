@@ -100,23 +100,23 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pulse: {
     name: 'PULSE BLASTER', price: 40, score: 1, icon: 'icon_pulse', texture: 'bullet', dtype: 'kinetic', where: 'start', from: 1,
     desc: 'KINETIC. FAST STRAIGHT SHOTS. RELIABLE BUT NARROW.',
-    tune: { damage: [1, 0.25], interval: [140, -6.25], angle: [0, 0], gap: [6, 0], speed: [300, 0] },
+    tune: { damage: [1, 0.2], interval: [140, -15], angle: [0, 0], gap: [6, 0], speed: [300, 10] },
     levels: { shots: [1, 1, 1, 1, 2] },
     stats: tunedStats,
   },
   spread: {
-    name: 'SPREAD GUN', price: 60, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
+    name: 'SPREAD GUN', price: 75, score: 2, icon: 'icon_spread', texture: 'pellet', dtype: 'kinetic', where: 'base', from: 1,
     desc: 'KINETIC. 3 SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.',
     levelTextures: { 3: 'pellet3', 5: 'pellet5' },
-    tune: { damage: [1, 0.5], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
+    tune: { damage: [1, 0.15], interval: [400, -50], angle: [14, 0], speed: [250, 0] },
     levels: { shots: [3, 3, 4, 4, 5] },
     stats: tunedStats,
   },
   twin: {
     name: 'TWIN LASER', price: 150, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
-    desc: 'LASER. TWO FAST PARALLEL BEAMS. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.',
-    tune: { damage: [0.8, 0.2], interval: [170, -7.5], angle: [0, 0.5], gap: [6, 0], speed: [440, 0] },
-    levels: { shots: [2, 2, 2, 2, 4] },
+    desc: 'LASER. TWO FAST PARALLEL BEAMS, 3 AT LV 3. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.',
+    tune: { damage: [0.75, 0.1], interval: [170, -12.5], angle: [0, -0.5], gap: [6, 0], speed: [450, 10] },
+    levels: { shots: [2, 2, 3, 3, 4] },
     stats: tunedStats,
   },
   homing: {
@@ -124,7 +124,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     speed: 150, fx: 'homing', splash: 15, desc: 'EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST. LOW FIRE RATE.',
     // Damage climbs faster than other weapons (75% a level) and the blast grows.
     tune: {
-      damage: [2, 0.5], interval: [720, -25], splash: [15, 2], splashDamage: [1, 0.5], speed: [150, 0], turn: [4, 0],
+      damage: [1.5, 0.25], interval: [720, -25], splash: [15, 2], splashDamage: [1, 0.25], speed: [150, 0], turn: [4, 0.5],
       angle: [70, -10],
     },
     levels: { shots: [1, 1, 2, 2, 3] },
@@ -133,7 +133,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   plasma: {
     name: 'PLASMA LOBBER', price: 280, score: 5, icon: 'icon_plasma', texture: 'blob', dtype: 'plasma', where: 'base', from: 4,
     fx: 'pierce', desc: 'PLASMA. BIG SLOW BLOBS THAT PIERCE. MELTS ARMOR AND THE HOLLOW.',
-    tune: { damage: [3, 0.75], interval: [900, -35], angle: [16, 0], speed: [110, 0] },
+    tune: { damage: [2, 0.35], interval: [900, -25], angle: [16, 0], speed: [110, 0] },
     levels: { shots: [1, 1, 1, 1, 2] },
     stats: tunedStats,
   },
@@ -142,18 +142,18 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fx: 'arc', desc: 'ION. SHORT RANGE LIGHTNING THAT JUMPS TO 3 TARGETS. STRIPS SHIELDS. CAN STUN.',
     // Jumps, stun and bolt life are read by the game as the arcs fly (see chainArc).
     tune: {
-      damage: [1, 0.5], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
+      damage: [1, 0.25], interval: [400, -5], jumps: [0.5, 0.5], jumpRange: [30, 5], jumpDamage: [0.5, 0.25],
       stun: [250, 250], life: [400, -25], angle: [10, 0], speed: [330, 0],
     },
     levelTextures: { 3: 'arc3', 5: 'arc5' },
-    levels: { shots: [1, 1, 2, 2, 3], stunChance: [20, 30, 40, 50, 60] },
+    levels: { shots: [1, 1, 2, 2, 3], stunChance: [30, 40, 50, 60, 75] },
     stats: tunedStats,
   },
   wave: {
     name: 'WAVE BEAM', price: 250, score: 5, icon: 'icon_wave', texture: 'wavebolt', dtype: 'laser', where: 'level', from: 6,
     fx: 'wave', desc: 'LASER. A WEAVING BEAM THAT PASSES THROUGH COVER AND WALLS.',
     // Paired beams weave opposite ways (see updateShots).
-    tune: { damage: [1.3, 0.325], interval: [260, -12.5], angle: [0, 0], gap: [2, 0], speed: [240, 0], weave: [9, 0] },
+    tune: { damage: [1.3, 0.125], interval: [260, -12.5], angle: [0, 0], gap: [2, 0], speed: [240, 20], weave: [9, 1] },
     levels: { shots: [1, 1, 1, 1, 2] },
     stats: tunedStats,
   },
@@ -169,7 +169,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fx: 'flak', desc: 'EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS. AT LV 5 A DIRECT HIT BURSTS TOO.',
     // The fuse, shrapnel count and shrapnel damage are read as shells burst (see flakBurst).
     tune: {
-      damage: [1, 0.25], interval: [650, -22.5], angle: [12, 0], speed: [220, 0], fuse: [420, 0], shrapnel: [7, 0],
+      damage: [1, 0.15], interval: [650, -22.5], angle: [20, 0], speed: [220, 0], fuse: [420, 0], shrapnel: [7, 1],
       shrapDamage: [0.8, 0],
     },
     levels: { shots: [1, 1, 1, 1, 2] },
@@ -180,8 +180,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fx: 'seek', desc: 'EXPLOSIVE. FAST LITTLE MISSILES OUT TO THE SIDES THAT SEEK ENEMIES THERE. TINY BLAST.',
     // Shots go out to each side: `shots` is how many a side, the first straight
     // out and the rest `angle` degrees further forward each.
-    tune: { damage: [1, 0.25], interval: [300, -10], angle: [30, 0], speed: [260, 0], splash: [6, 1], turn: [7, 0] },
-    levels: { shots: [1, 1, 1, 1, 2] },
+    tune: { damage: [0.5, 0.05], interval: [300, 0], angle: [30, -2], speed: [260, 5], splash: [6, 1], turn: [7, 0.5] },
+    levels: { shots: [1, 2, 4, 5, 7] },
     stats(lv) {
       const n = Math.max(1, Math.round(this.levels!.shots[lv - 1]));
       const a = atLv(this.tune!.angle, lv);
@@ -194,7 +194,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fx: 'latch', desc: 'PLASMA. SEEKING SPORES THAT CLING ON AND BURN. MORE CLING AS IT LEVELS. GREAT VS THE HOLLOW.',
     // Light hits that grow by spore count (one more each level) and a harder,
     // longer burn. Spores cling and burn (see bioLatch).
-    tune: { damage: [0.5, 0], interval: [350, 0], burn: [2, 1], burnTime: [3000, 500], cling: [3, 1], angle: [24, 0], speed: [160, 0] },
+    tune: { damage: [0.5, 0.1], interval: [350, 0], burn: [2, 0.5], burnTime: [3000, 500], cling: [3, 1], angle: [24, 0], speed: [160, 0] },
     levels: { shots: [1, 2, 3, 4, 5] },
     stats: tunedStats,
   },
@@ -265,7 +265,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   satellite: {
     name: 'SATELLITE', price: 600, score: 7, icon: 'icon_satellite', from: 6, where: 'level',
-    desc: 'A MINI DRONE CIRCLES YOU AND FIRES SMALL SHOTS.', levelUp: 'FASTER FIRE. 2 DRONES AT LV 5.',
+    desc: 'A MINI DRONE CIRCLES YOU AND FIRES SMALL SHOTS.', levelUp: 'FASTER FIRE. 2 DRONES AT LV 3, 3 AT LV 5.',
   },
   dodge: {
     name: 'DODGE THRUSTERS', price: 350, score: 5, icon: 'icon_dodge', from: 9, where: 'base', active: true,
@@ -324,17 +324,17 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   plating: { tune: { health: [2, 1] } },
   magnet: { tune: { radius: [44, 8], pull: [85, 15] } },
   deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 3] } },
-  satellite: { tune: { interval: [650, -70], damage: [1, 0.15] }, levels: { drones: [1, 1, 1, 1, 2] } },
-  dodge: { tune: { cooldown: [3000, -300], safe: [410, 60], dist: [42, 0] } },
-  blink: { tune: { cooldown: [4200, -400], dist: [50, 6] } },
-  afterburner: { tune: { cooldown: [5500, -300], burn: [2100, 300], ram: [3, 1] } },
+  satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
+  dodge: { tune: { cooldown: [3000, -300], safe: [500, 50], dist: [42, 0] } },
+  blink: { tune: { cooldown: [4200, -400], dist: [50, 5] } },
+  afterburner: { tune: { cooldown: [5500, -300], burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { cooldown: [3600, -250], spin: [600, 120] } },
   burst: { tune: { cooldown: [5000, -500], shots: [12, 2], damage: [1, 0.2] } },
-  antimissile: { tune: { interval: [900, -75], radius: [44, 4] }, levels: { targets: [1, 1, 2, 2, 3] } },
+  antimissile: { tune: { interval: [900, -75], radius: [45, 5] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
   incendiary: { tune: { scorch: [0.5, 0.25], burn: [0.5, 0.25] }, levels: { burnTime: [500, 1000, 2000, 3000, 4000] } },
-  ioncoat: { tune: { stun: [150, 150] } },
-  shaped: { tune: { splash: [6, 2] } },
+  ioncoat: { tune: { stun: [300, 300] } },
+  shaped: { tune: { splash: [6, 3] } },
   overcharge: { tune: {}, levels: { every: [6, 6, 5, 5, 4] } },
   scanner: { tune: { bonus: [0.15, 0.05] } },
   rear: { tune: { damage: [0.5, 0.125] } }, // share of the paired weapon's damage
