@@ -522,6 +522,16 @@ export class GameScene extends Phaser.Scene {
     GEAR_KEYS.forEach((k, i) => kb.on(`keydown-${k}`, () => this.useGear(i)));
   }
 
+  // Moves the drag along with a ship that jumped (Dodge Thrusters, Blink Drive),
+  // so a finger still down keeps steering from where the ship landed.
+  private shiftDrag(dx: number, dy: number) {
+    const d = this.dragFrom;
+    if (!d) return;
+    d.sx += dx; d.sy += dy;
+    d.tx = Phaser.Math.Clamp(d.tx + dx, 6, W - 6);
+    d.ty = Phaser.Math.Clamp(d.ty + dy, 24, H - 30);
+  }
+
   // How far the controls ask the ship to move this frame: keyboard first, then
   // the drag target. Touch flies toward the target at keyboard speed, landing
   // exactly on it once it's within one frame's step so the ship doesn't jitter.
@@ -785,21 +795,22 @@ export class GameScene extends Phaser.Scene {
         this.gearReadyAt[id] = now + st.cooldown;
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         this.dashing = true;
-        this.dragFrom = null;
+        const from = { x: p.x, y: p.y };
         const to = { x: Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), y: Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30) };
         for (let i = 0; i < 3; i++) {
           const ghost = this.add.image(p.x + (to.x - p.x) * i / 3, p.y + (to.y - p.y) * i / 3, 'ship').setAlpha(0.4).setDepth(9);
           this.tweens.add({ targets: ghost, alpha: 0, duration: 250, delay: i * 40, onComplete: () => ghost.destroy() });
         }
-        this.tweens.add({ targets: p, x: to.x, y: to.y, duration: 120, ease: 'Quad.easeOut', onComplete: () => { this.dashing = false; } });
+        this.tweens.add({ targets: p, x: to.x, y: to.y, duration: 120, ease: 'Quad.easeOut', onComplete: () => { this.dashing = false; this.shiftDrag(to.x - from.x, to.y - from.y); } });
         break;
       }
       case 'blink': {
         const st = gearStats.blink(lv);
         this.gearReadyAt[id] = now + st.cooldown;
         this.sparks.explode(10, p.x, p.y);
-        this.dragFrom = null;
+        const from = { x: p.x, y: p.y };
         p.setPosition(Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30));
+        this.shiftDrag(p.x - from.x, p.y - from.y);
         this.invulnUntil = Math.max(this.invulnUntil, now + 250);
         this.flash(p);
         break;
