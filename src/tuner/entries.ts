@@ -45,7 +45,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   damage: { label: 'DAMAGE', step: 0.1 },
   interval: { label: 'MS BETWEEN SHOTS', step: 10 },
   angle: { label: 'SPREAD: DEGREES BETWEEN SHOTS (ONE SHOT FLIES STRAIGHT)', step: 1 },
-  'side.angle': { label: 'DEGREES BETWEEN SHOTS ON A SIDE (THE FIRST GOES STRAIGHT OUT)', step: 1 },
+  'side.angle': { label: 'SPREAD ON EACH SIDE: DEGREES FROM FIRST TO LAST SHOT, CENTRED ON STRAIGHT OUT', step: 1 },
   gap: { label: 'GAP BETWEEN SHOTS SIDE BY SIDE (PX)', step: 1 },
   speed: { label: 'SHOT SPEED (PX/S)', step: 10 },
   splash: { label: 'BLAST RADIUS (PX)', step: 1 },

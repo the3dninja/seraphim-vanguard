@@ -178,14 +178,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   side: {
     name: 'SIDE WINDERS', price: 170, score: 3, icon: 'icon_side', texture: 'sidemissile', dtype: 'explosive', where: 'level', from: 4,
     fx: 'seek', desc: 'EXPLOSIVE. FAST LITTLE MISSILES OUT TO THE SIDES THAT SEEK ENEMIES THERE. TINY BLAST.',
-    // Shots go out to each side: `shots` is how many a side, the first straight
-    // out and the rest `angle` degrees further forward each.
+    // Shots go straight out to each side: `shots` is how many a side, fanned
+    // evenly across `angle` degrees centred on straight out (0 = all straight out).
     tune: { damage: [0.5, 0.05], interval: [300, 0], angle: [30, -2], speed: [260, 5], splash: [6, 1], turn: [7, 0.5] },
     levels: { shots: [1, 2, 4, 5, 7] },
     stats(lv) {
       const n = Math.max(1, Math.round(this.levels!.shots[lv - 1]));
       const a = atLv(this.tune!.angle, lv);
-      const side = Array.from({ length: n }, (_, i) => 90 - i * a);
+      const side = Array.from({ length: n }, (_, i) => 90 + (n > 1 ? a * (i / (n - 1) - 0.5) : 0));
       return { ...tunedStats.call(this, lv), shots: fan(...side.map((d) => -d).reverse(), ...side) };
     },
   },
