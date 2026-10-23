@@ -798,6 +798,18 @@ export class GameScene extends Phaser.Scene {
     return Math.max(500, CRATES.every + Phaser.Math.Between(-CRATES.vary, CRATES.vary));
   }
 
+  // Whether a point is inside level walls: the tunnel's, blast doors, coral,
+  // barrier cells, or a rock, wreck or other hazard.
+  private solidAt(x: number, y: number) {
+    if (this.tunnel) {
+      const { l, r } = this.tunnel.at(y);
+      if (x < l || x > r) return true;
+    }
+    if (this.act3.solidAt(x, y) || this.barriers.solidAt(x, y)) return true;
+    return (this.hazards.getChildren() as Phaser.Physics.Arcade.Image[]).some((h) => h.active
+      && Math.abs(h.x - x) < h.displayWidth / 2 && Math.abs(h.y - y) < h.displayHeight / 2);
+  }
+
   private updateCrates(dt: number) {
     for (const c of this.crates.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (c.y > H + 10) { c.destroy(); continue; }
@@ -824,7 +836,7 @@ export class GameScene extends Phaser.Scene {
   private dropCrate(id: GearId) {
     const x = Phaser.Math.Between(24, W - 24);
     const c = this.crates.create(x, -10, `crate_${id}`) as Phaser.Physics.Arcade.Image;
-    c.setDepth(9).setData('gear', id).setData('x', x).setVelocityY(30);
+    c.setDepth(9).setData('gear', id).setData('x', x).setVelocityY(CRATES.speed);
     this.tipOnce('crate', 'GRAB SUPPLY CRATES\nTO USE YOUR GEAR');
   }
 
@@ -857,13 +869,36 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'blink': {
+        // To just above the bottom middle (the tunnel's middle there, in the
+        // tunnel), and whatever is near the landing spot swaps to where the
+        // ship was, keeping its offset. What lands off screen or in level
+        // walls is destroyed, with no credits.
         const st = gearStats.blink(lv);
-        this.sparks.explode(10, p.x, p.y);
         const from = { x: p.x, y: p.y };
-        p.setPosition(Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30));
+        const ty = H - 34;
+        const to = { x: this.tunnel ? this.tunnel.at(ty).cx : W / 2, y: ty };
+        const near = (o: Phaser.GameObjects.Components.Transform) => Phaser.Math.Distance.Between(o.x, o.y, to.x, to.y) <= st.radius;
+        const foes = (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).filter((e) => e.active && near(e));
+        const shots = (this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]).filter((b) => b.active && near(b));
+        this.sparks.explode(10, p.x, p.y);
+        p.setPosition(to.x, to.y);
         this.shiftDrag(p.x - from.x, p.y - from.y);
-        this.invulnUntil = Math.max(this.invulnUntil, now + 250);
+        this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         this.flash(p);
+        const dx = from.x - to.x, dy = from.y - to.y;
+        const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
+        for (const e of foes) {
+          if (lost(e.x + dx, e.y + dy)) { this.killEnemy(e, false); continue; }
+          e.setPosition(e.x + dx, e.y + dy);
+          const d = e.getData('e') as EnemyData;
+          d.baseX += dx;
+          d.stopY += dy;
+          this.sparks.explode(4, e.x, e.y);
+        }
+        for (const b of shots) {
+          if (lost(b.x + dx, b.y + dy)) b.destroy();
+          else b.setPosition(b.x + dx, b.y + dy);
+        }
         break;
       }
       case 'afterburner': {

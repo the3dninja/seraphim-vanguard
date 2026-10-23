@@ -81,6 +81,12 @@ export class Act3Hazards {
   }
 
   // How far the gravity wells drag the ship this frame.
+  // Whether a point is inside a blast door or a coral wall.
+  solidAt(x: number, y: number) {
+    return this.doors.some((d) => Math.abs(y - d.y) < DOOR_H / 2 + 1 && (x < d.gapX - d.gap / 2 || x > d.gapX + d.gap / 2))
+      || this.walls.some((wl) => Math.abs(y - wl.y) < WALL_H / 2 + 1 && (wl.left ? x < wl.w + 2 : x > W - wl.w - 2));
+  }
+
   pull(dt: number) {
     const p = this.g.player;
     let x = 0, y = 0;

@@ -146,6 +146,11 @@ export class Barriers {
 
   clear() { this.list = []; this.gfx.clear(); }
 
+  // Whether a point is inside a live barrier cell.
+  solidAt(x: number, y: number) {
+    return this.list.some((b) => Math.abs(y - b.y) < CELL_H / 2 && b.cells.some((c) => x > c.x0 && x < c.x1));
+  }
+
   update(dt: number) {
     const g = this.g;
     const gfx = this.gfx;

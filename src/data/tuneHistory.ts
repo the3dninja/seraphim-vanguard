@@ -447,4 +447,13 @@ export const TUNE_HISTORY: TuneRevision[] = [
       { path: 'weapons.wave.weave.perLv', from: 0, to: 1 },
     ],
   },
+  // Not a Tuner export: playtest feedback slowing the gear supply crates.
+  {
+    n: 8, date: '2026-10-23',
+    changes: [
+      { path: 'gear.crates.every', from: 12000, to: 20000 },
+      { path: 'gear.crates.vary', from: 3000, to: 5000 },
+      { path: 'gear.crates.speed', from: 30, to: 21 },
+    ],
+  },
 ];

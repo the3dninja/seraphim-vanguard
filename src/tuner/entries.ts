@@ -66,6 +66,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   // Gear
   health: { label: 'EXTRA MAX HEALTH', step: 1 },
   radius: { label: 'RADIUS (PX)', step: 2 },
+  'blink.radius': { label: 'SWAP RADIUS AROUND WHERE YOU LAND (PX)', step: 1 },
   pull: { label: 'PULL SPEED (PX/S)', step: 5 },
   recharge: { label: 'RECHARGE MS', step: 100 },
   'satellite.interval': { label: 'MS BETWEEN DRONE SHOTS', step: 10 },
@@ -140,6 +141,7 @@ const crates: TuneEntry = {
   flat: [
     { key: 'every', label: 'MS BETWEEN CRATES (EACH GEAR)', step: 500, obj: CRATES, prop: 'every' },
     { key: 'vary', label: 'RANDOM OFFSET MS (EACH WAIT, UP TO THIS EITHER WAY)', step: 250, obj: CRATES, prop: 'vary' },
+    { key: 'speed', label: 'FALL SPEED (PX/S)', step: 1, obj: CRATES, prop: 'speed' },
   ],
 };
 

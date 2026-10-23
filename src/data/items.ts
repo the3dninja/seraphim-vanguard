@@ -273,7 +273,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   blink: {
     name: 'BLINK DRIVE', price: 500, score: 7, icon: 'icon_blink', from: 9, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: TELEPORT A SHORT WAY THE WAY YOU ARE MOVING. PASSES THROUGH WALLS.', levelUp: 'A LONGER JUMP.',
+    desc: 'SUPPLY CRATES: TELEPORT TO THE BOTTOM MIDDLE, BRIEFLY UNTOUCHABLE. ENEMIES AND SHOTS THERE SWAP TO WHERE YOU WERE.', levelUp: 'LONGER SAFE TIME, A WIDER SWAP.',
   },
   afterburner: {
     name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
@@ -326,7 +326,8 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 3] } },
   satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
   dodge: { tune: { safe: [500, 50], dist: [42, 0] } },
-  blink: { tune: { dist: [50, 5] } },
+  // radius: enemies and shots this close to where the ship lands swap to where it was.
+  blink: { tune: { safe: [750, 50], radius: [20, 2] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
@@ -341,10 +342,10 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
-// `every` ms give or take up to `vary` ms. With two, the second slot's first
+// `every` ms give or take up to `vary` ms, falling at `speed` px/s. With two, the second slot's first
 // crate comes halfway through the first slot's second wait, so they stay apart.
 // A level can switch them off for a segment (LevelDef.noCrates).
-export const CRATES = { every: 12000, vary: 3000 };
+export const CRATES = { every: 20000, vary: 5000, speed: 21 };
 // The gear that comes in crates (the active ones), for the crate art.
 export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
 
@@ -366,7 +367,7 @@ export const gearStats = {
   deflector: gs<'hits' | 'recharge'>('deflector'),
   satellite: gs<'drones' | 'interval' | 'damage'>('satellite'),
   dodge: gs<'safe' | 'dist'>('dodge'),
-  blink: gs<'dist'>('blink'),
+  blink: gs<'safe' | 'radius'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
   burst: gs<'shots' | 'damage'>('burst'),
