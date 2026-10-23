@@ -1,7 +1,7 @@
 import { BESTIARY } from '../data/bestiary';
 import { BOSS_STATS, type BossStatsKind } from '../data/bosses';
 import { DTYPES, ENEMY_STATS, type FoeKind, type Taken } from '../data/enemies';
-import { GEAR, GEAR_TUNE, ITEMS, KITS, WEAPONS, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
+import { CRATES, GEAR, GEAR_TUNE, ITEMS, KITS, WEAPONS, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
 
 // What the Tuner can change: one card per weapon, gear, item and foe, each
 // with its in-game name and description and its numbers. Numbers come in four
@@ -70,7 +70,6 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   recharge: { label: 'RECHARGE MS', step: 100 },
   'satellite.interval': { label: 'MS BETWEEN DRONE SHOTS', step: 10 },
   'satellite.damage': { label: 'DRONE SHOT DAMAGE', step: 0.05 },
-  cooldown: { label: 'COOLDOWN MS', step: 100 },
   safe: { label: 'UNTOUCHABLE MS', step: 10 },
   dist: { label: 'DISTANCE (PX)', step: 1 },
   'afterburner.burn': { label: 'BOOST MS', step: 100 },
@@ -133,6 +132,16 @@ const gear: TuneEntry[] = (Object.keys(GEAR) as GearId[]).map((id) => ({
   cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id])], taken: [],
   values: GEAR_TUNE[id].tune, levels: GEAR_TUNE[id].levels ?? {},
 }));
+
+// Supply crates, the way usable gear comes in flight: how often they drop, for all of them.
+const crates: TuneEntry = {
+  cat: 'gear', id: 'crates', name: 'SUPPLY CRATES', image: { key: 'crate_afterburner' }, taken: [], values: {}, levels: {},
+  desc: 'USABLE GEAR DROPS IN AS CRATES THAT FIRE IT WHEN PICKED UP. A SECOND USABLE GEAR STARTS HALF A WAIT LATER.',
+  flat: [
+    { key: 'every', label: 'MS BETWEEN CRATES (EACH GEAR)', step: 500, obj: CRATES, prop: 'every' },
+    { key: 'vary', label: 'RANDOM OFFSET MS (EACH WAIT, UP TO THIS EITHER WAY)', step: 250, obj: CRATES, prop: 'vary' },
+  ],
+};
 
 const items: TuneEntry[] = [
   ...(Object.keys(ITEMS) as ItemId[]).map((id): TuneEntry => {
@@ -203,7 +212,7 @@ const bosses: TuneEntry[] = (Object.keys(BOSS_STATS) as BossStatsKind[]).map((id
   };
 });
 
-export const ENTRIES: TuneEntry[] = [...weapons, ...gear, ...items, ...foes, ...bosses];
+export const ENTRIES: TuneEntry[] = [...weapons, crates, ...gear, ...items, ...foes, ...bosses];
 
 // A number's path: category.id.key, then .perLv for a pair's change each level,
 // .lv1 to .lv5 for a number set level by level, or the damage type for damage taken.

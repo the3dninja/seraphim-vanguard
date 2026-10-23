@@ -234,7 +234,7 @@ export const KITS: Record<KitId, KitDef> = {
 };
 
 // Special gear sits in gear slots. Passive gear works on its own; movement and
-// active gear has a button in flight and a cooldown; augments change how your
+// active gear drops in as supply crates that fire it when picked up; augments change how your
 // weapons behave. Like weapons, each one is one of a kind and has levels 1 to 5.
 export const MAX_GEAR_LEVEL = 5;
 
@@ -247,7 +247,7 @@ export interface GearDef {
   where: 'base' | 'level'; // Base vendor stock, or an in-level vendor exclusive
   score: number; // how strong it is, 1 to 9 (see WeaponDef)
   levelUp: string; // what each upgrade level adds, for the Upgrade tab
-  active?: boolean; // has a button in flight
+  active?: boolean; // comes as supply crates in flight (see CRATES), each firing it once
 }
 
 export const GEAR: Record<GearId, GearDef> = {
@@ -269,23 +269,23 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   dodge: {
     name: 'DODGE THRUSTERS', price: 350, score: 5, icon: 'icon_dodge', from: 9, where: 'base', active: true,
-    desc: 'TAP: A QUICK DASH THE WAY YOU ARE MOVING, UNTOUCHABLE FOR A MOMENT.', levelUp: 'SHORTER COOLDOWN, LONGER SAFE TIME.',
+    desc: 'SUPPLY CRATES: A QUICK DASH THE WAY YOU ARE MOVING, UNTOUCHABLE FOR A MOMENT.', levelUp: 'LONGER SAFE TIME.',
   },
   blink: {
     name: 'BLINK DRIVE', price: 500, score: 7, icon: 'icon_blink', from: 9, where: 'level', active: true,
-    desc: 'TAP: TELEPORT A SHORT WAY THE WAY YOU ARE MOVING. PASSES THROUGH WALLS.', levelUp: 'LONGER JUMP, SHORTER COOLDOWN.',
+    desc: 'SUPPLY CRATES: TELEPORT A SHORT WAY THE WAY YOU ARE MOVING. PASSES THROUGH WALLS.', levelUp: 'A LONGER JUMP.',
   },
   afterburner: {
     name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
-    desc: 'TAP: A SPEED BOOST. RAMMING LIGHT ENEMIES WHILE IT BURNS DESTROYS THEM.', levelUp: 'LONGER BURN, HARDER RAM. RAMS BIG SHIPS AT LV 5.',
+    desc: 'SUPPLY CRATES: A SPEED BOOST. RAMMING LIGHT ENEMIES WHILE IT BURNS DESTROYS THEM.', levelUp: 'LONGER BURN, HARDER RAM. RAMS BIG SHIPS AT LV 5.',
   },
   roll: {
     name: 'BARREL ROLL', price: 420, score: 7, icon: 'icon_roll', from: 10, where: 'level', active: true,
-    desc: 'TAP: A SPIN THAT SENDS ENEMY SHOTS BACK THE WAY THEY CAME.', levelUp: 'LONGER SPIN, SHORTER COOLDOWN.',
+    desc: 'SUPPLY CRATES: A SPIN THAT SENDS ENEMY SHOTS BACK THE WAY THEY CAME.', levelUp: 'A LONGER SPIN.',
   },
   burst: {
     name: '360 BURST', price: 450, score: 7, icon: 'icon_burst', from: 10, where: 'level', active: true,
-    desc: 'TAP: FIRES A RING OF SHOTS IN EVERY DIRECTION.', levelUp: 'MORE SHOTS, SHORTER COOLDOWN.',
+    desc: 'SUPPLY CRATES: FIRES A RING OF SHOTS IN EVERY DIRECTION.', levelUp: 'MORE SHOTS, HITTING HARDER.',
   },
   antimissile: {
     name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
@@ -319,17 +319,17 @@ export const GEAR: Record<GearId, GearDef> = {
 
 // What each gear does at a level, 1 to 5, as the Tuner (?tune) can change it:
 // `tune` numbers are [at level 1, change per level], `levels` numbers are set
-// level by level. Read by the game while flying. Cooldowns and durations are in ms.
+// level by level. Read by the game while flying. Durations are in ms.
 export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: Record<string, number[]> }> = {
   plating: { tune: { health: [2, 1] } },
   magnet: { tune: { radius: [44, 8], pull: [85, 15] } },
   deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 3] } },
   satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
-  dodge: { tune: { cooldown: [3000, -300], safe: [500, 50], dist: [42, 0] } },
-  blink: { tune: { cooldown: [4200, -400], dist: [50, 5] } },
-  afterburner: { tune: { cooldown: [5500, -300], burn: [2200, 400], ram: [3, 1] } },
-  roll: { tune: { cooldown: [3600, -250], spin: [600, 120] } },
-  burst: { tune: { cooldown: [5000, -500], shots: [12, 2], damage: [1, 0.2] } },
+  dodge: { tune: { safe: [500, 50], dist: [42, 0] } },
+  blink: { tune: { dist: [50, 5] } },
+  afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
+  roll: { tune: { spin: [600, 120] } },
+  burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
   antimissile: { tune: { interval: [900, -75], radius: [45, 5] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
   incendiary: { tune: { scorch: [0.5, 0.25], burn: [0.5, 0.25] }, levels: { burnTime: [500, 1000, 2000, 3000, 4000] } },
@@ -339,6 +339,14 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   scanner: { tune: { bonus: [0.15, 0.05] } },
   rear: { tune: { damage: [0.5, 0.125] } }, // share of the paired weapon's damage
 };
+
+// Supply crates: each equipped active gear drops in as a crate, one every
+// `every` ms give or take up to `vary` ms. With two, the second slot's first
+// crate comes halfway through the first slot's second wait, so they stay apart.
+// A level can switch them off for a segment (LevelDef.noCrates).
+export const CRATES = { every: 12000, vary: 3000 };
+// The gear that comes in crates (the active ones), for the crate art.
+export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
 const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every']);
@@ -357,11 +365,11 @@ export const gearStats = {
   magnet: gs<'radius' | 'pull'>('magnet'),
   deflector: gs<'hits' | 'recharge'>('deflector'),
   satellite: gs<'drones' | 'interval' | 'damage'>('satellite'),
-  dodge: gs<'cooldown' | 'safe' | 'dist'>('dodge'),
-  blink: gs<'cooldown' | 'dist'>('blink'),
-  afterburner: gs<'cooldown' | 'burn' | 'ram'>('afterburner'),
-  roll: gs<'cooldown' | 'spin'>('roll'),
-  burst: gs<'cooldown' | 'shots' | 'damage'>('burst'),
+  dodge: gs<'safe' | 'dist'>('dodge'),
+  blink: gs<'dist'>('blink'),
+  afterburner: gs<'burn' | 'ram'>('afterburner'),
+  roll: gs<'spin'>('roll'),
+  burst: gs<'shots' | 'damage'>('burst'),
   antimissile: gs<'interval' | 'radius' | 'targets'>('antimissile'),
   incendiary: gs<'scorch' | 'burn' | 'burnTime'>('incendiary'),
   ioncoat: gs<'stun'>('ioncoat'),
