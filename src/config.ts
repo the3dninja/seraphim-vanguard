@@ -1,6 +1,10 @@
 // Base resolution: a narrow NES-like portrait screen, scaled up to fit the phone.
 export const W = 180;
 export const H = 320;
+// The flight HUD's square buttons (px), in one row along the bottom, and the
+// lowest the ship flies, clear of them.
+export const HUD_BTN = 33;
+export const SHIP_MAX_Y = H - 44;
 
 export const FONT = '"Press Start 2P"';
 
