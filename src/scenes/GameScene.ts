@@ -801,13 +801,13 @@ export class GameScene extends Phaser.Scene {
   // Blink Drive's portal: overlapping purple-blue discs and a ring, the size of
   // the swap, that open out and fade.
   private portal(x: number, y: number, r: number) {
-    const discs = [[0x6844fc, 0.35, 1], [0x9878f8, 0.3, 0.75], [0x3cbcfc, 0.25, 0.5], [0x0058f8, 0.4, 0.25]] as const;
+    const discs = [[0x6844fc, 0.45, 1], [0x9878f8, 0.4, 0.75], [0x3cbcfc, 0.35, 0.5], [0x0058f8, 0.5, 0.25]] as const;
     const c = this.add.container(x, y, [
       ...discs.map(([color, a, k]) => this.add.circle(0, 0, r * k, color, a)),
-      this.add.circle(0, 0, r, 0x000000, 0).setStrokeStyle(1, 0xa4e4fc, 0.7),
+      this.add.circle(0, 0, r, 0x000000, 0).setStrokeStyle(1, 0xa4e4fc, 0.9),
     ]).setDepth(5).setScale(0.3); // under ships, shots and credits
     this.tweens.add({ targets: c, scale: 1, duration: 140, ease: 'Quad.easeOut' });
-    this.tweens.add({ targets: c, alpha: 0, delay: 160, duration: 300, onComplete: () => c.destroy() });
+    this.tweens.add({ targets: c, alpha: 0, delay: 450, duration: 400, onComplete: () => c.destroy() });
   }
 
   // A sparkle and a small white ring opening from the middle, where something
