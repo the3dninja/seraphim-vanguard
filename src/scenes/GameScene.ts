@@ -22,7 +22,7 @@ import { Treasure } from '../treasure';
 import { Warps } from '../warp';
 import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
-import { ITEM_COOLDOWN, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
+import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
@@ -2789,7 +2789,7 @@ export class GameScene extends Phaser.Scene {
       equip: (slot: number, id: WeaponId) => this.testEquip(slot, id),
       equipGear: (slot: number, id: GearId) => this.testEquipGear(slot, id),
       equipItem: (slot: number, id: ItemId) => this.testEquipItem(slot, id),
-      setLevel: (id: WeaponId, lv: number) => { this.state.weaponLevels[id] = lv; this.fireTimers = []; this.volleys = []; },
+      setLevel: (id: WeaponId, lv: number) => { this.state.weaponLevels[id] = lv; this.fireTimers = []; this.volleys = []; saveTestLoadout(this.state); },
       setGearLevel: (id: GearId, lv: number) => { this.state.gearLevels[id] = lv; this.testGearChanged(); },
       resume: () => { this.scene.stop('TestMenu'); this.scene.resume(); },
       quit: () => { this.scene.stop('TestMenu'); this.scene.start('Title'); },
@@ -2810,6 +2810,7 @@ export class GameScene extends Phaser.Scene {
     this.fireTimers = [];
     this.volleys = [];
     this.refreshHud();
+    saveTestLoadout(this.state);
   }
 
   // Gear goes in either slot the same way, and either slot can be emptied.
@@ -2830,6 +2831,7 @@ export class GameScene extends Phaser.Scene {
     this.health = this.maxHp;
     this.setupGear();
     this.refreshHud();
+    saveTestLoadout(this.state);
   }
 
   // Items fill their slot with a full stack, and don't run out in test mode.
@@ -2843,6 +2845,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.itemReadyAt = [];
     this.refreshHud();
+    saveTestLoadout(this.state);
   }
 
   // --- Boss ------------------------------------------------------------------
