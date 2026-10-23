@@ -126,6 +126,9 @@ const TRAP_STEP = 150; // ms per Trapper pincer frame
 // flashes over the last this many pixels before the height where it blows.
 const MINE_FLASH = 750;
 const BOMB_FLASH = 54;
+const BURN_WARN = 750; // ms at the end of an Afterburner burn that its enemy highlights blink
+const BURN_BLINK = 94; // ms each blink is off or on
+const DUDS = new Set<string>(['bomb', 'mine', 'pmine']); // an Afterburner ram smashes them without setting them off
 const NET_SLOW = 0.4;
 const godMode = () => new URLSearchParams(location.search).has('god');
 
@@ -2751,7 +2754,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private killEnemy(e: Phaser.Physics.Arcade.Sprite, drop: boolean) {
+  private killEnemy(e: Phaser.Physics.Arcade.Sprite, drop: boolean, dud = false) {
     if (!e.active) return;
     const d = e.getData('e') as EnemyData;
     this.sparks.explode(10, e.x, e.y);
@@ -2763,7 +2766,7 @@ export class GameScene extends Phaser.Scene {
     // Spore Pods and Husks burst into seekers when shot down.
     if (drop && d.kind === 'spore') for (let i = 0; i < 3; i++) this.spawnEnemy('seeker', x + (i - 1) * 4, y);
     if (drop && (d.kind === 'husk' || SEEDED.has(d.kind))) for (let i = 0; i < 2; i++) this.spawnEnemy('seeker', x + (i ? 5 : -5), y);
-    if (d.kind === 'bomb') this.bombBurst(x, y);
+    if (d.kind === 'bomb' && !dud) this.bombBurst(x, y);
   }
 
   // A lit fuse's flashing, which quickens from 5 to 25 flashes a second (times
@@ -2849,26 +2852,31 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Flying into an enemy. While the Afterburner burns, light enemies (or any
-  // the ram can finish) are smashed without a scratch.
+  // the ram can finish) are smashed without a scratch, and bombs and mines
+  // are smashed without going off.
   private rammed(e: Phaser.Physics.Arcade.Sprite) {
     const d = e.getData('e') as EnemyData;
     if (d.cloaked) return;
-    if (this.time.now < this.burnUntil && this.canRam(d)) { this.killEnemy(e, true); return; }
+    if (this.time.now < this.burnUntil && this.canRam(d)) { this.killEnemy(e, true, true); return; }
     this.killEnemy(e, false);
     this.hurt();
   }
 
-  // Whether an Afterburner ram destroys this enemy: light ones, ones with little
-  // health left, and from level 5 any of them (bosses aren't enemies here).
+  // Whether an Afterburner ram destroys this enemy: light ones, bombs and mines,
+  // ones with little health left, and from level 5 any of them (bosses aren't
+  // enemies here).
   private canRam(d: EnemyData) {
     const lv = gearLevel(this.state, 'afterburner');
-    return lv >= 5 || ENEMY_STATS[d.kind].light || d.hp <= gearStats.afterburner(lv).ram;
+    return lv >= 5 || ENEMY_STATS[d.kind].light || DUDS.has(d.kind) || d.hp <= gearStats.afterburner(lv).ram;
   }
 
   // While the Afterburner burns, a see-through teal layer over every enemy a
-  // ram would destroy, and orange over the rest.
+  // ram would destroy, and orange over the rest. It blinks over the last
+  // stretch of the burn as a warning.
   private drawRamGlow() {
-    const on = this.time.now < this.burnUntil && this.phase === 'action';
+    const left = this.burnUntil - this.time.now;
+    const on = left > 0 && this.phase === 'action';
+    const blink = left < BURN_WARN && Math.floor(left / BURN_BLINK) % 2 === 1;
     for (const [e, glow] of this.ramGlow) {
       if (on && e.active) continue;
       glow.destroy();
@@ -2883,7 +2891,7 @@ export class GameScene extends Phaser.Scene {
         this.ramGlow.set(e, glow);
       }
       glow.setTexture(e.texture.key, e.frame.name).setPosition(e.x, e.y).setFlip(e.flipX, e.flipY)
-        .setRotation(e.rotation).setScale(e.scaleX, e.scaleY).setVisible(e.visible && !d.cloaked)
+        .setRotation(e.rotation).setScale(e.scaleX, e.scaleY).setVisible(e.visible && !d.cloaked && !blink)
         .setTintFill(this.canRam(d) ? 0x00e8d8 : 0xe45c10).setAlpha(0.75);
     }
   }
