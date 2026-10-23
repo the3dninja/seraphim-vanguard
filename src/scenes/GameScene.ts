@@ -863,6 +863,7 @@ export class GameScene extends Phaser.Scene {
       this.vortexPull.y += ((v.y - p.y) / dp) * force(dp) || 0;
       for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
         const d = Phaser.Math.Distance.Between(e.x, e.y, v.x, v.y);
+        if (d <= v.reach) caught.add(e);
         const f = force(d) * dt;
         if (!f) continue;
         const mx = ((v.x - e.x) / d) * f, my = ((v.y - e.y) / d) * f;
@@ -915,6 +916,15 @@ export class GameScene extends Phaser.Scene {
       const want = Phaser.Math.Linear(b.getData('relFrom') as number, was, t);
       if (b.body.velocity.length() > 0.01) b.body.velocity.setLength(want);
       if (t >= 1) b.setData('vSpeed', null);
+    }
+    // Enemies it swapped move at half speed while it holds them; once out of
+    // its reach (or it is gone) they get back to full speed over a second.
+    for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+      const k = e.getData('slowK') as number | undefined;
+      if (k == null) continue;
+      if (caught.has(e)) { e.setData('slowK', 0.5); continue; }
+      const next = k + 0.5 * dt;
+      e.setData('slowK', next >= 1 ? null : next);
     }
     // Once out of reach (or the vortex is gone), credits soon lose their
     // sideways speed and settle back to falling straight down at the usual rate.
@@ -1030,6 +1040,7 @@ export class GameScene extends Phaser.Scene {
           d.baseX += dx;
           d.stopY += dy;
           d.stun = Math.max(d.stun, st.stun);
+          e.setData('slowK', 0.5); // half speed while the vortex holds it (see updateVortices)
         }
         for (const o of loose) {
           this.blinkSpark(o.x, o.y, o.x + dx, o.y + dy);
@@ -1416,13 +1427,15 @@ export class GameScene extends Phaser.Scene {
     return 70 + (this.state.level - 1) * 5; // slow and sparse early on
   }
 
-  private updateEnemies(dt: number) {
+  private updateEnemies(full: number) {
     const firing = this.phase === 'action';
     for (const obj of this.enemies.getChildren().slice()) {
       const e = obj as Phaser.Physics.Arcade.Sprite;
       const d = e.getData('e') as EnemyData;
-      if (d.wait > 0) { d.wait -= dt * 1000; continue; }
-      if (this.tickStatus(e, d, dt)) continue;
+      if (d.wait > 0) { d.wait -= full * 1000; continue; }
+      if (this.tickStatus(e, d, full)) continue;
+      // Slowed (Blink Drive's swap): it moves, and fires, at that share of its speed.
+      const dt = full * ((e.getData('slowK') as number | null) ?? 1);
       if (d.stun > 0) continue;
       d.t += dt;
       d.fireIn -= dt * 1000;
