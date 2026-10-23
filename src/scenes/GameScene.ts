@@ -800,8 +800,11 @@ export class GameScene extends Phaser.Scene {
 
   private updateCrates(dt: number) {
     for (const c of this.crates.getChildren() as Phaser.Physics.Arcade.Image[]) {
-      if (c.y > H + 10) c.destroy();
-      else c.x = c.getData('x') + Math.sin(this.time.now / 500 + c.getData('x')) * 3;
+      if (c.y > H + 10) { c.destroy(); continue; }
+      c.x = c.getData('x') + Math.sin(this.time.now / 500 + c.getData('x')) * 3;
+      // Its red lights blink.
+      const id = c.getData('gear') as GearId;
+      c.setTexture(Math.floor(this.time.now / 300) % 2 ? `crate_${id}_off` : `crate_${id}`);
     }
     if (this.phase !== 'action' || this.level.noCrates?.includes(this.segment)) return;
     const slots = this.state.gear.flatMap((g, i) => (g && GEAR[g].active ? [i] : []));

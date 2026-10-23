@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { W, H } from './config';
-import { CRATE_ACCENT } from './data/items';
+import { CRATE_GEAR } from './data/items';
 
 // Art for act 3 (levels 9 to 15) and the new weapons, gear and items. Same
 // text-grid approach as art.ts; these grids are added to its sprite list.
@@ -204,8 +204,8 @@ export const SPRITES3: Record<string, string[]> = {
 
 // A Mimic is the player's own ship, recolored and turned to face down.
 // A supply crate (14 x 14): a steel pod with rivets, a gear's 8 x 8 icon on
-// its dark panel, and lights top and bottom in the gear's color.
-function crateRows(icon: string[], accent: string) {
+// its dark panel, and lights top and bottom (red lit, dark off: they blink).
+function crateRows(icon: string[], light: string) {
   const rows = [
     'GGGGGGaaGGGGGG',
     'GDhhhhhhhhhhDG',
@@ -215,7 +215,7 @@ function crateRows(icon: string[], accent: string) {
     'GDDDDDDDDDDDDG',
     'GGGGGGaaGGGGGG',
   ];
-  return rows.map((r) => r.replace(/a/g, accent));
+  return rows.map((r) => r.replace(/a/g, light));
 }
 
 export function mimicRows(ship: string[]) {
@@ -618,7 +618,10 @@ function makeSceneries3(scene: Phaser.Scene) {
 export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, rows: string[]) => void,
   makePlanet: (key: string, r: number, bands: string[], shadow: string) => void) {
   for (const [key, rows] of Object.entries(SPRITES3)) makeTexture(key, rows);
-  for (const [gear, accent] of Object.entries(CRATE_ACCENT)) makeTexture(`crate_${gear}`, crateRows(SPRITES3[`icon_${gear}`], accent!));
+  for (const gear of CRATE_GEAR) {
+    makeTexture(`crate_${gear}`, crateRows(SPRITES3[`icon_${gear}`], 'R'));
+    makeTexture(`crate_${gear}_off`, crateRows(SPRITES3[`icon_${gear}`], 'D'));
+  }
   makeVossShip(scene, 'vossship', ['#9878f8', '#6844fc', '#3c1c7c'], false);
   makeVossShip(scene, 'vosswreck', ['#7c7c7c', '#3c3c3c', '#1c1c1c'], true);
   makeCreature(scene, 'parasite', 36, 26, ['#58d854', '#00a800', '#005800', '#d800cc'], 1, 3);

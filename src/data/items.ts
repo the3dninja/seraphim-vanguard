@@ -345,8 +345,8 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
 // crate comes halfway through the first slot's second wait, so they stay apart.
 // A level can switch them off for a segment (LevelDef.noCrates).
 export const CRATES = { every: 12000, vary: 3000 };
-// The light color on each crate, from its gear's icon.
-export const CRATE_ACCENT: Partial<Record<GearId, string>> = { dodge: 'C', blink: 'P', afterburner: 'O', roll: 'C', burst: 'Y' };
+// The gear that comes in crates (the active ones), for the crate art.
+export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
 const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every']);
