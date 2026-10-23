@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { W, H } from './config';
+import { W, H, SHIP_MAX_Y } from './config';
 import type { GameScene } from './scenes/GameScene';
 import { BOSS_STATS } from './data/bosses';
 
@@ -190,7 +190,7 @@ export class Barriers {
         if (p.y < b.y - 2) p.y = b.y - CELL_H / 2 - 6;
         else {
           p.y = b.y + CELL_H / 2 + 6;
-          if (p.y > H - 30) { p.y = H - 30; g.hurt(); }
+          if (p.y > SHIP_MAX_Y) { p.y = SHIP_MAX_Y; g.hurt(); }
         }
       }
     }

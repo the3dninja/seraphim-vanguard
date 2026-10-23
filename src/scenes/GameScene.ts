@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR, W, H } from '../config';
+import { COLOR, W, H, HUD_BTN, SHIP_MAX_Y } from '../config';
 import {
   DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
@@ -246,6 +246,12 @@ export class GameScene extends Phaser.Scene {
   private itemReadyAt: number[] = []; // per item slot, in combat test (items don't run out there)
   private weaponIcons: Phaser.GameObjects.Image[] = [];
   private gearButtons: { box: Phaser.GameObjects.Rectangle; icon: Phaser.GameObjects.Image; cool: Phaser.GameObjects.Rectangle }[] = [];
+  // The bottom button row, how far it's scrolled and how far it can go, its arrows, and the swipe scrolling it.
+  private hudRow: Phaser.GameObjects.Container | null = null;
+  private hudScroll = 0;
+  private hudScrollMax = 0;
+  private hudArrows: Phaser.GameObjects.Container[] = [];
+  private hudSwipe: { id: number; x: number; scroll: number; moved: boolean } | null = null;
   private tipsShown = new Set<string>();
   private tipFreeAt = 0; // when the tip on screen is done blinking
 
@@ -323,6 +329,11 @@ export class GameScene extends Phaser.Scene {
     this.itemReadyAt = [];
     this.weaponIcons = [];
     this.gearButtons = [];
+    this.hudRow = null;
+    this.hudScroll = 0;
+    this.hudScrollMax = 0;
+    this.hudArrows = [];
+    this.hudSwipe = null;
     this.tipsShown = new Set();
     this.tipFreeAt = 0;
     this.scenery = null;
@@ -505,7 +516,7 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!this.dragFrom || p.id !== this.dragFrom.id || !p.isDown || (this.phase !== 'action' && !this.lingering)) return;
       this.dragFrom.tx = Phaser.Math.Clamp(this.dragFrom.sx + (p.x - this.dragFrom.px), 6, W - 6);
-      this.dragFrom.ty = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, H - 30);
+      this.dragFrom.ty = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, SHIP_MAX_Y);
     });
     const release = (p: Phaser.Input.Pointer) => { if (p.id === this.dragFrom?.id) this.dragFrom = null; };
     this.input.on('pointerup', release);
@@ -529,7 +540,7 @@ export class GameScene extends Phaser.Scene {
     if (!d) return;
     d.sx += dx; d.sy += dy;
     d.tx = Phaser.Math.Clamp(d.tx + dx, 6, W - 6);
-    d.ty = Phaser.Math.Clamp(d.ty + dy, 24, H - 30);
+    d.ty = Phaser.Math.Clamp(d.ty + dy, 24, SHIP_MAX_Y);
   }
 
   // How far the controls ask the ship to move this frame: keyboard first, then
@@ -580,7 +591,7 @@ export class GameScene extends Phaser.Scene {
     mx += pull.x + wind.x + this.bossPull.x * dt;
     my += pull.y + this.bossPull.y * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
-    const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
+    const ny = Phaser.Math.Clamp(this.player.y + my, 24, SHIP_MAX_Y);
     // Sliding into the edge of the screen stops the slide that way.
     if (nx !== this.player.x + mx) this.slide.x = 0;
     if (ny !== this.player.y + my) this.slide.y = 0;
@@ -602,34 +613,83 @@ export class GameScene extends Phaser.Scene {
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
 
-    // Bottom left: one button per gear slot (active gear is tapped, passive
-    // gear just shows), with the weapon readout above. Bottom right: one item
-    // button per slot (big enough for a thumb), each showing its stack like 1/3.
-    const wy = this.state.gear.length ? H - 36 : H - 12;
-    this.state.weapons.forEach((_w, i) => this.weaponIcons.push(this.add.image(10 + i * 12, wy, 'icon_pulse').setDepth(900)));
+    // Bottom: one row of square buttons, gear slots then a divider then item
+    // slots (each showing its stack like 1/3). Active gear is tapped, passive
+    // gear just shows. When the row is wider than the screen it scrolls
+    // sideways with a swipe, and an arrow shows on each side there's more.
+    // The weapon readout sits above it.
+    const by = H - 3 - HUD_BTN;
+    this.weaponIcons = this.state.weapons.map((_w, i) => this.add.image(10 + i * 12, by - 7, 'icon_pulse').setDepth(900));
+    const row = this.add.container(0, 0).setDepth(900);
+    let x = 3;
+    const button = (onTap: () => void) => {
+      const box = this.add.rectangle(x, by, HUD_BTN, HUD_BTN, 0x000000).setOrigin(0).setInteractive();
+      // Taps land on release, so a swipe that starts on a button scrolls instead.
+      box.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.hudTapped(p)) onTap(); });
+      const cool = this.add.rectangle(x + 1, by + HUD_BTN - 1, HUD_BTN - 2, 0, 0x3c3c3c).setOrigin(0, 1);
+      row.add([box, cool]);
+      x += HUD_BTN + 3;
+      return { box, cool };
+    };
     this.state.gear.forEach((_g, i) => {
-      const x = 4 + i * 24;
-      const box = this.add.rectangle(x, H - 26, 22, 22, 0x000000).setOrigin(0).setDepth(900).setInteractive();
-      box.on('pointerdown', () => this.useGear(i));
-      const cool = this.add.rectangle(x + 1, H - 5, 20, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(901);
-      const icon = this.add.image(x + 11, H - 15, 'icon_plating').setDepth(902);
+      const { box, cool } = button(() => this.useGear(i));
+      const icon = this.add.image(box.x + HUD_BTN / 2, by + HUD_BTN / 2, 'icon_plating').setScale(2);
+      row.add(icon);
       this.gearButtons.push({ box, icon, cool });
     });
-    const slots = this.state.items.length;
-    // Combat test's items never run out, so their buttons drop the count and
-    // narrow to leave room for the test buttons.
-    const iw = this.test ? 22 : 39;
+    if (this.state.gear.length) {
+      row.add(this.add.rectangle(x + 1, by + 2, 2, HUD_BTN - 4, 0x7c7c7c).setOrigin(0));
+      x += 7;
+    }
     this.state.items.forEach((_it, i) => {
-      const x = W - iw - 3 - (slots - 1 - i) * (iw + 3); // slot 1 on the left, like the Ship screen
-      const box = this.add.rectangle(x, H - 26, iw, 22, 0x000000).setOrigin(0).setDepth(900)
-        .setStrokeStyle(1, 0xfcfcfc).setInteractive();
-      box.on('pointerdown', () => this.useItem(i));
-      const cool = this.add.rectangle(x + 1, H - 5, iw - 2, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(900.5);
-      const icon = this.add.image(x + (this.test ? 11 : 7), H - 15, 'icon_repair').setDepth(901);
-      const count = text(this, x + 13, H - 19, '', COLOR.white).setDepth(901);
+      const { box, cool } = button(() => this.useItem(i));
+      box.setStrokeStyle(1, 0xfcfcfc);
+      // Combat test's items never run out, so they show no count.
+      const icon = this.add.image(box.x + HUD_BTN / 2, by + (this.test ? HUD_BTN / 2 : 12), 'icon_repair');
+      const count = text(this, box.x + HUD_BTN / 2, by + 21, '', COLOR.white).setOrigin(0.5, 0);
+      row.add([icon, count]);
       this.itemButtons.push({ box, icon, count, cool });
     });
+    this.hudRow = row;
+    this.hudScrollMax = Math.max(0, x - W); // x is now 3 past the last button: the same margin as the left
+    // Arrows on a black edge, over the buttons, on each side the row can scroll to.
+    this.hudArrows = [-1, 1].map((d) => {
+      const ax = d < 0 ? 0 : W - 7;
+      const back = this.add.rectangle(ax, by, 7, HUD_BTN, 0x000000).setOrigin(0);
+      const tri = d < 0 ? this.add.triangle(ax + 1, by + HUD_BTN / 2 - 5, 4, 0, 0, 5, 4, 10, 0xf8b800)
+        : this.add.triangle(ax + 2, by + HUD_BTN / 2 - 5, 0, 0, 4, 5, 0, 10, 0xf8b800);
+      return this.add.container(0, 0, [back, tri.setOrigin(0)]).setDepth(902);
+    });
+    // The strip behind the row takes touches, so the ship's drag never starts
+    // there; a swipe along it scrolls the row.
+    this.add.zone(0, by - 3, W, HUD_BTN + 6).setOrigin(0).setInteractive().setDepth(899);
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.y >= by - 3) this.hudSwipe = { id: p.id, x: p.x, scroll: this.hudScroll, moved: false };
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      const sw = this.hudSwipe;
+      if (!sw || p.id !== sw.id || !p.isDown) return;
+      if (Math.abs(p.x - sw.x) > 4) sw.moved = true;
+      if (sw.moved) this.setHudScroll(sw.scroll - (p.x - sw.x));
+    });
+    this.setHudScroll(0);
     this.refreshHud();
+  }
+
+  private setHudScroll(v: number) {
+    this.hudScroll = Phaser.Math.Clamp(v, 0, this.hudScrollMax);
+    this.hudRow?.setX(-this.hudScroll);
+    this.hudArrows[0]?.setVisible(this.hudScroll > 0);
+    this.hudArrows[1]?.setVisible(this.hudScroll < this.hudScrollMax);
+  }
+
+  // Whether pointer p's touch was a tap on the button row: it started on the
+  // row (not a steering finger lifted over it) and didn't swipe. Ends the touch.
+  private hudTapped(p: Phaser.Input.Pointer) {
+    const sw = this.hudSwipe;
+    if (!sw || sw.id !== p.id) return false;
+    this.hudSwipe = null;
+    return !sw.moved;
   }
 
   private refreshHud() {
@@ -662,17 +722,17 @@ export class GameScene extends Phaser.Scene {
       this.state.items.forEach((it, i) => {
         const b = this.itemButtons[i];
         const left = it ? Math.max(0, (this.itemReadyAt[i] ?? 0) - now) : 0;
-        b.cool.setSize(b.box.width - 2, it ? Math.round((left / ITEM_COOLDOWN[it.id]) * 20) : 0);
+        b.cool.setSize(HUD_BTN - 2, it ? Math.round((left / ITEM_COOLDOWN[it.id]) * (HUD_BTN - 2)) : 0);
         b.icon.setAlpha(left > 0 ? 0.45 : 1);
       });
     }
     this.state.gear.forEach((g, i) => {
       const b = this.gearButtons[i];
       if (!b) return;
-      if (!g || !GEAR[g].active) { b.cool.setSize(20, 0); return; }
+      if (!g || !GEAR[g].active) { b.cool.setSize(HUD_BTN - 2, 0); return; }
       const cd = (gearStats[g] as (lv: number) => { cooldown: number })(gearLevel(this.state, g)).cooldown;
       const left = Math.max(0, (this.gearReadyAt[g] ?? 0) - now);
-      b.cool.setSize(20, Math.round((left / cd) * 20)); // origin at the bottom, so it shrinks downward
+      b.cool.setSize(HUD_BTN - 2, Math.round((left / cd) * (HUD_BTN - 2))); // origin at the bottom, so it shrinks downward
       b.icon.setAlpha(left > 0 ? 0.45 : 1);
     });
   }
@@ -796,7 +856,7 @@ export class GameScene extends Phaser.Scene {
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         this.dashing = true;
         const from = { x: p.x, y: p.y };
-        const to = { x: Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), y: Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30) };
+        const to = { x: Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), y: Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, SHIP_MAX_Y) };
         for (let i = 0; i < 3; i++) {
           const ghost = this.add.image(p.x + (to.x - p.x) * i / 3, p.y + (to.y - p.y) * i / 3, 'ship').setAlpha(0.4).setDepth(9);
           this.tweens.add({ targets: ghost, alpha: 0, duration: 250, delay: i * 40, onComplete: () => ghost.destroy() });
@@ -809,7 +869,7 @@ export class GameScene extends Phaser.Scene {
         this.gearReadyAt[id] = now + st.cooldown;
         this.sparks.explode(10, p.x, p.y);
         const from = { x: p.x, y: p.y };
-        p.setPosition(Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30));
+        p.setPosition(Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, SHIP_MAX_Y));
         this.shiftDrag(p.x - from.x, p.y - from.y);
         this.invulnUntil = Math.max(this.invulnUntil, now + 250);
         this.flash(p);
