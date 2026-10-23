@@ -327,7 +327,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
   dodge: { tune: { safe: [500, 50], dist: [42, 0] } },
   // radius: enemies, shots and credits this close to where the ship lands swap to where it was.
-  blink: { tune: { safe: [750, 50], radius: [20, 2] } },
+  blink: { tune: { safe: [750, 50], radius: [30, 2] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
