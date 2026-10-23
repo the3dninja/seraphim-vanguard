@@ -893,6 +893,11 @@ export class GameScene extends Phaser.Scene {
           if (group === this.enemyBullets && o.getData('vSpeed') == null) o.setData('vSpeed', o.body.velocity.length());
           o.body.velocity.x = (o.body.velocity.x + ((v.x - o.x) / d) * f) * slow;
           o.body.velocity.y = (o.body.velocity.y + ((v.y - o.y) / d) * f) * slow;
+          // An enemy shot never quite stops (1 px/s at least), so it keeps a heading to speed back up along.
+          if (group === this.enemyBullets && !o.getData('held') && o.body.velocity.length() < 1) {
+            if (o.body.velocity.length() < 0.01) o.body.velocity.set(0, 1);
+            else o.body.velocity.setLength(1);
+          }
           caught.add(o);
           o.setData('relT', 0);
           if (group === this.coins) o.setData('swirled', true);
@@ -903,7 +908,7 @@ export class GameScene extends Phaser.Scene {
     // speed they had before over a second, going the way they now point.
     for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
       const was = b.getData('vSpeed') as number | undefined;
-      if (was == null || caught.has(b) || !b.body) continue;
+      if (was == null || caught.has(b) || !b.body || b.getData('held')) continue;
       if (b.getData('relT') === 0) b.setData('relFrom', b.body.velocity.length());
       const t = Math.min(1, (b.getData('relT') as number) + dt);
       b.setData('relT', t);
@@ -1031,8 +1036,10 @@ export class GameScene extends Phaser.Scene {
           if (lost(o.x + dx, o.y + dy)) { o.destroy(); continue; }
           o.setPosition(o.x + dx, o.y + dy);
           const v = o.body!.velocity.clone();
-          o.setVelocity(0, 0);
-          this.time.delayedCall(hold(), () => { if (o.active) o.setVelocity(v.x, v.y); });
+          // The vortex opens right here: an enemy shot gets back to this speed after it, not to the hold's 0.
+          if (o.getData('vSpeed') == null && this.enemyBullets.contains(o)) o.setData('vSpeed', v.length()).setData('relT', 0);
+          o.setVelocity(0, 0).setData('held', true);
+          this.time.delayedCall(hold(), () => { if (o.active) o.setVelocity(v.x, v.y).setData('held', false); });
         }
         break;
       }
