@@ -67,6 +67,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   health: { label: 'EXTRA MAX HEALTH', step: 1 },
   radius: { label: 'RADIUS (PX)', step: 2 },
   'blink.radius': { label: 'SWAP RADIUS AROUND WHERE YOU LAND (PX)', step: 1 },
+  'blink.stun': { label: 'STUN MS FOR SWAPPED ENEMIES', step: 50 },
   'blink.vortex': { label: 'VORTEX MS', step: 100 },
   'blink.vortexPull': { label: 'VORTEX PULL AT ITS CORE (PX/S)', step: 5 },
   'blink.vortexReach': { label: 'VORTEX REACH (PX)', step: 2 },
