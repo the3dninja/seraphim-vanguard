@@ -342,7 +342,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
-// `every` ms give or take up to `vary` ms, falling at `speed` px/s. With two, the second slot's first
+// `every` ms give or take up to `vary` ms (the first of a level in half that), falling at `speed` px/s. With two, the second slot's first
 // crate comes halfway through the first slot's second wait, so they stay apart.
 // A level can switch them off for a segment (LevelDef.noCrates).
 export const CRATES = { every: 20000, vary: 5000, speed: 21 };
