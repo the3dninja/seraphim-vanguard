@@ -80,6 +80,7 @@ interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: numbe
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
+const COIN_FALL = 26; // px/s credits fall
 const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
@@ -202,7 +203,7 @@ export class GameScene extends Phaser.Scene {
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
   private ramGlow = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Image>(); // Afterburner target highlights
   bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
-  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number }[] = []; // Blink Drive's
+  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number; damp: number }[] = []; // Blink Drive's
   private vortexPull = { x: 0, y: 0 }; // px/s they drag the ship
 
   // Gear
@@ -835,6 +836,7 @@ export class GameScene extends Phaser.Scene {
     const gfx = this.beams;
     const p = this.player;
     this.vortexPull = { x: 0, y: 0 };
+    const caught = new Set<Phaser.GameObjects.GameObject>(); // credits a vortex holds this frame
     for (const v of this.vortices.slice()) {
       v.t += dt * 1000;
       if (v.t >= v.life) { this.vortices.splice(this.vortices.indexOf(v), 1); continue; }
@@ -879,17 +881,30 @@ export class GameScene extends Phaser.Scene {
         else o.x += mx;
         o.y += my;
       }
-      // Shots and credits bend toward it.
+      // Shots and credits bend toward it, and are slowed inside it so they
+      // don't slingshot out.
+      const slow = Math.exp(-v.damp * k * dt);
       for (const group of [this.playerBullets, this.enemyBullets, this.coins]) {
         for (const o of group.getChildren() as Phaser.Physics.Arcade.Image[]) {
           if (!o.body) continue;
           const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
           const f = force(d) * 6 * dt;
           if (!f) continue;
-          o.body.velocity.x += ((v.x - o.x) / d) * f;
-          o.body.velocity.y += ((v.y - o.y) / d) * f;
+          o.body.velocity.x = (o.body.velocity.x + ((v.x - o.x) / d) * f) * slow;
+          o.body.velocity.y = (o.body.velocity.y + ((v.y - o.y) / d) * f) * slow;
+          if (group === this.coins) { caught.add(o); o.setData('swirled', true); }
         }
       }
+    }
+    // Once out of reach (or the vortex is gone), credits soon lose their
+    // sideways speed and settle back to falling straight down at the usual rate.
+    const settle = 1 - Math.exp(-5 * dt);
+    for (const c of this.coins.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (!c.getData('swirled') || caught.has(c) || !c.body?.enable || c.getData('home')) continue;
+      const vel = c.body.velocity;
+      vel.x += (0 - vel.x) * settle;
+      vel.y += (COIN_FALL - vel.y) * settle;
+      if (Math.abs(vel.x) < 1 && Math.abs(vel.y - COIN_FALL) < 1) { c.setVelocity(0, COIN_FALL); c.setData('swirled', false); }
     }
   }
 
@@ -982,7 +997,7 @@ export class GameScene extends Phaser.Scene {
         this.blinkSpark(from.x, from.y, to.x, to.y);
         p.setPosition(to.x, to.y);
         this.shiftDrag(p.x - from.x, p.y - from.y);
-        this.vortices.push({ x: from.x, y: from.y, t: 0, life: st.vortex, pull: st.vortexPull, reach: st.vortexReach });
+        this.vortices.push({ x: from.x, y: from.y, t: 0, life: st.vortex, pull: st.vortexPull, reach: st.vortexReach, damp: st.vortexDamp });
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         const dx = from.x - to.x, dy = from.y - to.y;
         const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
@@ -2732,7 +2747,7 @@ export class GameScene extends Phaser.Scene {
 
   // Credits drop as metal bars: bronze, silver, gold, and a stack of gold for big ones.
   // Act 3 drops are worth a little more, and a Credit Booster adds half again.
-  dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = 26) {
+  dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = COIN_FALL) {
     if (this.state.level >= 9) value = Math.round(value * (1 + (this.state.level - 8) * 0.06));
     if (this.boostSegment === this.segment) value = Math.round(value * ITEMS.booster.tune!.bonus);
     const key = value >= 25 ? 'ingot4' : value >= 10 ? 'ingot3' : value >= 5 ? 'ingot2' : 'ingot1';

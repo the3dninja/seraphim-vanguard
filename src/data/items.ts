@@ -329,7 +329,8 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // radius: enemies, shots and credits this close to where the ship lands swap to where it was.
   // vortex: ms the vortex left where the ship was lasts; vortexPull: px/s it drags ships at its
   // core, falling off to nothing at vortexReach px (shots and credits bend 6 times as hard).
-  blink: { tune: { safe: [750, 50], radius: [30, 2], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5] } },
+  // vortexDamp: how fast shots and credits inside it lose speed, so they don't slingshot out (per second).
+  blink: { tune: { safe: [750, 50], radius: [30, 2], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
@@ -369,7 +370,7 @@ export const gearStats = {
   deflector: gs<'hits' | 'recharge'>('deflector'),
   satellite: gs<'drones' | 'interval' | 'damage'>('satellite'),
   dodge: gs<'safe' | 'dist'>('dodge'),
-  blink: gs<'safe' | 'radius' | 'vortex' | 'vortexPull' | 'vortexReach'>('blink'),
+  blink: gs<'safe' | 'radius' | 'vortex' | 'vortexPull' | 'vortexReach' | 'vortexDamp'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
   burst: gs<'shots' | 'damage'>('burst'),
