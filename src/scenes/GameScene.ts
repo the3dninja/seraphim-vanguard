@@ -1030,6 +1030,7 @@ export class GameScene extends Phaser.Scene {
           d.baseX += dx;
           d.stopY += dy;
           d.wait = Math.max(d.wait, hold()); // holds still (and holds fire)
+          d.stun = Math.max(d.stun, st.stun); // then is stunned (the stun counts down once the hold is over)
         }
         for (const o of loose) {
           this.blinkSpark(o.x, o.y, o.x + dx, o.y + dy);
