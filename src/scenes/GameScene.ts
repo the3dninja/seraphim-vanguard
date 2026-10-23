@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR, W, H, HUD_BTN, SHIP_MAX_Y } from '../config';
+import { COLOR, W, H, HUD_BTN, HUD_BTN_W, SHIP_MAX_Y } from '../config';
 import {
   DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
@@ -613,7 +613,7 @@ export class GameScene extends Phaser.Scene {
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
 
-    // Bottom: one row of square buttons, gear slots then a divider then item
+    // Bottom: one row of buttons, gear slots then a divider then item
     // slots (each showing its stack like 1/3). Active gear is tapped, passive
     // gear just shows. When the row is wider than the screen it scrolls
     // sideways with a swipe, and an arrow shows on each side there's more.
@@ -623,17 +623,17 @@ export class GameScene extends Phaser.Scene {
     const row = this.add.container(0, 0).setDepth(900);
     let x = 3;
     const button = (onTap: () => void) => {
-      const box = this.add.rectangle(x, by, HUD_BTN, HUD_BTN, 0x000000).setOrigin(0).setInteractive();
+      const box = this.add.rectangle(x, by, HUD_BTN_W, HUD_BTN, 0x000000).setOrigin(0).setInteractive();
       // Taps land on release, so a swipe that starts on a button scrolls instead.
       box.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.hudTapped(p)) onTap(); });
-      const cool = this.add.rectangle(x + 1, by + HUD_BTN - 1, HUD_BTN - 2, 0, 0x3c3c3c).setOrigin(0, 1);
+      const cool = this.add.rectangle(x + 1, by + HUD_BTN - 1, HUD_BTN_W - 2, 0, 0x3c3c3c).setOrigin(0, 1);
       row.add([box, cool]);
-      x += HUD_BTN + 3;
+      x += HUD_BTN_W + 3;
       return { box, cool };
     };
     this.state.gear.forEach((_g, i) => {
       const { box, cool } = button(() => this.useGear(i));
-      const icon = this.add.image(box.x + HUD_BTN / 2, by + HUD_BTN / 2, 'icon_plating').setScale(2);
+      const icon = this.add.image(box.x + HUD_BTN_W / 2, by + HUD_BTN / 2, 'icon_plating').setScale(2);
       row.add(icon);
       this.gearButtons.push({ box, icon, cool });
     });
@@ -645,8 +645,8 @@ export class GameScene extends Phaser.Scene {
       const { box, cool } = button(() => this.useItem(i));
       box.setStrokeStyle(1, 0xfcfcfc);
       // Combat test's items never run out, so they show no count.
-      const icon = this.add.image(box.x + HUD_BTN / 2, by + (this.test ? HUD_BTN / 2 : 12), 'icon_repair');
-      const count = text(this, box.x + HUD_BTN / 2, by + 21, '', COLOR.white).setOrigin(0.5, 0);
+      const icon = this.add.image(box.x + HUD_BTN_W / 2, by + (this.test ? HUD_BTN / 2 : 12), 'icon_repair');
+      const count = text(this, box.x + HUD_BTN_W / 2, by + 21, '', COLOR.white).setOrigin(0.5, 0);
       row.add([icon, count]);
       this.itemButtons.push({ box, icon, count, cool });
     });
@@ -722,17 +722,17 @@ export class GameScene extends Phaser.Scene {
       this.state.items.forEach((it, i) => {
         const b = this.itemButtons[i];
         const left = it ? Math.max(0, (this.itemReadyAt[i] ?? 0) - now) : 0;
-        b.cool.setSize(HUD_BTN - 2, it ? Math.round((left / ITEM_COOLDOWN[it.id]) * (HUD_BTN - 2)) : 0);
+        b.cool.setSize(HUD_BTN_W - 2, it ? Math.round((left / ITEM_COOLDOWN[it.id]) * (HUD_BTN - 2)) : 0);
         b.icon.setAlpha(left > 0 ? 0.45 : 1);
       });
     }
     this.state.gear.forEach((g, i) => {
       const b = this.gearButtons[i];
       if (!b) return;
-      if (!g || !GEAR[g].active) { b.cool.setSize(HUD_BTN - 2, 0); return; }
+      if (!g || !GEAR[g].active) { b.cool.setSize(HUD_BTN_W - 2, 0); return; }
       const cd = (gearStats[g] as (lv: number) => { cooldown: number })(gearLevel(this.state, g)).cooldown;
       const left = Math.max(0, (this.gearReadyAt[g] ?? 0) - now);
-      b.cool.setSize(HUD_BTN - 2, Math.round((left / cd) * (HUD_BTN - 2))); // origin at the bottom, so it shrinks downward
+      b.cool.setSize(HUD_BTN_W - 2, Math.round((left / cd) * (HUD_BTN - 2))); // origin at the bottom, so it shrinks downward
       b.icon.setAlpha(left > 0 ? 0.45 : 1);
     });
   }
