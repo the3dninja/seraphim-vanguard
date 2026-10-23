@@ -69,6 +69,7 @@ export interface LevelDef {
   // After this segment a second tear opens and lets the ship out of the rift
   // into Hollow space, and then the vendor arrives (level 11).
   riftExitAfter?: number;
+  noCrates?: number[]; // segments where gear supply crates don't drop (see CRATES)
   allies?: number; // wingmen flying with the ship (act 3)
   dark?: boolean; // only a pool of light around the ship (level 13)
   // Level 15: segments run straight into each other with no vendor stop.
@@ -596,6 +597,9 @@ export const LEVELS: LevelDef[] = [
     segmentThemes: ['deep', 'rift', 'beyond'],
     riftAfter: 0,
     riftExitAfter: 1,
+    // No supply crates inside the rift itself: it is alien space, far from any
+    // supply line. They come back once the ship is out in Hollow space.
+    noCrates: [1],
     allies: 2,
     segmentHazards: [[], [{ kind: 'well', every: [7000, 10000] }], [{ kind: 'well', every: [6000, 9000] }]],
     segments: [

@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
+  CRATES, DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
 import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
-import { equippedGear, gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
+import { gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
@@ -88,7 +88,6 @@ const BOSS_NAMES = {
   frostjaw: 'FROSTJAW', hollowwatcher: 'HOLLOW WATCHER', broodmother: 'BROOD MATRIARCH',
 };
 const EGG_HATCH = 5500; // ms before an egg hatches into larvae
-const GEAR_KEYS = ['Q', 'E'];
 // Ion Arc's numbers live in its Tuner values (WEAPONS.ion.tune).
 const ion = () => WEAPONS.ion.tune!;
 // s an Ion Arc bolt lasts, which sets its range.
@@ -211,7 +210,11 @@ export class GameScene extends Phaser.Scene {
   private deflectRing!: Phaser.GameObjects.Image;
   private sats: Phaser.GameObjects.Image[] = [];
   private satTimer = 0;
-  private gearReadyAt: Partial<Record<GearId, number>> = {}; // when active gear can be used again
+  // Supply crates: each gear slot's ms left until its next crate (null: not
+  // started yet, for the second slot), and how long that wait was, for the HUD.
+  private crateWait: (number | null)[] = [];
+  private crateGap: number[] = [];
+  private crates!: Phaser.Physics.Arcade.Group;
   private dashing = false; // a Dodge Thrusters dash is moving the ship
   private burnUntil = 0; // Afterburner
   private rollUntil = 0; // Barrel Roll
@@ -288,7 +291,8 @@ export class GameScene extends Phaser.Scene {
     this.satTimer = 0;
     this.deflect = 0;
     this.deflectAt = 0;
-    this.gearReadyAt = {};
+    this.crateWait = [];
+    this.crateGap = [];
     this.dashing = false;
     this.burnUntil = 0;
     this.rollUntil = 0;
@@ -349,6 +353,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group();
     this.enemyBullets = this.physics.add.group();
     this.coins = this.physics.add.group();
+    this.crates = this.physics.add.group();
     this.beams = this.add.graphics().setDepth(12);
     this.act3 = new Act3Hazards(this);
     this.barriers = new Barriers(this);
@@ -392,6 +397,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.rammed(spr(e)));
     this.physics.add.overlap(this.player, this.hazards, () => this.hurt());
     this.physics.add.overlap(this.player, this.coins, (_p, c) => this.collect(img(c)));
+    this.physics.add.overlap(this.player, this.crates, (_p, c) => this.pickCrate(img(c)));
 
     this.setupInput();
     this.createHud();
@@ -407,7 +413,6 @@ export class GameScene extends Phaser.Scene {
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
     const call = this.side ? undefined : RADIO[this.state.level];
     if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
-    if (equippedGear(this.state).some((g) => GEAR[g].active)) this.time.delayedCall(3000, () => this.tipOnce('gearbtn', 'TAP A GEAR BUTTON\nTO USE IT'));
 
     this.events.on('resume', () => this.afterVendor());
   }
@@ -518,8 +523,6 @@ export class GameScene extends Phaser.Scene {
     // Space uses the first loaded item slot; 1, 2 and 3 pick a slot.
     kb.on('keydown-SPACE', () => this.useItem(this.state.items.findIndex((it) => !!it)));
     ITEM_KEYS.forEach((k, i) => kb.on(`keydown-${k}`, () => this.useItem(i)));
-    // Q and E use active gear in gear slots 1 and 2.
-    GEAR_KEYS.forEach((k, i) => kb.on(`keydown-${k}`, () => this.useGear(i)));
   }
 
   // Moves the drag along with a ship that jumped (Dodge Thrusters, Blink Drive),
@@ -602,15 +605,14 @@ export class GameScene extends Phaser.Scene {
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
 
-    // Bottom left: one button per gear slot (active gear is tapped, passive
-    // gear just shows), with the weapon readout above. Bottom right: one item
+    // Bottom left: one box per gear slot (active gear fills with gray until
+    // its next supply crate), with the weapon readout above. Bottom right: one item
     // button per slot (big enough for a thumb), each showing its stack like 1/3.
     const wy = this.state.gear.length ? H - 36 : H - 12;
     this.state.weapons.forEach((_w, i) => this.weaponIcons.push(this.add.image(10 + i * 12, wy, 'icon_pulse').setDepth(900)));
     this.state.gear.forEach((_g, i) => {
       const x = 4 + i * 24;
-      const box = this.add.rectangle(x, H - 26, 22, 22, 0x000000).setOrigin(0).setDepth(900).setInteractive();
-      box.on('pointerdown', () => this.useGear(i));
+      const box = this.add.rectangle(x, H - 26, 22, 22, 0x000000).setOrigin(0).setDepth(900);
       const cool = this.add.rectangle(x + 1, H - 5, 20, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(901);
       const icon = this.add.image(x + 11, H - 15, 'icon_plating').setDepth(902);
       this.gearButtons.push({ box, icon, cool });
@@ -666,14 +668,14 @@ export class GameScene extends Phaser.Scene {
         b.icon.setAlpha(left > 0 ? 0.45 : 1);
       });
     }
+    // Active gear: how much of the wait for its next supply crate is left.
     this.state.gear.forEach((g, i) => {
       const b = this.gearButtons[i];
       if (!b) return;
       if (!g || !GEAR[g].active) { b.cool.setSize(20, 0); return; }
-      const cd = (gearStats[g] as (lv: number) => { cooldown: number })(gearLevel(this.state, g)).cooldown;
-      const left = Math.max(0, (this.gearReadyAt[g] ?? 0) - now);
-      b.cool.setSize(20, Math.round((left / cd) * 20)); // origin at the bottom, so it shrinks downward
-      b.icon.setAlpha(left > 0 ? 0.45 : 1);
+      const wait = this.crateWait[i];
+      const left = wait == null ? 1 : Math.max(0, wait) / (this.crateGap[i] || 1);
+      b.cool.setSize(20, Math.round(left * 20)); // origin at the bottom, so it shrinks downward
     });
   }
 
@@ -781,18 +783,65 @@ export class GameScene extends Phaser.Scene {
 
   // --- Active gear --------------------------------------------------------------
 
-  private useGear(slot: number) {
-    const id = this.state.gear[slot];
-    if (!id || !GEAR[id].active || this.phase !== 'action') return;
+  // Each equipped active gear drops in as supply crates on its own timer (see
+  // CRATES). The first slot's starts with the segment; the second's first
+  // crate comes halfway through the first slot's second wait, then it runs on
+  // its own. Called at the start and after a vendor stop, with setupGear.
+  private resetCrates() {
+    this.crateWait = this.state.gear.map(() => null);
+    this.crateGap = this.state.gear.map(() => 0);
+    const first = this.state.gear.findIndex((g) => g && GEAR[g].active);
+    if (first >= 0) this.crateGap[first] = this.crateWait[first] = this.crateTime();
+  }
+
+  private crateTime() {
+    return Math.max(500, CRATES.every + Phaser.Math.Between(-CRATES.vary, CRATES.vary));
+  }
+
+  private updateCrates(dt: number) {
+    for (const c of this.crates.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (c.y > H + 10) c.destroy();
+      else c.x = c.getData('x') + Math.sin(this.time.now / 500 + c.getData('x')) * 3;
+    }
+    if (this.phase !== 'action' || this.level.noCrates?.includes(this.segment)) return;
+    const slots = this.state.gear.flatMap((g, i) => (g && GEAR[g].active ? [i] : []));
+    slots.forEach((slot, k) => {
+      const wait = this.crateWait[slot];
+      if (wait == null) return;
+      this.crateWait[slot] = wait - dt * 1000;
+      if (this.crateWait[slot]! > 0) return;
+      this.dropCrate(this.state.gear[slot]!);
+      const next = this.crateTime();
+      this.crateGap[slot] = this.crateWait[slot] = next;
+      const second = slots[1];
+      if (k === 0 && second !== undefined && this.crateWait[second] == null) this.crateGap[second] = this.crateWait[second] = next / 2;
+    });
+  }
+
+  private dropCrate(id: GearId) {
+    const x = Phaser.Math.Between(24, W - 24);
+    const c = this.crates.create(x, -10, `crate_${id}`) as Phaser.Physics.Arcade.Image;
+    c.setDepth(9).setData('gear', id).setData('x', x).setVelocityY(30);
+    this.tipOnce('crate', 'GRAB SUPPLY CRATES\nTO USE YOUR GEAR');
+  }
+
+  private pickCrate(c: Phaser.Physics.Arcade.Image) {
+    if (!c.active || this.phase !== 'action') return;
+    const id = c.getData('gear') as GearId;
+    c.destroy();
+    this.sparks.explode(8, c.x, c.y);
+    if (hasGear(this.state, id)) this.fireGear(id);
+  }
+
+  // What an active gear does when its crate is picked up.
+  private fireGear(id: GearId) {
     const now = this.time.now;
-    if (now < (this.gearReadyAt[id] ?? 0)) return;
     const lv = gearLevel(this.state, id);
     const p = this.player;
     const dir = this.lastMove;
     switch (id) {
       case 'dodge': {
         const st = gearStats.dodge(lv);
-        this.gearReadyAt[id] = now + st.cooldown;
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         this.dashing = true;
         const from = { x: p.x, y: p.y };
@@ -806,7 +855,6 @@ export class GameScene extends Phaser.Scene {
       }
       case 'blink': {
         const st = gearStats.blink(lv);
-        this.gearReadyAt[id] = now + st.cooldown;
         this.sparks.explode(10, p.x, p.y);
         const from = { x: p.x, y: p.y };
         p.setPosition(Phaser.Math.Clamp(p.x + dir.x * st.dist, 6, W - 6), Phaser.Math.Clamp(p.y + dir.y * st.dist, 24, H - 30));
@@ -817,19 +865,16 @@ export class GameScene extends Phaser.Scene {
       }
       case 'afterburner': {
         const st = gearStats.afterburner(lv);
-        this.gearReadyAt[id] = now + st.cooldown + st.burn;
         this.burnUntil = now + st.burn;
         break;
       }
       case 'roll': {
         const st = gearStats.roll(lv);
-        this.gearReadyAt[id] = now + st.cooldown + st.spin;
         this.rollUntil = now + st.spin;
         break;
       }
       case 'burst': {
         const st = gearStats.burst(lv);
-        this.gearReadyAt[id] = now + st.cooldown;
         for (let i = 0; i < st.shots; i++) this.shot(p.x, p.y, 'pellet', (i / st.shots) * 360, 220, st.damage, 'kinetic');
         break;
       }
@@ -1822,6 +1867,7 @@ export class GameScene extends Phaser.Scene {
   // Called at the start and again after a vendor stop, where gear may have changed.
   private setupGear() {
     const s = this.state;
+    this.resetCrates();
     this.sats.forEach((sat) => sat.destroy());
     this.sats = [];
     this.deflect = 0;
@@ -2766,7 +2812,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private testGearChanged() {
-    this.gearReadyAt = {};
     this.maxHp = totalMaxHealth(this.state); // Hull Plating
     this.health = this.maxHp;
     this.setupGear();
@@ -3297,6 +3342,7 @@ export class GameScene extends Phaser.Scene {
     this.sideHaz.update(edt);
     this.warps.update(edt);
     this.updateGear(dt);
+    this.updateCrates(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);
     this.drawPops(dt);
