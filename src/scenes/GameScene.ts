@@ -787,11 +787,12 @@ export class GameScene extends Phaser.Scene {
   // CRATES). The first slot's starts with the segment; the second's first
   // crate comes halfway through the first slot's second wait, then it runs on
   // its own. Called at the start and after a vendor stop, with setupGear.
-  private resetCrates() {
+  private resetCrates(levelStart: boolean) {
     this.crateWait = this.state.gear.map(() => null);
     this.crateGap = this.state.gear.map(() => 0);
     const first = this.state.gear.findIndex((g) => g && GEAR[g].active);
-    if (first >= 0) this.crateGap[first] = this.crateWait[first] = this.crateTime();
+    // The first crate of a level comes in half the usual wait.
+    if (first >= 0) this.crateGap[first] = this.crateWait[first] = this.crateTime() / (levelStart ? 2 : 1);
   }
 
   private crateTime() {
@@ -806,8 +807,9 @@ export class GameScene extends Phaser.Scene {
       ...discs.map(([color, a, k]) => this.add.circle(0, 0, r * k, color, a)),
       this.add.circle(0, 0, r, 0x000000, 0).setStrokeStyle(1, 0xa4e4fc, 0.9),
     ]).setDepth(5).setScale(0.3); // under ships, shots and credits
-    this.tweens.add({ targets: c, scale: 1, duration: 140, ease: 'Quad.easeOut' });
-    this.tweens.add({ targets: c, alpha: 0, delay: 450, duration: 400, onComplete: () => c.destroy() });
+    // Starts fading the moment it is fully open.
+    this.tweens.add({ targets: c, scale: 1, duration: 100, ease: 'Quad.easeOut' });
+    this.tweens.add({ targets: c, alpha: 0, delay: 100, duration: 220, onComplete: () => c.destroy() });
   }
 
   // A sparkle and a small white ring opening from the middle, where something
@@ -1936,9 +1938,9 @@ export class GameScene extends Phaser.Scene {
   // --- Gear ------------------------------------------------------------------
 
   // Called at the start and again after a vendor stop, where gear may have changed.
-  private setupGear() {
+  private setupGear(levelStart = true) {
     const s = this.state;
-    this.resetCrates();
+    this.resetCrates(levelStart);
     this.sats.forEach((sat) => sat.destroy());
     this.sats = [];
     this.deflect = 0;
@@ -3251,7 +3253,7 @@ export class GameScene extends Phaser.Scene {
     // Gear may have changed at the vendor.
     this.maxHp = totalMaxHealth(this.state);
     this.health = Math.min(this.health, this.maxHp);
-    this.setupGear();
+    this.setupGear(false);
     this.refreshHud();
     // A Rewind Beacon would restart from here.
     this.checkpoint = { save: cloneSave(this.state), segment: this.segment + 1 };
