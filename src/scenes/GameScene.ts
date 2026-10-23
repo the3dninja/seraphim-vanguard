@@ -206,7 +206,7 @@ export class GameScene extends Phaser.Scene {
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
   private ramGlow = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Image>(); // Afterburner target highlights
   bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
-  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number; damp: number }[] = []; // Blink Drive's
+  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number; damp: number; spread: number }[] = []; // Blink Drive's
   private vortexPull = { x: 0, y: 0 }; // px/s they drag the ship
 
   // Gear
@@ -866,7 +866,7 @@ export class GameScene extends Phaser.Scene {
       this.vortexPull.y += ((v.y - p.y) / dp) * force(dp) || 0;
       for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
         const d = Phaser.Math.Distance.Between(e.x, e.y, v.x, v.y);
-        if (d <= v.reach) caught.add(e);
+        if (d <= v.reach) { caught.add(e); e.setData('spread', v.spread); }
         const f = force(d) * dt;
         if (!f) continue;
         const mx = ((v.x - e.x) / d) * f, my = ((v.y - e.y) / d) * f;
@@ -928,6 +928,32 @@ export class GameScene extends Phaser.Scene {
       if (caught.has(e)) { e.setData('slowK', 0.5); continue; }
       const next = k + 0.5 * dt;
       e.setData('slowK', next >= 1 ? null : next);
+    }
+    // Enemies a vortex has held, once out of its reach (or it is gone), slowly
+    // drift apart from any enemy they overlap, so they don't stay bunched up.
+    const foes = this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[];
+    for (const e of foes) {
+      const speed = e.getData('spread') as number | undefined;
+      if (!speed || caught.has(e) || !e.active) continue;
+      let px = 0, py = 0;
+      for (const o of foes) {
+        if (o === e || !o.active) continue;
+        const gap = (e.displayWidth + o.displayWidth + e.displayHeight + o.displayHeight) / 4;
+        const d = Phaser.Math.Distance.Between(e.x, e.y, o.x, o.y);
+        if (d >= gap) continue;
+        // Right on top of each other: part sideways, a random way.
+        const ux = d > 0.5 ? (e.x - o.x) / d : Math.random() < 0.5 ? -1 : 1, uy = d > 0.5 ? (e.y - o.y) / d : 0;
+        px += ux * (1 - d / gap);
+        py += uy * (1 - d / gap);
+      }
+      const len = Math.hypot(px, py);
+      if (len < 0.001) continue;
+      const step = speed * Math.min(1, len) * dt;
+      const mx = (px / len) * step, my = (py / len) * step;
+      e.setPosition(e.x + mx, e.y + my);
+      const ed = e.getData('e') as EnemyData;
+      ed.baseX += mx;
+      ed.stopY += my;
     }
     // Once out of reach (or the vortex is gone), credits soon lose their
     // sideways speed and settle back to falling straight down at the usual rate.
@@ -1031,7 +1057,7 @@ export class GameScene extends Phaser.Scene {
         this.blinkSpark(from.x, from.y, to.x, to.y);
         p.setPosition(to.x, to.y);
         this.shiftDrag(p.x - from.x, p.y - from.y);
-        this.vortices.push({ x: from.x, y: from.y, t: 0, life: st.vortex, pull: st.vortexPull, reach: st.vortexReach, damp: st.vortexDamp });
+        this.vortices.push({ x: from.x, y: from.y, t: 0, life: st.vortex, pull: st.vortexPull, reach: st.vortexReach, damp: st.vortexDamp, spread: st.vortexSpread });
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         const dx = from.x - to.x, dy = from.y - to.y;
         const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
@@ -2184,8 +2210,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Afterburner flame and Barrel Roll spin.
-    if (now < this.burnUntil && flying) this.beams.fillStyle(Math.floor(now / 50) % 2 ? 0xf8b800 : 0xd82800, 1).fillRect(p.x - 2, p.y + 7, 4, 4 + Math.floor(now / 40) % 3);
+    // Afterburner flame, a little bigger each level, and Barrel Roll spin.
+    if (now < this.burnUntil && flying) {
+      const lv = Math.max(1, gearLevel(this.state, 'afterburner'));
+      const fw = Math.round(4 + (lv - 1) * 0.5), fh = Math.round(4 + (lv - 1) * 1.5) + Math.floor(now / 40) % 3;
+      this.beams.fillStyle(Math.floor(now / 50) % 2 ? 0xf8b800 : 0xd82800, 1).fillRect(Math.round(p.x - fw / 2), p.y + 7, fw, fh);
+    }
     if (now < this.rollUntil) p.setScale(Math.cos(((this.rollUntil - now) / 260) * Math.PI * 2), 1);
     else if (this.phase === 'action' && p.scaleX !== 1 && p.scaleY === 1) p.setScale(1);
 
@@ -2843,6 +2873,12 @@ export class GameScene extends Phaser.Scene {
   // An enemy shot reaching the ship. A Barrel Roll sends it back as the ship's own.
   private shotHitShip(b: Phaser.Physics.Arcade.Image) {
     if (!b.active) return;
+    // A level 5 Afterburner burns through enemy shots.
+    if (this.time.now < this.burnUntil && gearLevel(this.state, 'afterburner') >= 5) {
+      this.sparks.explode(3, b.x, b.y);
+      b.destroy();
+      return;
+    }
     if (this.time.now < this.rollUntil) {
       const v = b.body!.velocity;
       this.shot(b.x, b.y, 'pellet', Phaser.Math.RadToDeg(Math.atan2(-v.y, -v.x)) + 90, 240, 1.5, 'kinetic');
