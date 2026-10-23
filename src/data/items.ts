@@ -285,7 +285,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   burst: {
     name: '360 BURST', price: 450, score: 7, icon: 'icon_burst', from: 10, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: FIRES A RING OF SHOTS IN EVERY DIRECTION.', levelUp: 'MORE SHOTS, HITTING HARDER.',
+    desc: 'SUPPLY CRATES: LEAVES A POD THAT FIRES RINGS OF SHOTS IN EVERY DIRECTION.', levelUp: 'ONE MORE RING, MORE SHOTS, HITTING HARDER. IT BLOWS UP AT LV 3, AND THROWS BOMBLETS AT LV 5.',
   },
   antimissile: {
     name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
@@ -333,7 +333,12 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   blink: { tune: { safe: [750, 50], radius: [30, 2], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
-  burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
+  // A pod that fires `bursts` rings, `gap` ms apart, then stays `linger` ms and pops: with a
+  // blast (blastRadius px, blastDamage) from level 3, and `bombs` cluster bomblets as well at 5.
+  burst: {
+    tune: { shots: [12, 2], damage: [1, 0.2], gap: [500, 0], linger: [500, 0] },
+    levels: { bursts: [1, 2, 3, 4, 5], blastRadius: [0, 0, 20, 20, 20], blastDamage: [0, 0, 10, 10, 10], bombs: [0, 0, 0, 0, 5] },
+  },
   antimissile: { tune: { interval: [900, -75], radius: [45, 5] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
   incendiary: { tune: { scorch: [0.5, 0.25], burn: [0.5, 0.25] }, levels: { burnTime: [500, 1000, 2000, 3000, 4000] } },
@@ -353,7 +358,7 @@ export const CRATES = { every: 20000, vary: 5000, speed: 21 };
 export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
-const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every']);
+const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every', 'bursts', 'bombs']);
 function gearAt(id: GearId, lv: number) {
   const g = GEAR_TUNE[id];
   const out: Record<string, number> = {};
@@ -373,7 +378,7 @@ export const gearStats = {
   blink: gs<'safe' | 'radius' | 'vortex' | 'vortexPull' | 'vortexReach' | 'vortexDamp'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
-  burst: gs<'shots' | 'damage'>('burst'),
+  burst: gs<'shots' | 'damage' | 'gap' | 'linger' | 'bursts' | 'blastRadius' | 'blastDamage' | 'bombs'>('burst'),
   antimissile: gs<'interval' | 'radius' | 'targets'>('antimissile'),
   incendiary: gs<'scorch' | 'burn' | 'burnTime'>('incendiary'),
   ioncoat: gs<'stun'>('ioncoat'),
