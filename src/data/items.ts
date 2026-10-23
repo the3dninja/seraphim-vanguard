@@ -331,7 +331,8 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // core, falling off to nothing at vortexReach px (shots and credits bend 6 times as hard).
   // vortexDamp: how fast shots and credits inside it lose speed, so they don't slingshot out (per second).
   // stun: ms enemies it swaps are stunned for (none for now: they fly on, and the vortex pulls them).
-  blink: { tune: { safe: [750, 50], radius: [30, 3], stun: [0, 0], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0] } },
+  // vortexSpread: px/s enemies a vortex has held drift apart afterward, so they don't stay bunched up.
+  blink: { tune: { safe: [750, 50], radius: [30, 3], stun: [0, 0], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0], vortexSpread: [16, 0] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   // A pod that fires `bursts` rings, `gap` ms apart, popping as it fires the last: with a
@@ -376,7 +377,7 @@ export const gearStats = {
   deflector: gs<'hits' | 'recharge'>('deflector'),
   satellite: gs<'drones' | 'interval' | 'damage'>('satellite'),
   dodge: gs<'safe' | 'dist'>('dodge'),
-  blink: gs<'safe' | 'radius' | 'stun' | 'vortex' | 'vortexPull' | 'vortexReach' | 'vortexDamp'>('blink'),
+  blink: gs<'safe' | 'radius' | 'stun' | 'vortex' | 'vortexPull' | 'vortexReach' | 'vortexDamp' | 'vortexSpread'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
   burst: gs<'shots' | 'damage' | 'gap' | 'bursts' | 'blastRadius' | 'blastDamage' | 'bombs'>('burst'),

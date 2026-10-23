@@ -72,6 +72,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'blink.vortexPull': { label: 'VORTEX PULL AT ITS CORE (PX/S)', step: 5 },
   'blink.vortexReach': { label: 'VORTEX REACH (PX)', step: 2 },
   'blink.vortexDamp': { label: 'VORTEX DAMPING (HIGHER SLOWS SHOTS AND CREDITS IN IT MORE)', step: 0.25 },
+  'blink.vortexSpread': { label: 'HOW FAST ENEMIES IT HELD DRIFT APART AFTER (PX/S)', step: 2 },
   pull: { label: 'PULL SPEED (PX/S)', step: 5 },
   recharge: { label: 'RECHARGE MS', step: 100 },
   'satellite.interval': { label: 'MS BETWEEN DRONE SHOTS', step: 10 },
