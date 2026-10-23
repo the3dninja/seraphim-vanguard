@@ -881,20 +881,35 @@ export class GameScene extends Phaser.Scene {
         else o.x += mx;
         o.y += my;
       }
-      // Shots and credits bend toward it, and are slowed inside it so they
-      // don't slingshot out.
+      // Enemy shots and credits bend toward it, and are slowed inside it so
+      // they don't slingshot out. The player's own shots aren't touched.
       const slow = Math.exp(-v.damp * k * dt);
-      for (const group of [this.playerBullets, this.enemyBullets, this.coins]) {
+      for (const group of [this.enemyBullets, this.coins]) {
         for (const o of group.getChildren() as Phaser.Physics.Arcade.Image[]) {
           if (!o.body) continue;
           const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
           const f = force(d) * 6 * dt;
           if (!f) continue;
+          if (group === this.enemyBullets && o.getData('vSpeed') == null) o.setData('vSpeed', o.body.velocity.length());
           o.body.velocity.x = (o.body.velocity.x + ((v.x - o.x) / d) * f) * slow;
           o.body.velocity.y = (o.body.velocity.y + ((v.y - o.y) / d) * f) * slow;
-          if (group === this.coins) { caught.add(o); o.setData('swirled', true); }
+          caught.add(o);
+          o.setData('relT', 0);
+          if (group === this.coins) o.setData('swirled', true);
         }
       }
+    }
+    // Once out of its pull (or it is gone), enemy shots get back up to the
+    // speed they had before over a second, going the way they now point.
+    for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      const was = b.getData('vSpeed') as number | undefined;
+      if (was == null || caught.has(b) || !b.body) continue;
+      if (b.getData('relT') === 0) b.setData('relFrom', b.body.velocity.length());
+      const t = Math.min(1, (b.getData('relT') as number) + dt);
+      b.setData('relT', t);
+      const want = Phaser.Math.Linear(b.getData('relFrom') as number, was, t);
+      if (b.body.velocity.length() > 0.01) b.body.velocity.setLength(want);
+      if (t >= 1) b.setData('vSpeed', null);
     }
     // Once out of reach (or the vortex is gone), credits soon lose their
     // sideways speed and settle back to falling straight down at the usual rate.
@@ -1032,16 +1047,18 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'burst': {
-        // A pod left where the ship is, completely still: it fires a ring at once and
-        // one more per extra burst, then stays a moment and pops, with a blast and
+        // A pod left where the ship is, completely still: it fires a ring at once,
+        // more rings a beat apart, and the last as it pops, with a blast and
         // cluster bomblets at higher levels.
         const st = gearStats.burst(lv);
         const pod = this.add.image(p.x, p.y, 'burstpod').setDepth(9);
         const ring = () => { for (let i = 0; i < st.shots; i++) this.shot(pod.x, pod.y, 'pellet', (i / st.shots) * 360, 220, st.damage, 'kinetic'); };
-        ring();
-        for (let k = 1; k < st.bursts; k++) this.time.delayedCall(k * st.gap, () => { if (pod.active) ring(); });
-        this.time.delayedCall((st.bursts - 1) * st.gap + st.linger, () => {
+        if (st.bursts > 1) ring();
+        for (let k = 1; k < st.bursts - 1; k++) this.time.delayedCall(k * st.gap, () => { if (pod.active) ring(); });
+        // The last ring fires as it pops.
+        this.time.delayedCall((st.bursts - 1) * st.gap, () => {
           if (!pod.active) return;
+          ring();
           const { x, y } = pod;
           pod.destroy();
           this.sparks.explode(12, x, y);
