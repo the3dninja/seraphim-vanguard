@@ -1189,7 +1189,7 @@ export class GameScene extends Phaser.Scene {
       data.aim = 24; // fall speed
       data.hold = Phaser.Math.Between(Math.round(H / 3), H - 24); // where it blows if it gets past the ship
     }
-    if (kind === 'mine') { data.fireIn = 2200; e.body!.setCircle(3.5); }
+    if (kind === 'mine') e.body!.setCircle(3.5);
     if (kind === 'pmine') e.body!.setCircle(3.5);
     if (kind === 'minelayer') {
       data.baseX = Phaser.Math.Clamp(x, 44, W - 44);
@@ -1523,11 +1523,11 @@ export class GameScene extends Phaser.Scene {
           }
           break;
         case 'mine':
-          // Net mine: drifts down blinking. On its timer, or when the ship comes
-          // close, it flashes faster and faster, then throws out an energy net.
-          // A ship inside the net is slowed for a while.
+          // Net mine: drifts down blinking until it leaves the screen. When the
+          // ship comes close, it flashes faster and faster, then throws out an
+          // energy net. A ship inside the net is slowed for a while.
           e.y += 26 * dt;
-          if (d.charge <= 0 && firing && (d.fireIn <= 0 || Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 66)) d.charge = MINE_FLASH;
+          if (d.charge <= 0 && firing && Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y) < 66) d.charge = MINE_FLASH;
           if (d.charge > 0) {
             d.charge -= dt * 1000;
             e.setTexture(this.fuseLit(d, dt, 1 - d.charge / MINE_FLASH) ? 'mineLit' : 'mine');
@@ -2788,12 +2788,14 @@ export class GameScene extends Phaser.Scene {
     this.tipOnce('net', 'NETS SLOW YOUR SHIP');
   }
 
-  // A Bomb going off, shot or rammed: the blast hurts the ship if it is close.
+  // A Bomb going off when shot or on its fuse: the blast hurts the ship if it
+  // is close, unless the Afterburner is burning.
   private bombBurst(x: number, y: number) {
     const r = 28;
     const ring = this.add.circle(x, y, r, 0xfc7460, 0.45).setDepth(12);
     this.tweens.add({ targets: ring, alpha: 0, scale: 1.15, duration: 220, onComplete: () => ring.destroy() });
     this.sparks.explode(14, x, y);
+    if (this.time.now < this.burnUntil) return;
     if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) <= r) this.hurt();
   }
 
