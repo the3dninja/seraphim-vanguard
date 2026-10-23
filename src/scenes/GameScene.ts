@@ -202,6 +202,8 @@ export class GameScene extends Phaser.Scene {
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
   private ramGlow = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Image>(); // Afterburner target highlights
   bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
+  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number }[] = []; // Blink Drive's
+  private vortexPull = { x: 0, y: 0 }; // px/s they drag the ship
 
   // Gear
   private maxHp = 5;
@@ -287,6 +289,8 @@ export class GameScene extends Phaser.Scene {
     this.latches = [];
     this.ramGlow = new Map();
     this.bossPull = { x: 0, y: 0 };
+    this.vortices = [];
+    this.vortexPull = { x: 0, y: 0 };
     this.sats = [];
     this.satTimer = 0;
     this.deflect = 0;
@@ -580,8 +584,8 @@ export class GameScene extends Phaser.Scene {
     // Gravity wells drag the ship toward them.
     const pull = this.act3.pull(dt);
     const wind = this.sideHaz.pull(dt);
-    mx += pull.x + wind.x + this.bossPull.x * dt;
-    my += pull.y + this.bossPull.y * dt;
+    mx += pull.x + wind.x + (this.bossPull.x + this.vortexPull.x) * dt;
+    my += pull.y + (this.bossPull.y + this.vortexPull.y) * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
     const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
     // Sliding into the edge of the screen stops the slide that way.
@@ -824,6 +828,71 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // Blink Drive's vortex, left where the ship blinked from: like a gravity well
+  // but stronger, it drags everything in play toward it (the ship, enemies,
+  // shots, credits, crates, rocks and wrecks, but not bosses) for a couple of seconds.
+  private updateVortices(dt: number) {
+    const gfx = this.beams;
+    const p = this.player;
+    this.vortexPull = { x: 0, y: 0 };
+    for (const v of this.vortices.slice()) {
+      v.t += dt * 1000;
+      if (v.t >= v.life) { this.vortices.splice(this.vortices.indexOf(v), 1); continue; }
+      // Grows in, then collapses at the end.
+      const k = Math.min(1, v.t / 250) * Math.min(1, (v.life - v.t) / 300);
+      // Swirling rings of dots in purples and blues, faster toward the core.
+      const ringGap = v.reach / 5;
+      for (let ring = 0; ring < 4; ring++) {
+        const r = (ringGap * 0.6 + ring * ringGap) * k;
+        const n = 8 + ring * 4;
+        const spin = -(v.t / 1000) * (5 - ring * 0.9);
+        for (let i = 0; i < n; i++) {
+          const a = spin + (i / n) * Math.PI * 2;
+          gfx.fillStyle([0xa4e4fc, 0x9878f8, 0x6844fc, 0x0058f8][ring], 1 - ring * 0.2)
+            .fillRect(Math.round(v.x + Math.cos(a) * r), Math.round(v.y + Math.sin(a) * r * 0.85), ring < 2 ? 2 : 1, 1);
+        }
+      }
+      gfx.fillStyle(0x000000, 0.6).fillCircle(v.x, v.y, 5 * k); // see-through, over whatever it holds
+      gfx.lineStyle(1, 0xa4e4fc, 0.9).strokeCircle(v.x, v.y, 5 * k);
+      // How hard it drags at a distance, in px/s.
+      const force = (d: number) => (d > v.reach || d < 1 ? 0 : v.pull * k * (1 - d / v.reach));
+      const dp = Phaser.Math.Distance.Between(p.x, p.y, v.x, v.y);
+      this.vortexPull.x += ((v.x - p.x) / dp) * force(dp) || 0;
+      this.vortexPull.y += ((v.y - p.y) / dp) * force(dp) || 0;
+      for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+        const d = Phaser.Math.Distance.Between(e.x, e.y, v.x, v.y);
+        const f = force(d) * dt;
+        if (!f) continue;
+        const mx = ((v.x - e.x) / d) * f, my = ((v.y - e.y) / d) * f;
+        e.setPosition(e.x + mx, e.y + my);
+        const ed = e.getData('e') as EnemyData;
+        ed.baseX += mx;
+        ed.stopY += my;
+      }
+      // Rocks, wrecks and crates drift toward it like ships.
+      for (const o of [...this.hazards.getChildren(), ...this.crates.getChildren()] as Phaser.Physics.Arcade.Image[]) {
+        const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
+        const f = force(d) * dt;
+        if (!f) continue;
+        const mx = ((v.x - o.x) / d) * f, my = ((v.y - o.y) / d) * f;
+        if (o.getData('gear')) o.setData('x', o.getData('x') + mx); // a crate sways about its own line
+        else o.x += mx;
+        o.y += my;
+      }
+      // Shots and credits bend toward it.
+      for (const group of [this.playerBullets, this.enemyBullets, this.coins]) {
+        for (const o of group.getChildren() as Phaser.Physics.Arcade.Image[]) {
+          if (!o.body) continue;
+          const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
+          const f = force(d) * 6 * dt;
+          if (!f) continue;
+          o.body.velocity.x += ((v.x - o.x) / d) * f;
+          o.body.velocity.y += ((v.y - o.y) / d) * f;
+        }
+      }
+    }
+  }
+
   // Whether a point is inside level walls: the tunnel's, blast doors, coral,
   // barrier cells, or a rock, wreck or other hazard.
   private solidAt(x: number, y: number) {
@@ -913,6 +982,7 @@ export class GameScene extends Phaser.Scene {
         this.blinkSpark(from.x, from.y, to.x, to.y);
         p.setPosition(to.x, to.y);
         this.shiftDrag(p.x - from.x, p.y - from.y);
+        this.vortices.push({ x: from.x, y: from.y, t: 0, life: st.vortex, pull: st.vortexPull, reach: st.vortexReach });
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         const dx = from.x - to.x, dy = from.y - to.y;
         const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
@@ -3394,6 +3464,7 @@ export class GameScene extends Phaser.Scene {
     } else if (this.lingering) this.move(dt);
     this.updateShots(dt);
     this.updateEnemies(edt);
+    this.updateVortices(edt);
     this.boss?.update(edt);
     this.treasure?.update(edt);
     this.storm?.draw(dt, this.stormNow());
