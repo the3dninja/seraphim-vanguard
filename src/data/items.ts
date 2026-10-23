@@ -273,7 +273,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   blink: {
     name: 'BLINK DRIVE', price: 500, score: 7, icon: 'icon_blink', from: 9, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: TELEPORT TO THE BOTTOM MIDDLE, BRIEFLY UNTOUCHABLE. ENEMIES AND SHOTS THERE SWAP TO WHERE YOU WERE.', levelUp: 'LONGER SAFE TIME, A WIDER SWAP.',
+    desc: 'SUPPLY CRATES: TELEPORT TO THE BOTTOM MIDDLE, BRIEFLY UNTOUCHABLE. ENEMIES, SHOTS AND CREDITS THERE SWAP TO WHERE YOU WERE.', levelUp: 'LONGER SAFE TIME, A WIDER SWAP.',
   },
   afterburner: {
     name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
@@ -326,7 +326,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   deflector: { tune: { recharge: [8000, -1000] }, levels: { hits: [1, 1, 2, 2, 3] } },
   satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
   dodge: { tune: { safe: [500, 50], dist: [42, 0] } },
-  // radius: enemies and shots this close to where the ship lands swap to where it was.
+  // radius: enemies, shots and credits this close to where the ship lands swap to where it was.
   blink: { tune: { safe: [750, 50], radius: [20, 2] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },

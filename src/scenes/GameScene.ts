@@ -798,6 +798,30 @@ export class GameScene extends Phaser.Scene {
     return Math.max(500, CRATES.every + Phaser.Math.Between(-CRATES.vary, CRATES.vary));
   }
 
+  // Blink Drive's portal: overlapping purple-blue discs and a ring, the size of
+  // the swap, that open out and fade.
+  private portal(x: number, y: number, r: number) {
+    const discs = [[0x6844fc, 0.35, 1], [0x9878f8, 0.3, 0.75], [0x3cbcfc, 0.25, 0.5], [0x0058f8, 0.4, 0.25]] as const;
+    const c = this.add.container(x, y, [
+      ...discs.map(([color, a, k]) => this.add.circle(0, 0, r * k, color, a)),
+      this.add.circle(0, 0, r, 0x000000, 0).setStrokeStyle(1, 0xa4e4fc, 0.7),
+    ]).setDepth(5).setScale(0.3); // under ships, shots and credits
+    this.tweens.add({ targets: c, scale: 1, duration: 140, ease: 'Quad.easeOut' });
+    this.tweens.add({ targets: c, alpha: 0, delay: 160, duration: 300, onComplete: () => c.destroy() });
+  }
+
+  // A sparkle and a small white ring opening from the middle, where something
+  // left and where it arrived.
+  private blinkSpark(...pts: number[]) {
+    for (let i = 0; i < pts.length; i += 2) {
+      const [x, y] = [pts[i], pts[i + 1]];
+      const s = this.add.image(x, y, 'sparkle').setDepth(13);
+      this.tweens.add({ targets: s, alpha: 0, scale: 0.4, angle: 45, duration: 300, onComplete: () => s.destroy() });
+      const ring = this.add.circle(x, y, 1, 0x000000, 0).setStrokeStyle(1, 0xfcfcfc).setDepth(13);
+      this.tweens.add({ targets: ring, radius: 6, alpha: 0, duration: 220, onComplete: () => ring.destroy() });
+    }
+  }
+
   // Whether a point is inside level walls: the tunnel's, blast doors, coral,
   // barrier cells, or a rock, wreck or other hazard.
   private solidAt(x: number, y: number) {
@@ -869,35 +893,44 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'blink': {
-        // To just above the bottom middle (the tunnel's middle there, in the
-        // tunnel), and whatever is near the landing spot swaps to where the
-        // ship was, keeping its offset. What lands off screen or in level
-        // walls is destroyed, with no credits.
+        // To the middle (the tunnel's middle, in the tunnel), as far above the
+        // HUD as the swap reaches, and whatever is near the landing spot (enemies,
+        // their shots, credits) swaps to where the ship was, keeping its offset,
+        // then holds still a moment. What lands off screen or in level walls is
+        // destroyed, with no credits.
         const st = gearStats.blink(lv);
         const from = { x: p.x, y: p.y };
-        const ty = H - 34;
+        const ty = H - 26 - st.radius;
         const to = { x: this.tunnel ? this.tunnel.at(ty).cx : W / 2, y: ty };
         const near = (o: Phaser.GameObjects.Components.Transform) => Phaser.Math.Distance.Between(o.x, o.y, to.x, to.y) <= st.radius;
         const foes = (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).filter((e) => e.active && near(e));
-        const shots = (this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]).filter((b) => b.active && near(b));
-        this.sparks.explode(10, p.x, p.y);
+        const loose = [...this.enemyBullets.getChildren(), ...this.coins.getChildren()]
+          .filter((o) => o.active && near(o as Phaser.Physics.Arcade.Image)) as Phaser.Physics.Arcade.Image[];
+        this.portal(from.x, from.y, st.radius);
+        this.portal(to.x, to.y, st.radius);
+        this.blinkSpark(from.x, from.y, to.x, to.y);
         p.setPosition(to.x, to.y);
         this.shiftDrag(p.x - from.x, p.y - from.y);
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
-        this.flash(p);
         const dx = from.x - to.x, dy = from.y - to.y;
         const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
+        const hold = () => Phaser.Math.Between(150, 250);
         for (const e of foes) {
+          this.blinkSpark(e.x, e.y, e.x + dx, e.y + dy);
           if (lost(e.x + dx, e.y + dy)) { this.killEnemy(e, false); continue; }
           e.setPosition(e.x + dx, e.y + dy);
           const d = e.getData('e') as EnemyData;
           d.baseX += dx;
           d.stopY += dy;
-          this.sparks.explode(4, e.x, e.y);
+          d.wait = Math.max(d.wait, hold()); // holds still (and holds fire)
         }
-        for (const b of shots) {
-          if (lost(b.x + dx, b.y + dy)) b.destroy();
-          else b.setPosition(b.x + dx, b.y + dy);
+        for (const o of loose) {
+          this.blinkSpark(o.x, o.y, o.x + dx, o.y + dy);
+          if (lost(o.x + dx, o.y + dy)) { o.destroy(); continue; }
+          o.setPosition(o.x + dx, o.y + dy);
+          const v = o.body!.velocity.clone();
+          o.setVelocity(0, 0);
+          this.time.delayedCall(hold(), () => { if (o.active) o.setVelocity(v.x, v.y); });
         }
         break;
       }
