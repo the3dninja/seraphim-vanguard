@@ -1,19 +1,49 @@
 import { H, HUD_BTN } from './config';
-import type { ItemId } from './data/items';
+import { ITEMS, isGear, isItem, isWeapon, type GearId, type ItemId, type WeaponId } from './data/items';
 import type { LevelDef, Wave } from './data/levels';
 import { newSave, type SaveData } from './save';
 
 // Combat test mode (?test): an empty level where wave sequences are switched
 // on from a pause menu and loop until switched off, for trying weapons
-// against a spread of enemies. Nothing in it is saved or logged.
+// against a spread of enemies. Only its loadout is saved (see testSave), so
+// a reload, like the phone closing the page, comes back with it; the run
+// itself and the main save are untouched.
 
 export const TEST_LEVEL: LevelDef = {
   name: 'COMBAT TEST', desc: '', node: '', theme: 'outpost', segments: [[]],
 };
 
-// Level 0 keeps level-specific tips quiet. Two weapon and gear slots, three item slots.
+// Level 0 keeps level-specific tips quiet. Two weapon and gear slots, three
+// item slots, filled with the last loadout picked in the test menu.
 export function testSave(): SaveData {
-  return { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], gear: [null, null], items: [null, null, null] };
+  const s: SaveData = { ...newSave(), level: 0, maxHealth: 8, weapons: ['pulse', null], gear: [null, null], items: [null, null, null] };
+  try {
+    const l = JSON.parse(localStorage.getItem(LOADOUT_KEY) ?? 'null') as Loadout | null;
+    if (!l) return s;
+    const keep = <T extends string>(ids: (T | null)[] | undefined, ok: (id: string) => boolean, n: number) =>
+      Array.from({ length: n }, (_, i) => (ids?.[i] && ok(ids[i]!) ? ids[i] : null));
+    s.weapons = keep(l.weapons, isWeapon, 2);
+    if (!s.weapons[0]) s.weapons = [s.weapons[1] ?? 'pulse', null];
+    s.gear = keep(l.gear, isGear, 2);
+    s.items = keep(l.items, isItem, 3).map((id) => (id ? { id, count: ITEMS[id].cap } : null));
+    s.weaponLevels = { ...l.weaponLevels };
+    s.gearLevels = { ...l.gearLevels };
+  } catch { /* storage blocked or bad data: the default loadout */ }
+  return s;
+}
+
+// The test loadout as kept in this browser: what's in each slot and each weapon and gear's level.
+const LOADOUT_KEY = 'sv-test-loadout';
+interface Loadout {
+  weapons: (WeaponId | null)[]; gear: (GearId | null)[]; items: (ItemId | null)[];
+  weaponLevels: SaveData['weaponLevels']; gearLevels: SaveData['gearLevels'];
+}
+export function saveTestLoadout(s: SaveData) {
+  const l: Loadout = {
+    weapons: s.weapons, gear: s.gear, items: s.items.map((it) => it?.id ?? null),
+    weaponLevels: s.weaponLevels, gearLevels: s.gearLevels,
+  };
+  try { localStorage.setItem(LOADOUT_KEY, JSON.stringify(l)); } catch { /* storage blocked: not kept */ }
 }
 
 // Groupings taken from the levels' own wave scripts, a few kinds per sequence.
