@@ -1032,8 +1032,25 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'burst': {
+        // A pod left where the ship is, completely still: it fires a ring at once and
+        // one more per extra burst, then stays a moment and pops, with a blast and
+        // cluster bomblets at higher levels.
         const st = gearStats.burst(lv);
-        for (let i = 0; i < st.shots; i++) this.shot(p.x, p.y, 'pellet', (i / st.shots) * 360, 220, st.damage, 'kinetic');
+        const pod = this.add.image(p.x, p.y, 'burstpod').setDepth(9);
+        const ring = () => { for (let i = 0; i < st.shots; i++) this.shot(pod.x, pod.y, 'pellet', (i / st.shots) * 360, 220, st.damage, 'kinetic'); };
+        ring();
+        for (let k = 1; k < st.bursts; k++) this.time.delayedCall(k * st.gap, () => { if (pod.active) ring(); });
+        this.time.delayedCall((st.bursts - 1) * st.gap + st.linger, () => {
+          if (!pod.active) return;
+          const { x, y } = pod;
+          pod.destroy();
+          this.sparks.explode(12, x, y);
+          if (st.blastRadius > 0) this.splash(x, y, st.blastRadius, st.blastDamage, 'explosive', null);
+          const t = ITEMS.cluster.tune!;
+          for (let i = 0; i < st.bombs; i++) {
+            this.setFx(this.shot(x, y, 'bomblet', (i / st.bombs) * 360, 160, t.damage, 'explosive'), 'bomb').setData('splash', t.splash);
+          }
+        });
         break;
       }
     }
