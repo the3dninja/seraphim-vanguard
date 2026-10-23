@@ -330,14 +330,14 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // vortex: ms the vortex left where the ship was lasts; vortexPull: px/s it drags ships at its
   // core, falling off to nothing at vortexReach px (shots and credits bend 6 times as hard).
   // vortexDamp: how fast shots and credits inside it lose speed, so they don't slingshot out (per second).
-  blink: { tune: { safe: [750, 50], radius: [30, 2], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0] } },
+  blink: { tune: { safe: [750, 50], radius: [30, 3], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
-  // A pod that fires `bursts` rings, `gap` ms apart, then stays `linger` ms and pops: with a
+  // A pod that fires `bursts` rings, `gap` ms apart, popping as it fires the last: with a
   // blast (blastRadius px, blastDamage) from level 3, and `bombs` cluster bomblets as well at 5.
   burst: {
-    tune: { shots: [12, 2], damage: [1, 0.2], gap: [500, 0], linger: [500, 0] },
-    levels: { bursts: [1, 2, 3, 4, 5], blastRadius: [0, 0, 20, 20, 20], blastDamage: [0, 0, 10, 10, 10], bombs: [0, 0, 0, 0, 5] },
+    tune: { shots: [12, 2], damage: [1, 0.2], gap: [500, 0] },
+    levels: { bursts: [2, 3, 4, 5, 6], blastRadius: [0, 0, 20, 20, 20], blastDamage: [0, 0, 10, 10, 10], bombs: [0, 0, 0, 0, 5] },
   },
   antimissile: { tune: { interval: [900, -75], radius: [45, 5] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
@@ -378,7 +378,7 @@ export const gearStats = {
   blink: gs<'safe' | 'radius' | 'vortex' | 'vortexPull' | 'vortexReach' | 'vortexDamp'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
-  burst: gs<'shots' | 'damage' | 'gap' | 'linger' | 'bursts' | 'blastRadius' | 'blastDamage' | 'bombs'>('burst'),
+  burst: gs<'shots' | 'damage' | 'gap' | 'bursts' | 'blastRadius' | 'blastDamage' | 'bombs'>('burst'),
   antimissile: gs<'interval' | 'radius' | 'targets'>('antimissile'),
   incendiary: gs<'scorch' | 'burn' | 'burnTime'>('incendiary'),
   ioncoat: gs<'stun'>('ioncoat'),

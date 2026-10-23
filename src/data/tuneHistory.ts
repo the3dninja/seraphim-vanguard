@@ -463,4 +463,11 @@ export const TUNE_HISTORY: TuneRevision[] = [
       { path: 'gear.blink.radius', from: 20, to: 30 },
     ],
   },
+  // Not a Tuner export: playtest feedback widening Blink Drive's swap faster per level.
+  {
+    n: 10, date: '2026-10-23',
+    changes: [
+      { path: 'gear.blink.radius.perLv', from: 2, to: 3 },
+    ],
+  },
 ];
