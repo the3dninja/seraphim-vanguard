@@ -1,4 +1,3 @@
-import { H, HUD_BTN } from './config';
 import { ITEMS, isGear, isItem, isWeapon, type GearId, type ItemId, type WeaponId } from './data/items';
 import type { LevelDef, Wave } from './data/levels';
 import { newSave, type SaveData } from './save';
@@ -153,9 +152,9 @@ export class TestWaves {
 }
 
 // The two test buttons, crossed swords for waves and a ship for equipment:
-// just above the HUD's button row, beside the menu button. Left edges, at W 180 x H 320.
+// bottom middle, between the HUD's gear and item buttons. Left edges, at W 180 x H 320.
 export type TestPanel = 'waves' | 'ship';
-export const TEST_BUTTONS = { y: H - HUD_BTN - 37, size: 22, x: { waves: 56, ship: 80 } as Record<TestPanel, number> };
+export const TEST_BUTTONS = { y: 294, size: 22, x: { waves: 56, ship: 80 } as Record<TestPanel, number> };
 export const TEST_ICONS: Record<TestPanel, string> = { waves: 'iconSwords', ship: 'ship' };
 
 // Items never run out in test mode, so each waits this long (ms) before it can
