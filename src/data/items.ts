@@ -273,7 +273,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   blink: {
     name: 'BLINK DRIVE', price: 500, score: 7, icon: 'icon_blink', from: 9, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: TELEPORT TO THE BOTTOM MIDDLE, BRIEFLY UNTOUCHABLE. ENEMIES, SHOTS AND CREDITS THERE SWAP TO WHERE YOU WERE.', levelUp: 'LONGER SAFE TIME, A WIDER SWAP.',
+    desc: 'SUPPLY CRATES: TELEPORT TO THE BOTTOM MIDDLE, BRIEFLY UNTOUCHABLE. ENEMIES, SHOTS AND CREDITS THERE SWAP TO WHERE YOU WERE, AND A VORTEX THERE PULLS EVERYTHING IN.', levelUp: 'LONGER SAFE TIME, A WIDER SWAP, A STRONGER VORTEX.',
   },
   afterburner: {
     name: 'AFTERBURNER', price: 380, score: 5, icon: 'icon_afterburner', from: 9, where: 'base', active: true,
@@ -327,7 +327,9 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   satellite: { tune: { interval: [650, -50], damage: [1, 0.15] }, levels: { drones: [1, 1, 2, 2, 3] } },
   dodge: { tune: { safe: [500, 50], dist: [42, 0] } },
   // radius: enemies, shots and credits this close to where the ship lands swap to where it was.
-  blink: { tune: { safe: [750, 50], radius: [30, 2] } },
+  // vortex: ms the vortex left where the ship was lasts; vortexPull: px/s it drags ships at its
+  // core, falling off to nothing at vortexReach px (shots and credits bend 6 times as hard).
+  blink: { tune: { safe: [750, 50], radius: [30, 2], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   burst: { tune: { shots: [12, 2], damage: [1, 0.2] } },
@@ -367,7 +369,7 @@ export const gearStats = {
   deflector: gs<'hits' | 'recharge'>('deflector'),
   satellite: gs<'drones' | 'interval' | 'damage'>('satellite'),
   dodge: gs<'safe' | 'dist'>('dodge'),
-  blink: gs<'safe' | 'radius'>('blink'),
+  blink: gs<'safe' | 'radius' | 'vortex' | 'vortexPull' | 'vortexReach'>('blink'),
   afterburner: gs<'burn' | 'ram'>('afterburner'),
   roll: gs<'spin'>('roll'),
   burst: gs<'shots' | 'damage'>('burst'),
