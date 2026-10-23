@@ -9,6 +9,8 @@ export const PAL3: Record<string, string> = {
 };
 
 export const SPRITES3: Record<string, string[]> = {
+  // Blink Drive's swap: a four-point sparkle with curved-in sides.
+  sparkle: ['...W...', '...W...', '..WWW..', 'WWWWWWW', '..WWW..', '...W...', '...W...'],
   // The Hollow.
   spore: [
     '...NNNN...',
