@@ -894,7 +894,7 @@ export class GameScene extends Phaser.Scene {
           o.body.velocity.x = (o.body.velocity.x + ((v.x - o.x) / d) * f) * slow;
           o.body.velocity.y = (o.body.velocity.y + ((v.y - o.y) / d) * f) * slow;
           // An enemy shot never quite stops (1 px/s at least), so it keeps a heading to speed back up along.
-          if (group === this.enemyBullets && !o.getData('held') && o.body.velocity.length() < 1) {
+          if (group === this.enemyBullets && o.body.velocity.length() < 1) {
             if (o.body.velocity.length() < 0.01) o.body.velocity.set(0, 1);
             else o.body.velocity.setLength(1);
           }
@@ -908,7 +908,7 @@ export class GameScene extends Phaser.Scene {
     // speed they had before over a second, going the way they now point.
     for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
       const was = b.getData('vSpeed') as number | undefined;
-      if (was == null || caught.has(b) || !b.body || b.getData('held')) continue;
+      if (was == null || caught.has(b) || !b.body) continue;
       if (b.getData('relT') === 0) b.setData('relFrom', b.body.velocity.length());
       const t = Math.min(1, (b.getData('relT') as number) + dt);
       b.setData('relT', t);
@@ -1001,8 +1001,9 @@ export class GameScene extends Phaser.Scene {
       case 'blink': {
         // To the middle (the tunnel's middle, in the tunnel), as far above the
         // HUD as the swap reaches, and whatever is near the landing spot (enemies,
-        // their shots, credits) swaps to where the ship was, keeping its offset,
-        // then holds still a moment. What lands off screen or in level walls is
+        // their shots, credits) swaps to where the ship was, keeping its offset and
+        // carrying straight on (the vortex there pulls it back in). Enemies can be
+        // stunned (0 ms unless tuned). What lands off screen or in level walls is
         // destroyed, with no credits.
         const st = gearStats.blink(lv);
         const from = { x: p.x, y: p.y };
@@ -1021,7 +1022,6 @@ export class GameScene extends Phaser.Scene {
         this.invulnUntil = Math.max(this.invulnUntil, now + st.safe);
         const dx = from.x - to.x, dy = from.y - to.y;
         const lost = (x: number, y: number) => x < 0 || x > W || y < 0 || y > H || this.solidAt(x, y);
-        const hold = () => Phaser.Math.Between(150, 250);
         for (const e of foes) {
           this.blinkSpark(e.x, e.y, e.x + dx, e.y + dy);
           if (lost(e.x + dx, e.y + dy)) { this.killEnemy(e, false); continue; }
@@ -1029,18 +1029,12 @@ export class GameScene extends Phaser.Scene {
           const d = e.getData('e') as EnemyData;
           d.baseX += dx;
           d.stopY += dy;
-          d.wait = Math.max(d.wait, hold()); // holds still (and holds fire)
-          d.stun = Math.max(d.stun, st.stun); // then is stunned (the stun counts down once the hold is over)
+          d.stun = Math.max(d.stun, st.stun);
         }
         for (const o of loose) {
           this.blinkSpark(o.x, o.y, o.x + dx, o.y + dy);
           if (lost(o.x + dx, o.y + dy)) { o.destroy(); continue; }
           o.setPosition(o.x + dx, o.y + dy);
-          const v = o.body!.velocity.clone();
-          // The vortex opens right here: an enemy shot gets back to this speed after it, not to the hold's 0.
-          if (o.getData('vSpeed') == null && this.enemyBullets.contains(o)) o.setData('vSpeed', v.length()).setData('relT', 0);
-          o.setVelocity(0, 0).setData('held', true);
-          this.time.delayedCall(hold(), () => { if (o.active) o.setVelocity(v.x, v.y).setData('held', false); });
         }
         break;
       }

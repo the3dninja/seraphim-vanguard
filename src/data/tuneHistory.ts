@@ -470,4 +470,12 @@ export const TUNE_HISTORY: TuneRevision[] = [
       { path: 'gear.blink.radius.perLv', from: 2, to: 3 },
     ],
   },
+  // Not a Tuner export: playtest feedback. Swapped enemies fly straight on, and the vortex pulls them back.
+  {
+    n: 11, date: '2026-10-23',
+    changes: [
+      { path: 'gear.blink.stun', from: 500, to: 0 },
+      { path: 'gear.blink.stun.perLv', from: 100, to: 0 },
+    ],
+  },
 ];
