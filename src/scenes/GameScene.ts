@@ -60,6 +60,8 @@ export interface EnemyData {
 // come back down: ms left, and the health it left with.
 interface Returner { kind: FoeKind; hp: number; t: number }
 const RETURN_AFTER: [number, number] = [8000, 12000];
+// The share of the credits picked up in a run that the ship keeps if it's destroyed.
+const DEATH_KEEP = 0.25;
 // Gunboats and Bombers leaving down the screen stop firing at the bottom third.
 const LEAVE_FIRE_STOP = (H * 2) / 3;
 
@@ -156,7 +158,8 @@ export class GameScene extends Phaser.Scene {
   private level!: LevelDef;
   private health = 0;
   // Where a Rewind Beacon restarts from: the level start, then each vendor stop.
-  private checkpoint!: { save: SaveData; segment: number };
+  private checkpoint!: { save: SaveData; segment: number; earned: number }; // earned: credits picked up before it
+  private earned = 0; // credits picked up this run
   private rewound = false;
 
   player!: Phaser.Physics.Arcade.Sprite;
@@ -287,7 +290,7 @@ export class GameScene extends Phaser.Scene {
   // `test` flies combat test mode: no level script, waves come from its menu.
   // `replay` names a cleared level to fly again, for less pay (see REPLAY_PAY).
   // A cleared side mission is a replay too.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string; test?: boolean; replay?: number }) {
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number; earned?: number }; side?: string; test?: boolean; replay?: number }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
     this.side = data.side ?? null;
@@ -297,7 +300,10 @@ export class GameScene extends Phaser.Scene {
     this.replay = !!this.replayLevel || (!!this.side && this.startState.sides.includes(this.side));
     this.test = data.test ? new TestWaves() : null;
     this.level = this.test ? TEST_LEVEL : (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
-    this.checkpoint = data.resume ? { save: cloneSave(data.resume.save), segment: data.resume.segment } : { save: cloneSave(data.state), segment: 0 };
+    this.checkpoint = data.resume
+      ? { save: cloneSave(data.resume.save), segment: data.resume.segment, earned: data.resume.earned ?? 0 }
+      : { save: cloneSave(data.state), segment: 0, earned: 0 };
+    this.earned = this.checkpoint.earned;
     this.rewound = !!data.resume;
     this.maxHp = totalMaxHealth(this.state);
     this.health = this.maxHp;
@@ -2970,6 +2976,7 @@ export class GameScene extends Phaser.Scene {
   private collect(c: Phaser.Physics.Arcade.Image) {
     if (!c.active) return;
     this.state.credits += c.getData('v') as number;
+    this.earned += c.getData('v') as number;
     this.sparkle(c.x, c.y, c.getData('key') as string);
     c.destroy();
     this.refreshHud();
@@ -3096,16 +3103,21 @@ export class GameScene extends Phaser.Scene {
       });
       this.time.delayedCall(2600, () => {
         this.cameras.main.fadeOut(400);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment }, side: this.side ?? undefined, replay: this.replayLevel ?? undefined }));
+        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment, earned: this.checkpoint.earned }, side: this.side ?? undefined, replay: this.replayLevel ?? undefined }));
       });
       return;
     }
+    // Items bought and all but a share of the credits picked up this run are
+    // lost (DEATH_KEEP); replay from the start.
+    const kept = Math.floor(this.earned * DEATH_KEEP);
+    const back = cloneSave(this.startState);
+    back.credits += kept;
     this.time.delayedCall(900, () => {
       text(this, W / 2, H / 2 - 16, 'SHIP DESTROYED', COLOR.red).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
+      if (kept > 0) text(this, W / 2, H / 2 + 20, `KEPT ${kept} CREDITS`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
     });
-    // Credits and items earned this level are lost; replay from the start.
-    this.time.delayedCall(3000, () => this.leaveTo('Base', this.startState));
+    this.time.delayedCall(3000, () => this.leaveTo('Base', back));
   }
 
   // --- Combat test --------------------------------------------------------------
@@ -3300,7 +3312,7 @@ export class GameScene extends Phaser.Scene {
   private flowOn() {
     const next = this.segment + 1;
     // A Rewind Beacon would restart from here.
-    this.checkpoint = { save: cloneSave(this.state), segment: next };
+    this.checkpoint = { save: cloneSave(this.state), segment: next, earned: this.earned };
     if (this.segmentTheme(next) !== this.theme) this.setTheme(this.segmentTheme(next), 2500);
     this.beginSegment();
   }
@@ -3543,7 +3555,7 @@ export class GameScene extends Phaser.Scene {
     this.setupGear(false);
     this.refreshHud();
     // A Rewind Beacon would restart from here.
-    this.checkpoint = { save: cloneSave(this.state), segment: this.segment + 1 };
+    this.checkpoint = { save: cloneSave(this.state), segment: this.segment + 1, earned: this.earned };
     this.cameras.main.fadeIn(350);
     this.startNextSegment();
   }
