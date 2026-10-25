@@ -86,8 +86,10 @@ export class SideHazards {
     return { x, y: 0 };
   }
 
-  clear() {
-    this.presses = [];
+  // The presses are part of the moon, so a cleared level leaves them scrolling
+  // past (they only hurt during the action) instead of popping out of sight.
+  clear(keepPresses = false) {
+    if (!keepPresses) this.presses = [];
     this.gusts = [];
     this.embers = [];
     this.sweeps = [];

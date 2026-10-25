@@ -349,7 +349,7 @@ export function updateCorrupt(g: GameScene, e: Phaser.Physics.Arcade.Sprite, d: 
       } else {
         if (d.step === 4 && firing) { d.step = 5; ring(g, e.x, e.y, 12, g.bulletSpeed() * 0.8); }
         d.hold -= ms;
-        if (d.hold <= 0) e.y -= 24 * dt;
+        if (d.hold <= 0) { e.y -= 24 * dt; d.leaving = true; }
       }
       break;
     case 'cphantom':
@@ -365,7 +365,7 @@ function updateLancer(g: GameScene, e: Phaser.Physics.Arcade.Sprite, d: EnemyDat
   const fanOf = (a: number) => [a - 0.32, a, a + 0.32];
   if (d.step >= 3 && d.charge <= 0 && d.beam <= 0) {
     e.y -= 40 * dt;
-    if (e.y < -20) { e.destroy(); return true; }
+    d.leaving = true;
     return false;
   }
   if (e.y < d.stopY) { e.y += 45 * dt; return false; }
@@ -397,7 +397,7 @@ function updatePhantom(g: GameScene, e: Phaser.Physics.Arcade.Sprite, d: EnemyDa
   d.hold -= dt * 1000;
   if (d.cloaked) {
     e.setAlpha(Math.floor(d.t * 20) % 6 === 0 ? 0.3 : 0.1);
-    if (d.step >= 4) { e.y -= 50 * dt; return; }
+    if (d.step >= 4) { e.y -= 50 * dt; d.leaving = true; return; }
     e.y += Phaser.Math.Clamp(d.stopY - e.y, -50 * dt, 50 * dt);
     e.x += Phaser.Math.Clamp(d.baseX - e.x, -70 * dt, 70 * dt);
     if (d.hold <= 0) {

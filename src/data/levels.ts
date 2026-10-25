@@ -95,6 +95,15 @@ export const ramp = (from: number, to: number, waves: Wave[]) => waves.map((w, i
   return { ...w, delay: Math.round((w.delay * k) / 50) * 50 };
 });
 
+// Waves growing as they go: each wave's count scaled by `from` at the first
+// wave, rising steadily to `to` at the last. Waves without a count are left be.
+export const swell = (from: number, to: number, waves: Wave[]) => waves.map((w, i) => {
+  if (!w.count) return w;
+  const k = from + (to - from) * (i / Math.max(1, waves.length - 1));
+  const n = Math.round(w.count * k);
+  return { ...w, count: w.pattern === 'vee' && n % 2 === 0 ? n + 1 : n }; // a vee keeps its point
+});
+
 export const isBuilt = (l: LevelDef | undefined): l is LevelDef => !!l && l.segments.length > 0;
 
 export const LEVELS: LevelDef[] = [
@@ -428,7 +437,9 @@ export const LEVELS: LevelDef[] = [
     hazards: [{ kind: 'fence', every: [9000, 13000] }],
     boss: 'watcher',
     segments: [
-      [
+      // Starts at the old pace, then the waves come faster and grow bigger all
+      // the way to The Watcher.
+      ramp(1, 0.75, swell(1, 1.15, [
         { delay: 2500, kind: 'drone', pattern: 'swarm', count: 8, x: 0 },
         { delay: 3000, kind: 'phantom', pattern: 'single', x: 0.5 },
         { delay: 3500, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
@@ -448,8 +459,8 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'phantom', pattern: 'line', count: 3, waitClear: true },
         { delay: 2000, kind: 'dart', pattern: 'vee', count: 7, x: 0.5 },
         { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.6, waitClear: true },
-      ],
-      [
+      ])),
+      ramp(0.75, 0.5, swell(1.15, 1.4, [
         { delay: 2500, kind: 'phantom', pattern: 'pair' },
         { delay: 3000, kind: 'drone', pattern: 'swarm', count: 9, x: 0 },
         { delay: 2500, kind: 'minelayer', pattern: 'single', x: 0.7 },
@@ -468,7 +479,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 3000, kind: 'minelayer', pattern: 'pair', waitClear: true },
         { delay: 2000, kind: 'drone', pattern: 'swarm', count: 10, x: 1 },
         { delay: 2000, kind: 'lancer', pattern: 'line', count: 3, waitClear: true },
-      ],
+      ])),
     ],
   },
   // Level 9: the first Hollow. Spore Pods burst into seekers, infected
