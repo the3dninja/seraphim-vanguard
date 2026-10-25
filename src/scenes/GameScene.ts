@@ -51,7 +51,14 @@ export interface EnemyData {
   burnTick: number; // ms to the next burn tick
   stun: number; // ms stunned: no moving or firing
   corrupt?: boolean; // a Corrupted ship, or a mine one laid
+  leaving?: boolean; // pulling back up off the top of the screen
+  back?: boolean; // already came back once after pulling back
 }
+
+// An enemy that pulled back off the top before it was killed, waiting to
+// come back down: ms left, and the health it left with.
+interface Returner { kind: FoeKind; hp: number; t: number }
+const RETURN_AFTER: [number, number] = [8000, 12000];
 
 // Anything a boss class offers the scene.
 interface Boss {
@@ -176,6 +183,7 @@ export class GameScene extends Phaser.Scene {
 
   phase: Phase = 'action';
   private segment = 0;
+  private returners: Returner[] = [];
   private waveIndex = 0;
   private waveTimer = 0;
   private hazardIn: number[] = [];
@@ -277,6 +285,7 @@ export class GameScene extends Phaser.Scene {
     this.strikes = [];
     this.flares = [];
     this.fences = [];
+    this.returners = [];
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
@@ -834,7 +843,7 @@ export class GameScene extends Phaser.Scene {
 
   // Blink Drive's vortex, left where the ship blinked from: like a gravity well
   // but stronger, it drags everything in play toward it (the ship, enemies,
-  // shots, credits, crates, rocks and wrecks, but not bosses) for a couple of seconds.
+  // shots, credits, rocks and wrecks, but not bosses or gear crates) for a couple of seconds.
   private updateVortices(dt: number) {
     const gfx = this.beams;
     const p = this.player;
@@ -875,14 +884,13 @@ export class GameScene extends Phaser.Scene {
         ed.baseX += mx;
         ed.stopY += my;
       }
-      // Rocks, wrecks and crates drift toward it like ships.
-      for (const o of [...this.hazards.getChildren(), ...this.crates.getChildren()] as Phaser.Physics.Arcade.Image[]) {
+      // Rocks and wrecks drift toward it like ships. Gear crates don't.
+      for (const o of this.hazards.getChildren() as Phaser.Physics.Arcade.Image[]) {
         const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
         const f = force(d) * dt;
         if (!f) continue;
         const mx = ((v.x - o.x) / d) * f, my = ((v.y - o.y) / d) * f;
-        if (o.getData('gear')) o.setData('x', o.getData('x') + mx); // a crate sways about its own line
-        else o.x += mx;
+        o.x += mx;
         o.y += my;
       }
       // Enemy shots and credits bend toward it, and are slowed inside it so
@@ -1119,9 +1127,15 @@ export class GameScene extends Phaser.Scene {
 
   private runWaves(dt: number) {
     if (this.boss || this.treasure) return;
+    this.tickReturners(dt);
     const waves = this.level.segments[this.segment];
     const wave = waves[this.waveIndex];
     if (!wave) {
+      // The segment can't end with ships still due back: hurry them in.
+      if (this.returners.length) {
+        if (this.enemies.countActive() === 0) this.returners.forEach((r) => { r.t = Math.min(r.t, 1500); });
+        return;
+      }
       // In the tunnel, fly on until it opens out again. Level 15's legs flow
       // straight on without waiting for the screen to clear, unless a boss is next.
       const last = this.segment >= this.level.segments.length - 1;
@@ -1139,6 +1153,29 @@ export class GameScene extends Phaser.Scene {
       this.spawnWave(wave);
       this.waveIndex++;
       this.waveTimer = 0;
+    }
+  }
+
+  // An enemy pulling back off the top: the first time, it comes back down a
+  // few seconds later with the health it had left. The second time it's gone.
+  retreat(e: Phaser.Physics.Arcade.Sprite) {
+    const d = e.getData('e') as EnemyData;
+    if (!d.back && this.phase === 'action') {
+      this.returners.push({ kind: d.kind, hp: d.hp, t: Phaser.Math.Between(...RETURN_AFTER) });
+    }
+    e.destroy();
+  }
+
+  private tickReturners(dt: number) {
+    if (this.phase !== 'action') return;
+    for (const r of this.returners.slice()) {
+      r.t -= dt * 1000;
+      if (r.t > 0) continue;
+      this.returners.splice(this.returners.indexOf(r), 1);
+      const e = this.spawnEnemy(r.kind, Phaser.Math.Between(20, W - 20), -10);
+      const d = e.getData('e') as EnemyData;
+      d.hp = r.hp;
+      d.back = true;
     }
   }
 
@@ -1485,35 +1522,39 @@ export class GameScene extends Phaser.Scene {
           e.y += 52 * dt;
           e.x = d.baseX + d.dir * d.t * 42 + Math.sin(d.t * 3.6) * 12 * d.dir;
           break;
-        case 'gunboat':
-          // Fly in, park, fire a 4-shot spread (one from each gun tip), then move on.
+        case 'gunboat': {
+          // Fly in, park, fire a 4-shot spread (one from each gun tip), then pull
+          // back up off the top, still firing on the way.
           if (e.y < d.stopY && d.hold > 0) e.y += 50 * dt;
-          else if (d.hold > 0) {
-            d.hold -= dt * 1000;
-            if (d.fireIn <= 0 && firing) {
-              d.fireIn = 2500;
-              const tg = this.aimTarget();
-              const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
-              // Gun tips: the inner pair reach one pixel lower than the outer pair.
-              for (const g of [{ dx: -5, dy: 4, off: -0.3 }, { dx: -3, dy: 5, off: -0.1 }, { dx: 3, dy: 5, off: 0.1 }, { dx: 5, dy: 4, off: 0.3 }])
-                this.enemyShoot(e.x + g.dx, e.y + g.dy, a + g.off);
-            }
-          } else e.y += 40 * dt;
+          else if (d.hold > 0) d.hold -= dt * 1000;
+          else { e.y -= 40 * dt; d.leaving = true; }
+          const parked = e.y >= d.stopY || d.leaving;
+          if (parked && d.fireIn <= 0 && firing && e.y > 6) {
+            d.fireIn = 2500;
+            const tg = this.aimTarget();
+            const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
+            // Gun tips: the inner pair reach one pixel lower than the outer pair.
+            for (const g of [{ dx: -5, dy: 4, off: -0.3 }, { dx: -3, dy: 5, off: -0.1 }, { dx: 3, dy: 5, off: 0.1 }, { dx: 5, dy: 4, off: 0.3 }])
+              this.enemyShoot(e.x + g.dx, e.y + g.dy, a + g.off);
+          }
           break;
-        case 'bomber':
+        }
+        case 'bomber': {
           // Sinks to its height, edges toward the ship dropping a bomb from under
-          // each wing, then flies on down.
+          // each wing, then pulls back up off the top, still dropping bombs.
           if (e.y < d.stopY && d.hold > 0) e.y += 34 * dt;
           else if (d.hold > 0) {
             d.hold -= dt * 1000;
             e.x += Phaser.Math.Clamp(this.player.x - e.x, -10, 10) * dt;
-            if (d.fireIn <= 0 && firing) {
-              d.fireIn = 2000;
-              this.spawnEnemy('bomb', e.x - 7, e.y + 9);
-              this.spawnEnemy('bomb', e.x + 7, e.y + 9);
-            }
-          } else e.y += 30 * dt;
+          } else { e.y -= 30 * dt; d.leaving = true; }
+          const parked = e.y >= d.stopY || d.leaving;
+          if (parked && d.fireIn <= 0 && firing && e.y > 6) {
+            d.fireIn = 2000;
+            this.spawnEnemy('bomb', e.x - 7, e.y + 9);
+            this.spawnEnemy('bomb', e.x + 7, e.y + 9);
+          }
           break;
+        }
         case 'bomb':
           // Falls straight down, slow at first and faster and faster. Like a depth
           // charge it blows at the ship's height while it is above the ship;
@@ -1604,7 +1645,7 @@ export class GameScene extends Phaser.Scene {
             }
           } else {
             d.hold -= dt * 1000;
-            if (d.hold <= 0) e.y -= 24 * dt;
+            if (d.hold <= 0) { e.y -= 24 * dt; d.leaving = true; }
           }
           break;
         case 'phantom':
@@ -1643,7 +1684,8 @@ export class GameScene extends Phaser.Scene {
           d.shieldImg?.setPosition(e.x, e.y + 9);
           break;
       }
-      if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || e.y < -40) e.destroy();
+      if (d.leaving && e.y < -20) this.retreat(e);
+      else if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || e.y < -40) e.destroy();
     }
   }
 
@@ -1675,7 +1717,7 @@ export class GameScene extends Phaser.Scene {
     const ms = dt * 1000;
     if (d.step >= 3 && d.charge <= 0 && d.beam <= 0) {
       e.y -= 40 * dt;
-      if (e.y < -20) { e.destroy(); return true; }
+      d.leaving = true;
       return false;
     }
     if (e.y < d.stopY) { e.y += 45 * dt; return false; }
@@ -1708,7 +1750,7 @@ export class GameScene extends Phaser.Scene {
     d.hold -= dt * 1000;
     if (d.cloaked) {
       e.setAlpha(Math.floor(d.t * 20) % 6 === 0 ? 0.3 : 0.1);
-      if (d.step >= 3) { e.y -= 50 * dt; return; }
+      if (d.step >= 3) { e.y -= 50 * dt; d.leaving = true; return; }
       e.y += Phaser.Math.Clamp(d.stopY - e.y, -45 * dt, 45 * dt);
       e.x += Phaser.Math.Clamp(d.baseX - e.x, -60 * dt, 60 * dt);
       if (d.hold <= 0) {
@@ -2064,7 +2106,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private clearTimedHazards() {
+  private clearTimedHazards(keepScenery = false) {
     this.strikes = [];
     this.flares = [];
     this.fences.forEach((f) => f.posts.forEach((p) => p.destroy()));
@@ -2072,7 +2114,7 @@ export class GameScene extends Phaser.Scene {
     this.flareGlow.setFillStyle(0xf8b800, 0);
     this.act3.clear();
     this.barriers.clear();
-    this.sideHaz.clear();
+    this.sideHaz.clear(keepScenery);
     this.warps.clear();
   }
 
@@ -3446,7 +3488,7 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'clear';
     this.player.setVisible(true);
     this.enemyBullets.clear(true, true);
-    this.clearTimedHazards();
+    this.clearTimedHazards(true);
     const last = !this.side && this.state.level === LEVELS.length;
     // Loose credits curve in toward the ship (see homeCoin) for a few seconds,
     // or until they're all picked up, before the rest are gathered in.
@@ -3565,7 +3607,7 @@ export class GameScene extends Phaser.Scene {
     if (this.phase === 'action') {
       this.move(dt);
       this.autoFire(dt);
-      if (this.test) this.test.update(dt, (w) => this.spawnWave(w));
+      if (this.test) { this.test.update(dt, (w) => this.spawnWave(w)); this.tickReturners(dt); }
       else {
         this.runWaves(dt);
         this.runHazards(dt);
