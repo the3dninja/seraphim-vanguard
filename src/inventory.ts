@@ -64,10 +64,18 @@ export function unequipGear(s: SaveData, slot: number) {
 
 // --- Items ---------------------------------------------------------------
 
+// How many of a consumable one slot holds: its own cap, more with a Cargo Bay Expansion.
+export const itemCap = (s: SaveData, id: ItemId) =>
+  ITEMS[id].cap + (hasGear(s, 'cargo') ? gearStats.cargo(gearLevel(s, 'cargo')).extra : 0);
+
+// Items carried beyond their own caps, which each slow the ship (Cargo Bay Expansion).
+export const extraCargo = (s: SaveData) =>
+  s.items.reduce((n, it) => n + (it ? Math.max(0, it.count - ITEMS[it.id].cap) : 0), 0);
+
 // Where one more of a consumable fits: a slot with the same item and room,
 // else an empty slot, else null.
 export function itemSlotFor(s: SaveData, id: ItemId): number | null {
-  const same = s.items.findIndex((it) => it && it.id === id && it.count < ITEMS[id].cap);
+  const same = s.items.findIndex((it) => it && it.id === id && it.count < itemCap(s, id));
   if (same >= 0) return same;
   const empty = s.items.indexOf(null);
   return empty >= 0 ? empty : null;
@@ -97,7 +105,7 @@ export function equipStack(s: SaveData, id: ItemId, slot = itemSlotFor(s, id) ??
   let moved = false;
   while (s.storage.includes(id)) {
     const it = s.items[slot];
-    if (it && it.count >= ITEMS[id].cap) break;
+    if (it && it.count >= itemCap(s, id)) break;
     s.storage.splice(s.storage.indexOf(id), 1);
     if (it) it.count++;
     else s.items[slot] = { id, count: 1 };
@@ -124,7 +132,7 @@ export function equipFromStorage(s: SaveData, index: number): boolean {
   if (isItem(id)) {
     const slot = itemSlotFor(s, id) ?? 0;
     const it = s.items[slot];
-    if (it && it.id === id && it.count >= ITEMS[id].cap) return false;
+    if (it && it.id === id && it.count >= itemCap(s, id)) return false;
     s.storage.splice(index, 1);
     if (it && it.id === id) { it.count++; return true; }
     unequipItem(s, slot);
@@ -171,7 +179,7 @@ export const gearUpgradePrice = (id: GearId, nextLevel: number) => GEAR_UP_COST[
 export const hullPrice = (s: SaveData) => 100 * (s.maxHealth - 4);
 export const weaponSlotPrice = (n: number) => [0, 600][n] ?? 0;
 export const itemSlotPrice = (n: number) => [0, 300, 1000][n] ?? 0;
-export const gearSlotPrice = (n: number) => [600, 1000][n] ?? 0;
+export const gearSlotPrice = (n: number) => [400, 800][n] ?? 0;
 
 export interface Upgrade {
   key: string;

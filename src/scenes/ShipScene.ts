@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  ITEMS, KITS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type KitId, type WeaponId,
+  KITS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type KitId, type WeaponId,
 } from '../data/items';
 import {
-  applyKit, equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, kitTargets, unequipGear, unequipItem,
-  unequipWeapon, weaponLevel,
+  applyKit, equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, gearSlotPrice, itemCap, itemSlotPrice, kitTargets,
+  unequipGear, unequipItem, unequipWeapon, weaponLevel, weaponSlotPrice,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { button, choose, text } from '../ui';
@@ -20,18 +20,20 @@ type Filter = Kind | 'all';
 
 // Slots around the big ship: weapons near the nose, gear on the sides, items
 // in a row along the bottom. `n` is the slot's number within its kind.
-// Prices are what a locked slot will cost at the Base vendor (placeholders).
-interface SlotDef { kind: Kind; n: number; x: number; y: number; price: number }
+interface SlotDef { kind: Kind; n: number; x: number; y: number }
 const SLOT = 22;
 const SLOTS: SlotDef[] = [
-  { kind: 'weapon', n: 0, x: 44, y: 32, price: 0 },
-  { kind: 'weapon', n: 1, x: W - 44 - SLOT, y: 32, price: 600 },
-  { kind: 'gear', n: 0, x: 32, y: 66, price: 600 },
-  { kind: 'gear', n: 1, x: W - 32 - SLOT, y: 66, price: 1000 },
-  { kind: 'item', n: 0, x: W / 2 - SLOT / 2 - 32, y: 110, price: 0 },
-  { kind: 'item', n: 1, x: W / 2 - SLOT / 2, y: 110, price: 300 },
-  { kind: 'item', n: 2, x: W / 2 - SLOT / 2 + 32, y: 110, price: 1000 },
+  { kind: 'weapon', n: 0, x: 44, y: 32 },
+  { kind: 'weapon', n: 1, x: W - 44 - SLOT, y: 32 },
+  { kind: 'gear', n: 0, x: 32, y: 66 },
+  { kind: 'gear', n: 1, x: W - 32 - SLOT, y: 66 },
+  { kind: 'item', n: 0, x: W / 2 - SLOT / 2 - 32, y: 110 },
+  { kind: 'item', n: 1, x: W / 2 - SLOT / 2, y: 110 },
+  { kind: 'item', n: 2, x: W / 2 - SLOT / 2 + 32, y: 110 },
 ];
+// What a locked slot will cost at the Base vendor.
+const slotPrice = (def: SlotDef) =>
+  (def.kind === 'weapon' ? weaponSlotPrice : def.kind === 'gear' ? gearSlotPrice : itemSlotPrice)(def.n);
 
 const TABS: { f: Filter; label: string }[] = [
   { f: 'all', label: 'ALL' }, { f: 'weapon', label: 'WPN' }, { f: 'gear', label: 'GEAR' }, { f: 'item', label: 'ITEM' },
@@ -210,14 +212,14 @@ export class ShipScene extends Phaser.Scene {
       add(this.add.image(cx, cy, defOf(held.id).icon).setScale(2));
       // Stacks show against their cap under the slot, like 1/3.
       const it = def.kind === 'item' ? this.s.items[def.n] : null;
-      if (it) add(text(this, cx, def.y + SLOT + 2, stackLabel(it), COLOR.white).setOrigin(0.5, 0));
+      if (it) add(text(this, cx, def.y + SLOT + 2, stackLabel(it, itemCap(this.s, it.id)), COLOR.white).setOrigin(0.5, 0));
     } else {
       // Empty or locked: a faint picture of what the slot takes.
       add(this.add.image(cx, open ? cy : cy + 3, SLOT_ART[def.kind]).setAlpha(open ? 0.6 : 0.35));
     }
     if (!open) {
       add(this.add.image(cx, def.y + 5, 'lock'));
-      add(text(this, cx, def.y + SLOT + 2, `${def.price}`, COLOR.dim).setOrigin(0.5, 0));
+      add(text(this, cx, def.y + SLOT + 2, `${slotPrice(def)}`, COLOR.dim).setOrigin(0.5, 0));
     }
     box.setInteractive().on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.press = { from: 'slot', slot: i, x: p.x, y: p.y, dragging: false };
@@ -251,7 +253,7 @@ export class ShipScene extends Phaser.Scene {
       title = isWeapon(id) ? `${defOf(id).name} LV${weaponLevel(this.s, id)}`
         : isGear(id) ? `${defOf(id).name} LV${gearLevel(this.s, id)}` : defOf(id).name;
       body = defOf(id).desc;
-      if (isItem(id)) add(text(this, W - 6, INFO_Y, `MAX ${ITEMS[id].cap}`, COLOR.gray).setOrigin(1, 0));
+      if (isItem(id)) add(text(this, W - 6, INFO_Y, `MAX ${itemCap(this.s, id)}`, COLOR.gray).setOrigin(1, 0));
     }
     if (title) add(text(this, 6, INFO_Y, title, COLOR.cyan));
     add(text(this, 6, title ? INFO_Y + 11 : INFO_Y, body, title ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
@@ -281,7 +283,7 @@ export class ShipScene extends Phaser.Scene {
   private tapSlot(i: number) {
     const def = SLOTS[i];
     if (!this.unlocked(def)) {
-      this.say(`LOCKED ${KIND_NAME[def.kind]} SLOT. BUY IT FOR ${def.price} CR IN THE BASE VENDOR'S UPGRADE TAB.`);
+      this.say(`LOCKED ${KIND_NAME[def.kind]} SLOT. BUY IT FOR ${slotPrice(def)} CR IN THE BASE VENDOR'S UPGRADE TAB.`);
       return;
     }
     const sel = this.sel;

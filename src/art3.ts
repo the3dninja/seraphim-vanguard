@@ -201,6 +201,8 @@ export const SPRITES3: Record<string, string[]> = {
   icon_shaped: ['...YY...', '..YWWY..', '.YYYYYY.', '..GGGG..', '..GDDG..', '..GDDG..', '..GGGG..', '........'],
   icon_overcharge: ['...Y....', '..YY....', '.YWY....', 'YWWYYYY.', '.YYYWWY.', '....YWY.', '....YY..', '....Y...'],
   icon_scanner: ['.TTTTT..', 'T.....T.', 'T..T..T.', 'T.TTT.T.', 'T..T..T.', 'T.....T.', '.TTTTT..', '........'],
+  icon_nullifier: ['..PPPP..', '.P....P.', 'P....W.P', 'P...W..P', 'P..W...P', 'P.W....P', '.P....P.', '..PPPP..'],
+  icon_cargo: ['.ffffff.', 'fbbbbbbf', 'fbbbTbbf', 'fbbTTTbf', 'fbbbTbbf', 'fbbbbbbf', 'feeeeeef', '.ffffff.'],
 
   // Item icons.
   icon_cluster: ['.G.G.G..', 'GDGDGDG.', '.G.G.G..', '........', '..GGG...', '.GDDDG..', '.GDRDG..', '..GGG...'],

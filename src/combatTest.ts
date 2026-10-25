@@ -1,5 +1,6 @@
-import { ITEMS, isGear, isItem, isWeapon, type GearId, type ItemId, type WeaponId } from './data/items';
+import { isGear, isItem, isWeapon, type GearId, type ItemId, type WeaponId } from './data/items';
 import type { LevelDef, Wave } from './data/levels';
+import { itemCap } from './inventory';
 import { newSave, type SaveData } from './save';
 
 // Combat test mode (?test): an empty level where wave sequences are switched
@@ -24,9 +25,9 @@ export function testSave(): SaveData {
     s.weapons = keep(l.weapons, isWeapon, 2);
     if (!s.weapons[0]) s.weapons = [s.weapons[1] ?? 'pulse', null];
     s.gear = keep(l.gear, isGear, 2);
-    s.items = keep(l.items, isItem, 3).map((id) => (id ? { id, count: ITEMS[id].cap } : null));
     s.weaponLevels = { ...l.weaponLevels };
     s.gearLevels = { ...l.gearLevels };
+    s.items = keep(l.items, isItem, 3).map((id) => (id ? { id, count: itemCap(s, id) } : null));
   } catch { /* storage blocked or bad data: the default loadout */ }
   return s;
 }
@@ -161,5 +162,5 @@ export const TEST_ICONS: Record<TestPanel, string> = { waves: 'iconSwords', ship
 // be used again: about as long as it lasts, or a few seconds for one-shot ones.
 export const ITEM_COOLDOWN: Record<ItemId, number> = {
   repair: 3000, fullrepair: 6000, shield: 7000, overdrive: 10000, nova: 6000, cluster: 2500, emp: 5000,
-  warp: 7000, decoy: 6000, booster: 3000, drone: 20000, rewind: 1000,
+  warp: 7000, decoy: 6000, drone: 20000, rewind: 1000,
 };
