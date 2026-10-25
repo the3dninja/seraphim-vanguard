@@ -104,6 +104,9 @@ export const swell = (from: number, to: number, waves: Wave[]) => waves.map((w, 
   return { ...w, count: w.pattern === 'vee' && n % 2 === 0 ? n + 1 : n }; // a vee keeps its point
 });
 
+// Flying a cleared level or side mission again pays this share of the credits.
+export const REPLAY_PAY = 0.5;
+
 export const isBuilt = (l: LevelDef | undefined): l is LevelDef => !!l && l.segments.length > 0;
 
 export const LEVELS: LevelDef[] = [

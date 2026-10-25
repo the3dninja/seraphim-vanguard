@@ -3,9 +3,9 @@ import type { SaveData } from '../save';
 
 // Side missions: extra levels beside levels 2, 4, 7, 8, 9, 12 and 14, for
 // more credits and loot before the boss and mini boss levels. Each opens when
-// the ship beats its level and stays open until the ship leaves that system
-// (levels 1 to 5 are system 1, 6 to 10 system 2, 11 to 15 system 3). They
-// bring back enemies already met, in new mixes, with their own hazards.
+// the ship beats its level and stays open for good, even from later systems,
+// for the same pay. They bring back enemies already met, in new mixes, with
+// their own hazards.
 export interface SideDef extends LevelDef {
   id: string;
   anchor: number; // the level it sits beside on the map
@@ -271,19 +271,13 @@ export const SIDES: SideDef[] = [
 
 export const sideById = (id: string) => SIDES.find((s) => s.id === id);
 
-// Systems of five levels: 1 to 5, 6 to 10, 11 to 15.
-export const systemOf = (level: number) => Math.ceil(level / 5);
-
-// Side missions in the ship's current system whose level it has beaten.
+// Side missions whose level the ship has beaten.
 export function openSides(state: SaveData) {
-  return SIDES.filter((s) => s.anchor < state.level && systemOf(s.anchor) === systemOf(state.level));
+  return SIDES.filter((s) => s.anchor < state.level);
 }
 
 // Of those, the ones not beaten yet.
 export const unbeatenSides = (state: SaveData) => openSides(state).filter((s) => !state.sides.includes(s.id));
 
-// Whether flying the next level closes this system's side missions.
 // The side missions that open once `level` is beaten.
 export const unlockedBy = (level: number) => SIDES.filter((s) => s.anchor === level).map((s) => s.id);
-
-export const closesSystem = (level: number) => level % 5 === 0;

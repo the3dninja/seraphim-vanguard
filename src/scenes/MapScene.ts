@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { LEVELS, commonEnemies, isBuilt, levelEnder, metEnemies, type LevelDef } from '../data/levels';
-import { SIDES, systemOf, type SideDef } from '../data/sides';
+import { SIDES, type SideDef } from '../data/sides';
 import type { SaveData } from '../save';
 import { button, starfield, text } from '../ui';
+
+// What Base flies next: a main level by number (a cleared one is a replay), or a side mission.
+export type Pick = { level: number; side?: undefined } | { side: string; level?: undefined };
 
 interface MapData {
   state: SaveData;
@@ -12,8 +15,12 @@ interface MapData {
   // buttons, then return to Base on its own after a few seconds.
   announce?: boolean;
   onLeave: () => void;
-  // Fly the next level (no side) or a side mission; Base takes it from there.
-  onLaunch?: (side?: string) => void;
+  // Fly the picked level or side mission; Base takes it from there.
+  onLaunch?: (pick: Pick) => void;
+  // What was picked last time, picked again on opening.
+  pick?: Pick | null;
+  // On leaving: the launchable stop left picked, or null for the next level.
+  onPick?: (pick: Pick | null) => void;
 }
 
 // A stop on the map: a main level by index, or a side mission.
@@ -52,6 +59,10 @@ export class MapScene extends Phaser.Scene {
   init(data: MapData) {
     this.d = data;
     this.selected = { i: Math.min(data.state.level, LEVELS.length) - 1 };
+    const pk = data.pick;
+    const pickSide = pk?.side ? SIDES.find((sd) => sd.id === pk.side) : undefined;
+    if (pickSide) this.selected = { i: pickSide.anchor - 1, side: pickSide };
+    else if (pk?.level) this.selected = { i: pk.level - 1 };
     // Newly unlocked side missions are picked first, so their briefing shows.
     const fresh = SIDES.find((sd) => data.unlocked?.includes(sd.id));
     if (fresh) this.selected = { i: fresh.anchor - 1, side: fresh };
@@ -109,8 +120,18 @@ export class MapScene extends Phaser.Scene {
   private sideState(sd: SideDef) {
     const st = this.d.state;
     if (st.sides.includes(sd.id)) return 'cleared';
-    if (sd.anchor >= st.level) return 'coming';
-    return systemOf(sd.anchor) === systemOf(st.level) ? 'open' : 'missed';
+    return sd.anchor >= st.level ? 'coming' : 'open';
+  }
+
+  // Whether a stop can be flown from here: the next level, an open side
+  // mission, or a cleared one of either, as a replay.
+  private launchable(st: Stop) {
+    if (st.side) return this.sideState(st.side) !== 'coming';
+    return (this.replaying(st) || (st.i === this.next && this.d.state.level <= LEVELS.length)) && isBuilt(LEVELS[st.i]);
+  }
+
+  private replaying(st: Stop) {
+    return st.side ? this.sideState(st.side) === 'cleared' : st.i < this.d.state.level - 1;
   }
 
   // The path and the level pictures, drawn once.
@@ -144,7 +165,7 @@ export class MapScene extends Phaser.Scene {
       g.fillStyle(state === 'open' ? 0x3cbcfc : state === 'cleared' ? 0xf8b800 : 0x3c3c3c);
       for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
       const img = this.add.image(x, y, sd.node);
-      if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
+      if (state === 'coming') img.setAlpha(0.35);
       // A treasure mission shows a pulsing pile of gold in the corner while it's open.
       if (sd.treasure && state === 'open') {
         const pile = this.add.image(x + 7, y + 5, 'goldPile').setDepth(5);
@@ -207,14 +228,13 @@ export class MapScene extends Phaser.Scene {
     let launch = false;
     if (side) {
       const st = this.sideState(side);
-      status = st === 'cleared' ? ['CLEARED', COLOR.green] : st === 'open' ? ['OPEN', COLOR.yellow] : st === 'missed' ? ['CLOSED', COLOR.gray] : ['COMING UP', COLOR.cyan];
+      status = st === 'cleared' ? ['CLEARED', COLOR.green] : st === 'open' ? ['OPEN', COLOR.yellow] : ['COMING UP', COLOR.cyan];
       ender = side.boss ? 'MINI BOSS' : '';
-      launch = st === 'open';
     } else {
       status = i < this.next ? ['CLEARED', COLOR.green] : i === this.next ? ['NEXT', COLOR.yellow] : ['COMING UP', COLOR.cyan];
       ender = levelEnder(i + 1);
-      launch = i === this.next && this.d.state.level <= LEVELS.length && isBuilt(l);
     }
+    launch = this.launchable(this.selected);
     add(text(this, W / 2, 30, ender ? `${status[0]} - ${ender}` : status[0], status[1]).setOrigin(0.5, 0));
 
     // Blinking brackets around the selected level.
@@ -240,20 +260,32 @@ export class MapScene extends Phaser.Scene {
     if (this.d.announce) return;
     if (launch && this.d.onLaunch) {
       add(button(this, 6, H - 22, 84, 18, 'BACK', () => this.leave(), COLOR.cyan));
-      add(button(this, 94, H - 22, W - 100, 18, 'LAUNCH', () => this.leave(side ? side.id : null), COLOR.yellow));
+      const label = this.replaying(this.selected) ? 'REPLAY' : 'LAUNCH';
+      add(button(this, 94, H - 22, W - 100, 18, label, () => this.leave(true), COLOR.yellow));
     } else add(button(this, 6, H - 22, W - 12, 18, 'BACK', () => this.leave(), COLOR.cyan));
   }
 
-  // `launch` is null for the next level, or a side mission's id.
-  private leave(launch?: string | null) {
+  // The selected stop as Base's pick, if it can be flown. The next level is
+  // Base's default, so it's null.
+  private pick(): Pick | null {
+    const st = this.selected;
+    if (!this.launchable(st)) return null;
+    if (st.side) return { side: st.side.id };
+    return this.replaying(st) ? { level: st.i + 1 } : null;
+  }
+
+  // With `launch`, fly the selected stop.
+  private leave(launch = false) {
     if (!this.scene.isActive()) return;
+    const pick = this.pick();
     this.input.keyboard!.enabled = false;
     this.cameras.main.fadeOut(250);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop();
       this.scene.resume('Base');
       this.d.onLeave();
-      if (launch !== undefined) this.d.onLaunch?.(launch ?? undefined);
+      if (!this.d.announce) this.d.onPick?.(pick);
+      if (launch) this.d.onLaunch?.(pick ?? { level: this.next + 1 });
     });
   }
 
