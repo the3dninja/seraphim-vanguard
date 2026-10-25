@@ -1,7 +1,7 @@
 import { BESTIARY } from '../data/bestiary';
 import { BOSS_STATS, type BossStatsKind } from '../data/bosses';
 import { DTYPES, ENEMY_STATS, type FoeKind, type Taken } from '../data/enemies';
-import { CRATES, GEAR, GEAR_TUNE, ITEMS, KITS, WEAPONS, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
+import { CRATES, GEAR, GEAR_TUNE, GEAR_UP_COST, ITEMS, KITS, WEAPONS, WEAPON_UP_COST, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
 
 // What the Tuner can change: one card per weapon, gear, item and foe, each
 // with its in-game name and description and its numbers. Numbers come in four
@@ -132,16 +132,19 @@ const ITEM_PROPS: Record<string, { label: string; step: number }> = {
 
 const price = (obj: { price: number }): FlatValue =>
   ({ key: 'price', label: 'PRICE (CREDITS)', step: 5, obj: obj as unknown as Record<string, number>, prop: 'price' });
+// Base vendor upgrade costs, level 2 to 5, under the price.
+const upCosts = (costs: number[]): FlatValue[] => costs.map((_, i) =>
+  ({ key: `cost${i + 2}`, label: `UPGRADE COST TO LV ${i + 2} (CREDITS)`, step: 25, obj: costs as unknown as Record<number, number>, prop: i }));
 const words = (k: string) => k.replace(/([A-Z])/g, ' $1').toUpperCase();
 const TAKEN_LABEL = 'DAMAGE TAKEN % BY TYPE (100 NORMAL, 200 DOUBLE, 50 HALF, 0 IMMUNE)';
 
 const weapons: TuneEntry[] = (Object.keys(WEAPONS) as WeaponId[]).map((id) => ({
-  cat: 'weapons', id, name: WEAPONS[id].name, desc: WEAPONS[id].desc, image: { key: WEAPONS[id].icon }, flat: [price(WEAPONS[id])], taken: [],
+  cat: 'weapons', id, name: WEAPONS[id].name, desc: WEAPONS[id].desc, image: { key: WEAPONS[id].icon }, flat: [price(WEAPONS[id]), ...upCosts(WEAPON_UP_COST[id])], taken: [],
   values: WEAPONS[id].tune ?? {}, levels: WEAPONS[id].levels ?? {},
 }));
 
 const gear: TuneEntry[] = (Object.keys(GEAR) as GearId[]).map((id) => ({
-  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id])], taken: [],
+  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id]), ...upCosts(GEAR_UP_COST[id])], taken: [],
   values: GEAR_TUNE[id].tune, levels: GEAR_TUNE[id].levels ?? {},
 }));
 

@@ -220,8 +220,16 @@ export function installTuner(game: Phaser.Game) {
     head.append(el('h2', '', e.name));
     c.append(head);
     if (e.desc) c.append(el('div', 'desc', e.desc));
-    // Single numbers first, each a row of its own.
+    // Weapons and gear: what they cost at each level, the buy price then each
+    // Base vendor upgrade, as one row.
+    const costs = e.flat.some((f) => f.key === 'cost2');
+    if (costs) {
+      const cells = ['price', 'cost2', 'cost3', 'cost4', 'cost5'].map((k, n) => ({ path: flatPath(e, k), label: `LV ${n + 1}` }));
+      c.append(grid('COST PER LEVEL (CREDITS: LV 1 BUYS IT, 2-5 UPGRADE IT)', cells, { min: 0, max: 100000, whole: true }));
+    }
+    // Single numbers next, each a row of its own.
     for (const f of e.flat) {
+      if (costs && (f.key === 'price' || f.key.startsWith('cost'))) continue;
       const stat = el('div', 'stat');
       stat.append(stepper(flatPath(e, f.key), f.label, f.step, () => {}));
       c.append(stat);
