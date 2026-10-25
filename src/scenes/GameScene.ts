@@ -4,7 +4,7 @@ import {
   CRATES, DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
-import { LEVELS, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
+import { LEVELS, REPLAY_PAY, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
 import { gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
@@ -186,6 +186,8 @@ export class GameScene extends Phaser.Scene {
   private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private segBossDone = false; // this segment's mini boss is beaten
   private side: string | null = null; // the side mission being flown, if any
+  private replay = false; // flying a cleared level or side mission again
+  private replayLevel: number | null = null; // the cleared main level being flown again
   private test: TestWaves | null = null; // combat test mode (see combatTest.ts)
   private sideHaz!: SideHazards;
 
@@ -280,10 +282,16 @@ export class GameScene extends Phaser.Scene {
   // `resume` comes from a Rewind Beacon: restart at a checkpoint instead of the level start.
   // `side` names a side mission to fly instead of the next level.
   // `test` flies combat test mode: no level script, waves come from its menu.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string; test?: boolean }) {
+  // `replay` names a cleared level to fly again, for less pay (see REPLAY_PAY).
+  // A cleared side mission is a replay too.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number }; side?: string; test?: boolean; replay?: number }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
     this.side = data.side ?? null;
+    // While replaying, the run flies as that level; the ship's real place comes back at the end.
+    this.replayLevel = data.replay ?? null;
+    if (this.replayLevel) this.state.level = this.replayLevel;
+    this.replay = !!this.replayLevel || (!!this.side && this.startState.sides.includes(this.side));
     this.test = data.test ? new TestWaves() : null;
     this.level = this.test ? TEST_LEVEL : (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
     this.checkpoint = data.resume ? { save: cloneSave(data.resume.save), segment: data.resume.segment } : { save: cloneSave(data.state), segment: 0 };
@@ -436,6 +444,7 @@ export class GameScene extends Phaser.Scene {
       text(this, W / 2, H / 2 - 26, this.level.name, COLOR.white),
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
+    if (this.replay) intro.push(text(this, W / 2, H / 2 + (this.rewound ? 6 : -6), 'REPLAY: HALF CREDITS', COLOR.yellow).setOrigin(0.5).setDepth(1000));
     this.tweens.add({ targets: intro, alpha: 0, delay: 2700, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
     const call = this.side ? undefined : RADIO[this.state.level];
@@ -2920,6 +2929,7 @@ export class GameScene extends Phaser.Scene {
   dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = COIN_FALL) {
     if (this.state.level >= 9) value = Math.round(value * (1 + (this.state.level - 8) * 0.06));
     if (this.boostSegment === this.segment) value = Math.round(value * ITEMS.booster.tune!.bonus);
+    if (this.replay) value = Math.max(1, Math.round(value * REPLAY_PAY));
     const key = value >= 25 ? 'ingot4' : value >= 10 ? 'ingot3' : value >= 5 ? 'ingot2' : 'ingot1';
     const c = this.coins.create(x, y, key) as Phaser.Physics.Arcade.Image;
     c.setData('v', value);
@@ -3076,7 +3086,7 @@ export class GameScene extends Phaser.Scene {
       });
       this.time.delayedCall(2600, () => {
         this.cameras.main.fadeOut(400);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment }, side: this.side ?? undefined }));
+        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart({ state: start, resume: { save, segment: this.checkpoint.segment }, side: this.side ?? undefined, replay: this.replayLevel ?? undefined }));
       });
       return;
     }
@@ -3534,7 +3544,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(true);
     this.enemyBullets.clear(true, true);
     this.clearTimedHazards(true);
-    const last = !this.side && this.state.level === LEVELS.length;
+    const last = !this.side && !this.replay && this.state.level === LEVELS.length;
     // Loose credits curve in toward the ship (see homeCoin) for a few seconds,
     // or until they're all picked up, before the rest are gathered in.
     if (skipLinger) { this.endLevel(last); return; }
@@ -3567,6 +3577,12 @@ export class GameScene extends Phaser.Scene {
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
       this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+      if (this.replay) {
+        // A replay doesn't move the ship on, or open anything new.
+        this.state.level = this.startState.level;
+        this.time.delayedCall(2800, () => this.leaveTo('Base', this.state));
+        return;
+      }
       const unlocked = unlockedBy(this.state.level);
       this.state.level++;
       this.time.delayedCall(2800, () => this.leaveTo('Base', this.state, unlocked.length > 0, unlocked));

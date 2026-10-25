@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { LEVELS, isBuilt } from '../data/levels';
 import { unreadFoes } from '../data/bestiary';
-import { closesSystem, sideById, unbeatenSides } from '../data/sides';
+import { sideById, unbeatenSides } from '../data/sides';
+import type { Pick } from './MapScene';
 import { cloneSave, writeSave, type SaveData } from '../save';
 import { button, starfield, text, toast } from '../ui';
 
@@ -19,6 +20,11 @@ export class BaseScene extends Phaser.Scene {
   // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
+  // A side mission or cleared level picked on the map, flown instead of the next level.
+  private pick: Pick | null = null;
+  private nextLabel!: Phaser.GameObjects.Text;
+  private nextName!: Phaser.GameObjects.Text;
+  private nextNote!: Phaser.GameObjects.Text;
   private foesIcon!: Phaser.GameObjects.Image;
   private foesBlink: Phaser.Tweens.Tween | null = null;
 
@@ -28,6 +34,7 @@ export class BaseScene extends Phaser.Scene {
     this.state = cloneSave(data.state);
     this.toMap = !!data.toMap;
     this.unlocked = data.unlocked ?? [];
+    this.pick = null;
     // Playtest helpers: ?rich tops credits up to 5000, ?level=N jumps to level N.
     const params = new URLSearchParams(location.search);
     if (params.has('rich')) this.state.credits = Math.max(this.state.credits, 5000);
@@ -44,10 +51,10 @@ export class BaseScene extends Phaser.Scene {
     this.coin = this.add.image(0, 18, 'coinIcon').setOrigin(0, 0.5);
     this.creditsText = text(this, W - 8, 18, '', COLOR.yellow).setOrigin(1, 0.5);
     this.refresh();
-    const next = LEVELS[this.state.level - 1];
-    text(this, W / 2, 40, `NEXT: LEVEL ${this.state.level}`, COLOR.gray).setOrigin(0.5);
-    const done = this.state.level > LEVELS.length;
-    text(this, W / 2, 52, isBuilt(next) ? next.name : done ? 'CAMPAIGN COMPLETE' : 'NOT BUILT YET', COLOR.cyan).setOrigin(0.5);
+    this.nextLabel = text(this, W / 2, 40, '', COLOR.gray).setOrigin(0.5);
+    this.nextName = text(this, W / 2, 52, '', COLOR.cyan).setOrigin(0.5);
+    this.nextNote = text(this, W / 2, 63, '', COLOR.yellow).setOrigin(0.5);
+    this.showNext();
 
     // Your ship in the middle, on a glowing pad: tap it to outfit it.
     const cx = W / 2, cy = 136;
@@ -104,47 +111,58 @@ export class BaseScene extends Phaser.Scene {
     const jump = new URLSearchParams(location.search).get('side');
     if (jump && sideById(jump) && !sideJumpDone) {
       sideJumpDone = true;
-      this.time.delayedCall(400, () => this.fly(jump));
+      this.time.delayedCall(400, () => this.fly({ side: jump }));
     }
+  }
+
+  // What Launch flies: the next level, or whatever was left picked on the map.
+  private showNext() {
+    const p = this.pick;
+    const side = p?.side ? sideById(p.side) : undefined;
+    const replay = !!p && (side ? this.state.sides.includes(side.id) : p.level! < this.state.level);
+    if (side) {
+      this.nextLabel.setText(replay ? 'REPLAY: SIDE MISSION' : 'NEXT: SIDE MISSION');
+      this.nextName.setText(side.name);
+    } else {
+      const n = p?.level ?? this.state.level;
+      const l = LEVELS[n - 1];
+      const done = n > LEVELS.length;
+      this.nextLabel.setText(`${replay ? 'REPLAY' : 'NEXT'}: LEVEL ${n}`);
+      this.nextName.setText(isBuilt(l) ? l.name : done ? 'CAMPAIGN COMPLETE' : 'NOT BUILT YET');
+    }
+    this.nextLabel.setColor(side ? COLOR.cyan : COLOR.gray);
+    this.nextName.setColor(side ? COLOR.white : COLOR.cyan);
+    this.nextNote.setText(replay ? 'HALF CREDITS' : '');
   }
 
   private openMap(unlocked: string[] = [], announce = false) {
     this.scene.pause();
-    this.scene.launch('Map', { state: this.state, unlocked, announce, onLeave: () => {}, onLaunch: (side?: string) => this.launch(side) });
+    this.scene.launch('Map', {
+      state: this.state, unlocked, announce, pick: this.pick,
+      onLeave: () => {},
+      onPick: (pick: Pick | null) => { this.pick = pick; this.showNext(); },
+      onLaunch: (pick: Pick) => this.fly(pick),
+    });
   }
 
-  // The next level, or a side mission. Flying the last level of a system
-  // with side missions still open asks first, since they close behind you.
-  private launch(side?: string) {
-    if (side) { this.fly(side); return; }
+  // The next level, or what was picked on the map.
+  private launch() {
+    if (this.pick) { this.fly(this.pick); return; }
     const next = LEVELS[this.state.level - 1];
     if (!isBuilt(next)) {
       const done = this.state.level > LEVELS.length;
       toast(this, done ? 'THE HOLLOW IS GONE.\nTHE GALAXY IS SAFE.' : `LEVEL ${this.state.level}\nIS NOT BUILT YET`, 260);
       return;
     }
-    const left = unbeatenSides(this.state).length;
-    if (closesSystem(this.state.level) && left) this.confirm(left);
-    else this.fly();
+    this.fly();
   }
 
-  private fly(side?: string) {
+  // A cleared level is flown as a replay.
+  private fly(pick?: Pick) {
+    const side = pick?.side;
+    const replay = pick?.level && pick.level < this.state.level ? pick.level : undefined;
     this.cameras.main.fadeOut(300);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Game', { state: this.state, side }));
-  }
-
-  // "Side missions are still open. Fly on anyway?"
-  private confirm(left: number) {
-    const box = this.add.container(0, 0).setDepth(100);
-    box.add(this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0).setInteractive());
-    box.add(this.add.rectangle(10, 92, W - 20, 132, 0xfcfcfc).setOrigin(0));
-    box.add(this.add.rectangle(11, 93, W - 22, 130, 0x000000).setOrigin(0));
-    box.add(text(this, W / 2, 104, 'FLY ON?', COLOR.yellow).setOrigin(0.5, 0));
-    const msg = left > 1 ? `${left} SIDE MISSIONS ARE STILL OPEN.` : 'A SIDE MISSION IS STILL OPEN.';
-    box.add(text(this, W / 2, 122, `${msg} THEY CLOSE ONCE YOU LEAVE THIS SYSTEM.`, COLOR.white)
-      .setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(W - 36));
-    box.add(button(this, 20, 190, 64, 22, 'STAY', () => box.destroy(), COLOR.cyan));
-    box.add(button(this, 92, 190, 68, 22, 'FLY ON', () => { box.destroy(); this.fly(); }, COLOR.yellow));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Game', { state: this.state, side, replay }));
   }
 
   // A 34px picture button with its name underneath. Returns the picture.
