@@ -1,7 +1,7 @@
 import { BESTIARY } from '../data/bestiary';
 import { BOSS_STATS, type BossStatsKind } from '../data/bosses';
 import { DTYPES, ENEMY_STATS, type FoeKind, type Taken } from '../data/enemies';
-import { CRATES, GEAR, GEAR_TUNE, GEAR_UP_COST, ITEMS, KITS, WEAPONS, WEAPON_UP_COST, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
+import { CRATES, GEAR, RADAR, GEAR_TUNE, GEAR_UP_COST, ITEMS, KITS, WEAPONS, WEAPON_UP_COST, type GearId, type ItemId, type KitId, type Tuned, type WeaponId } from '../data/items';
 
 // What the Tuner can change: one card per weapon, gear, item and foe, each
 // with its in-game name and description and its numbers. Numbers come in four
@@ -98,6 +98,8 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'redirect.pull': { label: 'MAGNET STRENGTH (PX/S EACH SECOND)', step: 10 },
   mult: { label: 'BEAM DAMAGE PER SHOT SOAKED UP (EXACT, IGNORES WEAKNESS AND RESISTANCE)', step: 0.05 },
   'redirect.radius': { label: 'SHOT-WIPING BLAST RADIUS (PX)', step: 1 },
+  'radar.lineDist': { label: 'LINE SHOWS ONCE A SHOT IS THIS CLOSE (PX)', step: 5 },
+  'radar.near': { label: 'NEAR MISS: PX AROUND THE HITBOX', step: 1 },
   'rear.damage': { label: 'BACKWARD SHOT DAMAGE (0.5 = 50% OF THE WEAPON\'S)', step: 0.025 },
 };
 
@@ -113,6 +115,7 @@ export const LEVEL_PROPS: Record<string, { label: string; min: number; max: numb
   targets: { label: 'SHOTS DOWN THIS MANY AT ONCE', min: 1, max: 5, whole: true },
   'incendiary.burnTime': { label: 'BURN MS (0 = NO BURN, JUST THE SCORCH)', min: 0, max: 20000 },
   every: { label: 'A CHARGED SHOT EVERY N VOLLEYS', min: 1, max: 20, whole: true },
+  'radar.color': { label: 'COLORED LINES (1 = TEAL NEAR MISS, RED HIT)', min: 0, max: 1, whole: true },
 };
 export const propOf = (e: TuneEntry, key: string) => PROPS[`${e.id}.${key}`] ?? PROPS[key] ?? { label: key.toUpperCase(), step: 1 };
 export const levelPropOf = (e: TuneEntry, key: string) =>
@@ -148,8 +151,19 @@ const weapons: TuneEntry[] = (Object.keys(WEAPONS) as WeaponId[]).map((id) => ({
   values: WEAPONS[id].tune ?? {}, levels: WEAPONS[id].levels ?? {},
 }));
 
+// Shot Radar's rewards, the same at every level.
+const RADAR_LABELS: Record<keyof typeof RADAR, [string, number]> = {
+  speedPer: ['SPEED PER NEAR MISS (0.01 = +1%)', 0.005], speedCap: ['MOST EXTRA SPEED (0.5 = +50%)', 0.05],
+  creditsEvery: ['CREDITS EVERY N NEAR MISSES', 1], credits: ['CREDITS THE FIRST TIME', 1], creditsStep: ['CREDITS MORE EACH TIME AFTER', 1],
+  burstEvery: ['360 BURST EVERY N', 1], burstStep: ['BURST A LEVEL STRONGER EVERY N AFTER THE FIRST', 1],
+  overdriveEvery: ['OVERDRIVE EVERY N', 1], invulnEvery: ['INVULNERABLE EVERY N', 1], invulnMs: ['INVULNERABLE MS', 250],
+  holeEvery: ['BLACK HOLE EVERY N', 1], holeMs: ['BLACK HOLE MS', 250], holeReach: ['BLACK HOLE REACH (PX)', 10], holePull: ['BLACK HOLE PULL ON ENEMIES (PX/S, SHOTS 6X)', 5],
+};
+const radarFlats: FlatValue[] = (Object.keys(RADAR) as (keyof typeof RADAR)[]).map((k) =>
+  ({ key: k, label: RADAR_LABELS[k][0], step: RADAR_LABELS[k][1], obj: RADAR, prop: k }));
+
 const gear: TuneEntry[] = (Object.keys(GEAR) as GearId[]).map((id) => ({
-  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id]), ...upCosts(GEAR_UP_COST[id])], taken: [],
+  cat: 'gear', id, name: GEAR[id].name, desc: `${GEAR[id].desc} EACH LEVEL: ${GEAR[id].levelUp}`, image: { key: GEAR[id].icon }, flat: [price(GEAR[id]), ...upCosts(GEAR_UP_COST[id]), ...(id === 'radar' ? radarFlats : [])], taken: [],
   values: GEAR_TUNE[id].tune, levels: GEAR_TUNE[id].levels ?? {},
 }));
 

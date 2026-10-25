@@ -203,6 +203,7 @@ export const SPRITES3: Record<string, string[]> = {
   icon_scanner: ['.TTTTT..', 'T.....T.', 'T..T..T.', 'T.TTT.T.', 'T..T..T.', 'T.....T.', '.TTTTT..', '........'],
   icon_nullifier: ['..PPPP..', '.P....P.', 'P....W.P', 'P...W..P', 'P..W...P', 'P.W....P', '.P....P.', '..PPPP..'],
   icon_redirect: ['...F....', '..FWF...', '.F.W.F..', '...W....', 'F..W..F.', '.F.W.F..', '..FFF...', 'F.....F.'],
+  icon_radar: ['..TTTT..', '.T....T.', 'T..TT..T', 'T.T..WT.', 'T.T.T..T', 'T..TT..T', '.T....T.', '..TTTT..'],
   icon_cargo: ['.ffffff.', 'fbbbbbbf', 'fbbbTbbf', 'fbbTTTbf', 'fbbbTbbf', 'fbbbbbbf', 'feeeeeef', '.ffffff.'],
 
   // Item icons.

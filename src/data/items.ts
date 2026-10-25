@@ -6,7 +6,7 @@ export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' |
   | 'decoy' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
   | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear'
-  | 'booster' | 'nullifier' | 'cargo' | 'redirect';
+  | 'booster' | 'nullifier' | 'cargo' | 'redirect' | 'radar';
 export type KitId = 'wkit' | 'gkit';
 
 // Every weapon deals one damage type. Enemies take double damage from types
@@ -331,6 +331,11 @@ export const GEAR: Record<GearId, GearDef> = {
     name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
     desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 2%.', levelUp: '1 MORE PER SLOT.',
   },
+  radar: {
+    name: 'SHOT RADAR', price: 400, score: 6, icon: 'icon_radar', from: 6, where: 'base',
+    desc: 'FAINT LINES SHOW WHERE ENEMY SHOTS ARE HEADED. NEAR MISSES ADD UP TO REWARDS: SPEED, CREDITS, 360 BURSTS, OVERDRIVE, INVULNERABILITY AND A BLACK HOLE. A HIT RESETS THE COUNT.',
+    levelUp: 'LINES SHOW SOONER. FROM LV 3 THEY TURN TEAL FOR A NEAR MISS AND RED FOR A HIT.',
+  },
 };
 
 // What each upgrade costs at the Base vendor, for levels 2 to 5, weapon by
@@ -380,6 +385,20 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // mult: beam damage per thing soaked up (ignores weakness and resistance);
   // radius: the blast around the ship that wipes enemy shots as it fires (px).
   redirect: { tune: { collect: [2000, 250], reach: [40, 5], pull: [300, 50], mult: [0.5, 0.1], radius: [20, 5] } },
+  // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
+  // hitbox that counts as a near miss; color 1: lines turn teal (near miss) or red (hit).
+  radar: { tune: { lineDist: [100, 15], near: [5, 0] }, levels: { color: [0, 0, 1, 1, 1] } },
+};
+
+// Shot Radar's rewards, every so many near misses in a row (a hit starts the count again).
+// Speed: speedPer for each one, up to speedCap. Credits: `credits` every creditsEvery, creditsStep
+// more each time. A 360 burst from the ship every burstEvery, a level stronger every burstStep after
+// the first; an Overdrive Cell's effect every overdriveEvery (doubling up with one used);
+// invulnMs untouchable every invulnEvery; a black hole mid-screen for holeMs every holeEvery.
+export const RADAR = {
+  speedPer: 0.01, speedCap: 0.5, creditsEvery: 5, credits: 10, creditsStep: 1,
+  burstEvery: 15, burstStep: 30, overdriveEvery: 30, invulnEvery: 60, invulnMs: 7000,
+  holeEvery: 120, holeMs: 7000, holeReach: 320, holePull: 90,
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
@@ -423,6 +442,7 @@ export const gearStats = {
   nullifier: gs<'damage'>('nullifier'),
   cargo: gs<'extra' | 'slow'>('cargo'),
   redirect: gs<'collect' | 'reach' | 'pull' | 'mult' | 'radius'>('redirect'),
+  radar: gs<'lineDist' | 'near' | 'color'>('radar'),
 };
 
 // A weapon's shot look at a level.
