@@ -166,7 +166,7 @@ export class Dreadnought {
     for (const side of [-1, 1]) {
       const a = Math.PI / 2 + side * off;
       g.drawBeam(ox, oy, a, 4, 0xd82800);
-      if (g.beamHits(ox, oy, a, BEAM_REACH)) g.hurt(2);
+      if (g.laserHits(ox, oy, a, BEAM_REACH)) g.hurt(2);
     }
     // Spreads keep coming while it's angry, so the lane isn't a rest.
     if (this.angry) {

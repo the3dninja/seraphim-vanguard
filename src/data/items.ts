@@ -6,7 +6,7 @@ export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' |
   | 'decoy' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
   | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear'
-  | 'booster' | 'nullifier' | 'cargo';
+  | 'booster' | 'nullifier' | 'cargo' | 'redirect';
 export type KitId = 'wkit' | 'gkit';
 
 // Every weapon deals one damage type. Enemies take double damage from types
@@ -323,6 +323,10 @@ export const GEAR: Record<GearId, GearDef> = {
     name: 'NULLIFIER', price: 450, score: 6, icon: 'icon_nullifier', from: 9, where: 'base',
     desc: 'AUGMENT. YOUR WEAPONS IGNORE WEAKNESS AND RESISTANCE, AND HIT 5% HARDER.', levelUp: '+5% DAMAGE.',
   },
+  redirect: {
+    name: 'ENERGY REDIRECT', price: 500, score: 7, icon: 'icon_redirect', from: 9, where: 'level', active: true,
+    desc: 'SUPPLY CRATES: SOAKS UP ENEMY SHOTS AND LASERS FOR A MOMENT, PULLING NEARBY SHOTS IN, THEN FIRES THEM BACK AS A BEAM AHEAD AND WIPES SHOTS AROUND YOU.', levelUp: 'LONGER, STRONGER PULL, A HARDER BEAM, A WIDER WIPE.',
+  },
   cargo: {
     name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
     desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 2%.', levelUp: '1 MORE PER SLOT.',
@@ -371,6 +375,11 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   nullifier: { tune: { damage: [1.05, 0.05] } }, // every weapon hit multiplied by this, whatever the target takes
   // extra: items each slot holds beyond the item's own max; slow: speed lost per item carried beyond it.
   cargo: { tune: { extra: [1, 1], slow: [0.02, 0] } },
+  // collect: ms it soaks up shots and lasers (each laser counts once); reach and pull: the
+  // radius (px) it drags travelling shots in from, and how hard (px/s each second);
+  // mult: beam damage per thing soaked up (ignores weakness and resistance);
+  // radius: the blast around the ship that wipes enemy shots as it fires (px).
+  redirect: { tune: { collect: [2000, 250], reach: [40, 5], pull: [300, 50], mult: [0.5, 0.1], radius: [20, 5] } },
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
@@ -379,7 +388,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
 // A level can switch them off for a segment (LevelDef.noCrates).
 export const CRATES = { every: 20000, vary: 5000, speed: 21 };
 // The gear that comes in crates (the active ones), for the crate art.
-export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
+export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst', 'redirect'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
 const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every', 'bursts', 'bombs', 'extra']);
@@ -413,6 +422,7 @@ export const gearStats = {
   booster: gs<'bonus'>('booster'),
   nullifier: gs<'damage'>('nullifier'),
   cargo: gs<'extra' | 'slow'>('cargo'),
+  redirect: gs<'collect' | 'reach' | 'pull' | 'mult' | 'radius'>('redirect'),
 };
 
 // A weapon's shot look at a level.

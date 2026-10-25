@@ -249,6 +249,12 @@ export class GameScene extends Phaser.Scene {
   private dashing = false; // a Dodge Thrusters dash is moving the ship
   private burnUntil = 0; // Afterburner
   private rollUntil = 0; // Barrel Roll
+  // Energy Redirect: when it stops soaking up shots, what it has soaked up,
+  // and the lasers already counted (by where they come from).
+  private redirectUntil = 0;
+  private redirectCount = 0;
+  private redirectLasers = new Set<string>();
+  private redirectText: Phaser.GameObjects.Text | null = null;
   private antiTimer = 0; // Anti-Missile
   private volleys: number[] = []; // per weapon slot, for the Overcharger
   private lastMove = { x: 0, y: -1 }; // direction the ship last moved, for dashes and blinks
@@ -339,6 +345,8 @@ export class GameScene extends Phaser.Scene {
     this.dashing = false;
     this.burnUntil = 0;
     this.rollUntil = 0;
+    this.redirectUntil = 0;
+    this.redirectText = null;
     this.antiTimer = 0;
     this.volleys = [];
     this.lastMove = { x: 0, y: -1 };
@@ -1127,6 +1135,11 @@ export class GameScene extends Phaser.Scene {
         this.rollUntil = now + st.spin;
         break;
       }
+      case 'redirect': {
+        if (this.redirectUntil === 0) { this.redirectCount = 0; this.redirectLasers.clear(); }
+        this.redirectUntil = now + gearStats.redirect(lv).collect;
+        break;
+      }
       case 'burst': {
         // A pod left where the ship is, completely still: it fires a ring at once,
         // more rings a beat apart, and the last as it pops, with a blast and
@@ -1763,7 +1776,7 @@ export class GameScene extends Phaser.Scene {
     if (d.beam > 0) {
       d.beam -= ms;
       this.drawBeam(nose.x, nose.y, d.aim, 3, 0xd800cc);
-      if (firing && this.beamHits(nose.x, nose.y, d.aim, 2.5)) this.hurt();
+      if (firing && this.laserHits(nose.x, nose.y, d.aim, 2.5)) this.hurt();
       if (d.beam <= 0) { d.step++; d.fireIn = 1600; }
     } else if (d.charge > 0) {
       d.charge -= ms;
@@ -1825,6 +1838,16 @@ export class GameScene extends Phaser.Scene {
       g.lineStyle(1, 0xfcfcfc, alpha);
       g.lineBetween(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
     }
+  }
+
+  // Whether an enemy laser from (x, y) hits the ship. Energy Redirect soaks it
+  // up instead, counting each laser (by where it comes from) once.
+  laserHits(x: number, y: number, angle: number, reach: number, len = Infinity) {
+    if (!this.beamHits(x, y, angle, reach, len)) return false;
+    if (this.time.now >= this.redirectUntil) return true;
+    const key = `${Math.round(x / 4)},${Math.round(y / 4)}`;
+    if (!this.redirectLasers.has(key)) { this.redirectLasers.add(key); this.soak(this.player.x, this.player.y - 4); }
+    return false;
   }
 
   // Whether the ship is within `reach` px of a beam's center line.
@@ -2193,6 +2216,62 @@ export class GameScene extends Phaser.Scene {
       const n = gearStats.satellite(gearLevel(s, 'satellite')).drones;
       for (let i = 0; i < n; i++) this.sats.push(this.add.image(0, 0, 'sat').setDepth(10));
     }
+  }
+
+  // Energy Redirect: while it soaks, travelling enemy shots near the ship bend
+  // in toward it, and a pink ring and a count show around the ship. Then it lets
+  // go: a beam straight up hurting everything in its path by the count times
+  // `mult`, exactly, and a blast that wipes enemy shots around the ship.
+  private updateRedirect(dt: number) {
+    if (!this.redirectUntil) return;
+    const st = gearStats.redirect(gearLevel(this.state, 'redirect'));
+    const p = this.player;
+    if (this.time.now < this.redirectUntil && this.phase === 'action') {
+      for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
+        if (!b.body) continue;
+        const d = Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y);
+        if (d > st.reach || d < 1) continue;
+        b.body.velocity.x += ((p.x - b.x) / d) * st.pull * dt;
+        b.body.velocity.y += ((p.y - b.y) / d) * st.pull * dt;
+      }
+      const k = (this.time.now % 400) / 400;
+      this.beams.lineStyle(1, 0xf878f8, 0.6 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
+      this.beams.lineStyle(1, 0xf878f8, 0.15).strokeCircle(p.x, p.y, st.reach);
+      this.redirectText ??= text(this, 0, 0, '', '#f878f8').setOrigin(0.5, 1).setDepth(20);
+      this.redirectText.setText(`${this.redirectCount}`).setPosition(p.x, p.y - 10);
+      return;
+    }
+    this.redirectUntil = 0;
+    this.redirectText?.destroy();
+    this.redirectText = null;
+    if (this.phase !== 'action') return;
+    // The wipe.
+    for (const b of this.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
+      if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.sparks.explode(2, b.x, b.y); b.destroy(); }
+    }
+    const ring = this.add.circle(p.x, p.y, st.radius).setStrokeStyle(2, 0xf878f8).setDepth(12).setScale(0.2);
+    this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    // The beam.
+    const dmg = this.redirectCount * st.mult;
+    if (dmg <= 0) return;
+    const x = p.x, top = p.y - 6;
+    const beam = this.add.graphics().setDepth(12);
+    beam.fillStyle(0xf878f8, 0.7).fillRect(x - 4, 0, 8, top);
+    beam.fillStyle(0xfcfcfc, 1).fillRect(x - 1, 0, 3, top);
+    this.tweens.add({ targets: beam, alpha: 0, duration: 350, onComplete: () => beam.destroy() });
+    for (const e of this.enemies.getChildren().slice() as Phaser.Physics.Arcade.Sprite[]) {
+      if (!e.active || e.y > top || e.y < -10 || Math.abs(e.x - x) > 4 + e.displayWidth / 2) continue;
+      this.damageEnemy(e, dmg, null);
+    }
+    // Bosses take it from a fast shot up the same line (see shotDamage); other enemies let it pass.
+    if (this.boss) this.setFx(this.shot(x, top, 'bullet', 0, 1800, dmg, 'kinetic'), 'redirect').setVisible(false);
+  }
+
+  // A shot or laser soaked up by Energy Redirect.
+  private soak(x: number, y: number) {
+    this.redirectCount++;
+    this.impact.setParticleTint([0xfcfcfc, 0xf878f8, 0xf878f8]);
+    this.impact.explode(3, x, y);
   }
 
   private updateGear(dt: number) {
@@ -2664,6 +2743,7 @@ export class GameScene extends Phaser.Scene {
   shotDamage(b: Phaser.GameObjects.Image, taken: Taken) {
     const info = this.shotInfo.get(b);
     const fx = info?.fx;
+    if (fx === 'redirect') return info!.dmg; // exactly what Energy Redirect soaked up
     if (fx !== 'tick') {
       if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
       this.hitFx(b);
@@ -2680,7 +2760,7 @@ export class GameScene extends Phaser.Scene {
     const d = e.getData('e') as EnemyData;
     if (d.cloaked) return; // shots pass through a cloaked Phantom
     const fx = b.getData('fx');
-    if (fx === 'tick' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; flak shrapnel past its first target
+    if (fx === 'tick' || fx === 'redirect' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; Energy Redirect's boss shot; flak shrapnel past its first target
     const lv = this.shotInfo.get(b)?.lv ?? 1;
     const dtype = (b.getData('dtype') as DType) ?? 'kinetic';
     let dmg = (b.getData('dmg') as number) ?? 1;
@@ -2992,6 +3072,7 @@ export class GameScene extends Phaser.Scene {
   // An enemy shot reaching the ship. A Barrel Roll sends it back as the ship's own.
   private shotHitShip(b: Phaser.Physics.Arcade.Image) {
     if (!b.active) return;
+    if (this.time.now < this.redirectUntil) { this.soak(b.x, b.y); b.destroy(); return; }
     // A level 5 Afterburner burns through enemy shots.
     if (this.time.now < this.burnUntil && gearLevel(this.state, 'afterburner') >= 5) {
       this.sparks.explode(3, b.x, b.y);
@@ -3726,6 +3807,7 @@ export class GameScene extends Phaser.Scene {
     this.sideHaz.update(edt);
     this.warps.update(edt);
     this.updateGear(dt);
+    this.updateRedirect(dt);
     this.updateCrates(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);

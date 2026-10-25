@@ -93,6 +93,11 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'incendiary.burn': { label: 'BURN DPS (0.4 = 40% OF HIT)', step: 0.05 },
   'shaped.splash': { label: 'EXTRA BLAST RADIUS (PX)', step: 1 },
   bonus: { label: 'BONUS VS WEAKNESSES (0.15 = +15%)', step: 0.01 },
+  'redirect.collect': { label: 'MS IT SOAKS UP SHOTS', step: 100 },
+  'redirect.reach': { label: 'MAGNET RADIUS: PULLS TRAVELLING SHOTS IN FROM THIS FAR (PX)', step: 2 },
+  'redirect.pull': { label: 'MAGNET STRENGTH (PX/S EACH SECOND)', step: 10 },
+  mult: { label: 'BEAM DAMAGE PER SHOT SOAKED UP (EXACT, IGNORES WEAKNESS AND RESISTANCE)', step: 0.05 },
+  'redirect.radius': { label: 'SHOT-WIPING BLAST RADIUS (PX)', step: 1 },
   'rear.damage': { label: 'BACKWARD SHOT DAMAGE (0.5 = 50% OF THE WEAPON\'S)', step: 0.025 },
 };
 

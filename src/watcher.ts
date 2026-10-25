@@ -193,7 +193,7 @@ export class Watcher {
       } else if (c.beam > 0) {
         c.beam -= ms;
         g.drawBeam(nose.x, nose.y, c.aim, 3, 0x0058f8);
-        if (live && g.beamHits(nose.x, nose.y, c.aim, 2.5)) g.hurt();
+        if (live && g.laserHits(nose.x, nose.y, c.aim, 2.5)) g.hurt();
       }
     }
     if (blinking) return;
