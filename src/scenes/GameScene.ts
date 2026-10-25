@@ -78,6 +78,14 @@ interface Zap { x1: number; y1: number; x2: number; y2: number; t: number; color
 // enemies, and the point ship lobs homing plasma that splashes.
 type AllyKind = 'vex' | 'ion' | 'plasma';
 interface Ally { img: Phaser.GameObjects.Image; ox: number; oy: number; fireIn: number; kind: AllyKind; burst: number }
+interface Glitter { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number; color: number } // a credit sparkle, ms since it began
+// Credit sparkles by bar: their colors, how many, how big, and how far they fly.
+const GLITTER: Record<string, { colors: number[]; n: number; size: number; speed: number }> = {
+  ingot1: { colors: [0xfca044, 0xc84c0c], n: 4, size: 2, speed: 22 },
+  ingot2: { colors: [0xe4e4e4, 0xbcbcbc], n: 5, size: 2, speed: 26 },
+  ingot3: { colors: [0xfce0a8, 0xf8b800], n: 6, size: 2, speed: 30 },
+  ingot4: { colors: [0xfce0a8, 0xf8b800], n: 10, size: 3, speed: 42 },
+};
 interface Pop { x: number; y: number; t: number; lv: number; color: number } // a hit's flash ring, ms since the hit
 // Incendiary Ammo's smouldering flame where a shot hit, riding on `on` if set (ox, oy from it, else where it is).
 interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; t: number; life: number; lv: number }
@@ -209,6 +217,7 @@ export class GameScene extends Phaser.Scene {
   private warpIn: number | null = null; // ms to the next repeating warp-in
   private homeUntil = 0; // credits dropped before this curve toward the ship (a boss's gold)
   private pops: Pop[] = [];
+  private glitter: Glitter[] = [];
   private flames: Flame[] = [];
   private latches: Latch[] = [];
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
@@ -286,6 +295,7 @@ export class GameScene extends Phaser.Scene {
     this.flares = [];
     this.fences = [];
     this.returners = [];
+    this.glitter = [];
     this.zaps = [];
     this.allies = [];
     this.riftOpen = 0;
@@ -2573,6 +2583,40 @@ export class GameScene extends Phaser.Scene {
     if (lv >= 2 && this.pops.length < 40) this.pops.push({ x: b.x, y: b.y, t: 0, lv, color });
   }
 
+  // Sparkles where a credit is picked up, in its metal, more and bigger for a pile.
+  private sparkle(x: number, y: number, key: string) {
+    const st = GLITTER[key] ?? GLITTER.ingot1;
+    for (let i = 0; i < st.n; i++) {
+      const a = (i / st.n) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.4, 0.4);
+      const sp = st.speed * Phaser.Math.FloatBetween(0.5, 1);
+      this.glitter.push({
+        x: x + Phaser.Math.Between(-2, 2), y: y + Phaser.Math.Between(-2, 2), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        t: -i * 25, life: Phaser.Math.Between(320, 480), size: st.size, color: st.colors[i % st.colors.length],
+      });
+    }
+  }
+
+  // Each sparkle is a little four-point star that swells, twinkles and shrinks away.
+  private drawGlitter(dt: number) {
+    const g = this.beams;
+    for (const s of this.glitter.slice()) {
+      s.t += dt * 1000;
+      if (s.t < 0) continue;
+      if (s.t >= s.life) { this.glitter.splice(this.glitter.indexOf(s), 1); continue; }
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vx *= 0.92;
+      s.vy *= 0.92;
+      const k = s.t / s.life;
+      const arm = Math.round(s.size * Math.sin(k * Math.PI));
+      if (Math.floor(s.t / 60) % 3 === 2) continue; // twinkle
+      const x = Math.round(s.x), y = Math.round(s.y);
+      g.fillStyle(s.color, 1).fillRect(x - arm, y, arm * 2 + 1, 1).fillRect(x, y - arm, 1, arm * 2 + 1);
+      if (s.size >= 3 && arm >= 2) g.fillStyle(0xfcfcfc, 1).fillRect(x - 1, y - 1, 3, 3);
+      else g.fillStyle(0xfcfcfc, 1).fillRect(x, y, 1, 1);
+    }
+  }
+
   private drawPops(dt: number) {
     const g = this.beams;
     for (const p of this.pops.slice()) {
@@ -2906,6 +2950,7 @@ export class GameScene extends Phaser.Scene {
   private collect(c: Phaser.Physics.Arcade.Image) {
     if (!c.active) return;
     this.state.credits += c.getData('v') as number;
+    this.sparkle(c.x, c.y, c.getData('key') as string);
     c.destroy();
     this.refreshHud();
     this.creditsText.setScale(1.3);
@@ -3642,6 +3687,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAllies(dt);
     this.drawZaps(dt);
     this.drawPops(dt);
+    this.drawGlitter(dt);
     this.drawFlames(dt);
     this.updateLatches(edt);
     this.drawRamGlow();
