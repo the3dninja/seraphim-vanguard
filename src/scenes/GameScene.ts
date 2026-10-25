@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  CRATES, DTYPE_COLOR, GEAR, ITEMS, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
+  CRATES, DTYPE_COLOR, GEAR, ITEMS, RADAR, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
 import { LEVELS, REPLAY_PAY, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
@@ -98,6 +98,7 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
+const RADAR_TEAL = '#00e8d8'; // Shot Radar's near-miss count and lines
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
 const COIN_FALL = 26; // px/s credits fall
@@ -231,7 +232,7 @@ export class GameScene extends Phaser.Scene {
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
   private ramGlow = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Image>(); // Afterburner target highlights
   bossPull = { x: 0, y: 0 }; // px/s a boss drags the ship (the Hollow Mind's black holes)
-  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number; damp: number; spread: number }[] = []; // Blink Drive's
+  private vortices: { x: number; y: number; t: number; life: number; pull: number; reach: number; damp: number; spread: number; hole?: boolean }[] = []; // Blink Drive's, and Shot Radar's black hole (hole: leaves the ship be, eats shots)
   private vortexPull = { x: 0, y: 0 }; // px/s they drag the ship
 
   // Gear
@@ -255,6 +256,10 @@ export class GameScene extends Phaser.Scene {
   private redirectCount = 0;
   private redirectLasers = new Set<string>();
   private redirectText: Phaser.GameObjects.Text | null = null;
+  private nearMisses = 0; // Shot Radar: near misses since the last hit
+  private nearText: Phaser.GameObjects.Text | null = null;
+  private radarGfx!: Phaser.GameObjects.Graphics; // its lines, under the shots
+  private radarOverdriveUntil = 0;
   private antiTimer = 0; // Anti-Missile
   private volleys: number[] = []; // per weapon slot, for the Overcharger
   private lastMove = { x: 0, y: -1 }; // direction the ship last moved, for dashes and blinks
@@ -347,6 +352,9 @@ export class GameScene extends Phaser.Scene {
     this.rollUntil = 0;
     this.redirectUntil = 0;
     this.redirectText = null;
+    this.nearMisses = 0;
+    this.nearText = null;
+    this.radarOverdriveUntil = 0;
     this.antiTimer = 0;
     this.volleys = [];
     this.lastMove = { x: 0, y: -1 };
@@ -405,6 +413,7 @@ export class GameScene extends Phaser.Scene {
     this.coins = this.physics.add.group();
     this.crates = this.physics.add.group();
     this.beams = this.add.graphics().setDepth(12);
+    this.radarGfx = this.add.graphics().setDepth(9.5);
     this.act3 = new Act3Hazards(this);
     this.barriers = new Barriers(this);
     this.sideHaz = new SideHazards(this);
@@ -645,9 +654,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Gear that changes the ship's speed: items carried beyond their caps slow it.
+  // Shot Radar's near misses speed it up.
   private speedK() {
     const extra = extraCargo(this.state);
-    return extra ? Math.max(0.2, 1 - extra * gearStats.cargo(gearLevel(this.state, 'cargo')).slow) : 1;
+    const k = extra ? Math.max(0.2, 1 - extra * gearStats.cargo(gearLevel(this.state, 'cargo')).slow) : 1;
+    return hasGear(this.state, 'radar') ? k * (1 + Math.min(RADAR.speedCap, this.nearMisses * RADAR.speedPer)) : k;
   }
 
   private onIce() {
@@ -664,6 +675,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
+    // Shot Radar's near misses, under the credits.
+    if (hasGear(this.state, 'radar')) this.nearText = text(this, W - 6, 14, '0', RADAR_TEAL).setOrigin(1, 0).setDepth(900);
 
     // Bottom left: one box per gear slot (active gear fills with gray until
     // its next supply crate), with the weapon readout above. Bottom right: one item
@@ -894,7 +907,7 @@ export class GameScene extends Phaser.Scene {
       // Grows in, then collapses at the end.
       const k = Math.min(1, v.t / 250) * Math.min(1, (v.life - v.t) / 300);
       // Swirling rings of dots in purples and blues, faster toward the core.
-      const ringGap = v.reach / 5;
+      const ringGap = (v.hole ? 60 : v.reach) / 5; // a black hole reaches past its rings
       for (let ring = 0; ring < 4; ring++) {
         const r = (ringGap * 0.6 + ring * ringGap) * k;
         const n = 8 + ring * 4;
@@ -905,13 +918,16 @@ export class GameScene extends Phaser.Scene {
             .fillRect(Math.round(v.x + Math.cos(a) * r), Math.round(v.y + Math.sin(a) * r * 0.85), ring < 2 ? 2 : 1, 1);
         }
       }
-      gfx.fillStyle(0x000000, 0.6).fillCircle(v.x, v.y, 5 * k); // see-through, over whatever it holds
-      gfx.lineStyle(1, 0xa4e4fc, 0.9).strokeCircle(v.x, v.y, 5 * k);
+      const core = v.hole ? 9 : 5;
+      gfx.fillStyle(0x000000, 0.6).fillCircle(v.x, v.y, core * k); // see-through, over whatever it holds
+      gfx.lineStyle(1, 0xa4e4fc, 0.9).strokeCircle(v.x, v.y, core * k);
       // How hard it drags at a distance, in px/s.
       const force = (d: number) => (d > v.reach || d < 1 ? 0 : v.pull * k * (1 - d / v.reach));
       const dp = Phaser.Math.Distance.Between(p.x, p.y, v.x, v.y);
-      this.vortexPull.x += ((v.x - p.x) / dp) * force(dp) || 0;
-      this.vortexPull.y += ((v.y - p.y) / dp) * force(dp) || 0;
+      if (!v.hole) {
+        this.vortexPull.x += ((v.x - p.x) / dp) * force(dp) || 0;
+        this.vortexPull.y += ((v.y - p.y) / dp) * force(dp) || 0;
+      }
       for (const e of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
         const d = Phaser.Math.Distance.Between(e.x, e.y, v.x, v.y);
         if (d <= v.reach) { caught.add(e); e.setData('spread', v.spread); }
@@ -941,6 +957,8 @@ export class GameScene extends Phaser.Scene {
           const d = Phaser.Math.Distance.Between(o.x, o.y, v.x, v.y);
           const f = force(d) * 6 * dt;
           if (!f) continue;
+          // A black hole swallows the shots it pulls in.
+          if (v.hole && group === this.enemyBullets && d < 5) { o.destroy(); continue; }
           if (group === this.enemyBullets && o.getData('vSpeed') == null) o.setData('vSpeed', o.body.velocity.length());
           o.body.velocity.x = (o.body.velocity.x + ((v.x - o.x) / d) * f) * slow;
           o.body.velocity.y = (o.body.velocity.y + ((v.y - o.y) / d) * f) * slow;
@@ -2274,6 +2292,114 @@ export class GameScene extends Phaser.Scene {
     this.impact.explode(3, x, y);
   }
 
+  // Shot Radar. A line ahead of each enemy shot flying straight, once it is
+  // close; a near miss is a shot that came within `near` px of the hitbox and
+  // went on by without hitting. They add up to rewards until a hit.
+  private updateRadar() {
+    const g = this.radarGfx;
+    g.clear();
+    if (!hasGear(this.state, 'radar') || this.phase !== 'action') return;
+    const st = gearStats.radar(gearLevel(this.state, 'radar'));
+    const p = this.player;
+    // The hitbox, and a shot's reach (its radius) beyond it.
+    const hb = p.body as Phaser.Physics.Arcade.Body;
+    const cx = hb.center.x, cy = hb.center.y, hw = hb.halfWidth, hh = hb.halfHeight;
+    const SHOT_R = 1.5;
+    const boxDist = (x: number, y: number) => Math.hypot(Math.max(0, Math.abs(x - cx) - hw), Math.max(0, Math.abs(y - cy) - hh));
+    for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (!b.active || !b.body) continue;
+      const bx = b.body.center.x, by = b.body.center.y;
+      const d = boxDist(bx, by);
+      // Near-miss bookkeeping: inside the zone it's pending; leaving it without a hit counts.
+      if (d <= SHOT_R) b.setData('nearHit', true);
+      else if (d <= SHOT_R + st.near) b.setData('nearIn', true);
+      else if (b.getData('nearIn') && !b.getData('nearHit') && !b.getData('nearDone')) {
+        b.setData('nearDone', true);
+        this.nearMiss();
+      }
+      // The line: only for a shot flying straight (the same heading as last frame, not in a vortex).
+      const v = b.body.velocity;
+      const speed = v.length();
+      const head = Math.atan2(v.y, v.x);
+      const last = b.getData('radarHead') as number | undefined;
+      b.setData('radarHead', head);
+      if (last === undefined || speed < 1 || b.getData('vSpeed') != null) continue;
+      if (Math.abs(Phaser.Math.Angle.Wrap(head - last)) > 0.002) continue;
+      if (Phaser.Math.Distance.Between(bx, by, cx, cy) > st.lineDist) continue;
+      const ux = v.x / speed, uy = v.y / speed;
+      let color = 0xfcfcfc, alpha = 0.15;
+      if (st.color) {
+        // Closest the shot comes to the hitbox along its path ahead.
+        const along = Math.max(0, (cx - bx) * ux + (cy - by) * uy);
+        let best = Infinity;
+        for (let t = Math.max(0, along - 12); t <= along + 12; t += 0.5) best = Math.min(best, boxDist(bx + ux * t, by + uy * t));
+        if (best <= SHOT_R) { color = 0xd82800; alpha = 0.25; }
+        else if (best <= SHOT_R + st.near) { color = 0x00e8d8; alpha = 0.25; }
+      }
+      const len = 400;
+      g.lineStyle(1, color, alpha).lineBetween(bx, by, bx + ux * len, by + uy * len);
+    }
+  }
+
+  private nearMiss() {
+    const n = ++this.nearMisses;
+    const now = this.time.now;
+    const p = this.player;
+    if (this.nearText) {
+      this.nearText.setText(`${n}`).setScale(1.3);
+      this.tweens.add({ targets: this.nearText, scale: 1, duration: 150 });
+    }
+    const say = (msg: string) => {
+      const t = text(this, p.x, p.y - 14, msg, RADAR_TEAL).setOrigin(0.5).setDepth(950);
+      this.tweens.add({ targets: t, y: t.y - 12, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+    };
+    if (n % RADAR.creditsEvery === 0) {
+      let v = RADAR.credits + (n / RADAR.creditsEvery - 1) * RADAR.creditsStep;
+      if (this.replay) v = Math.max(1, Math.round(v * REPLAY_PAY));
+      this.state.credits += v;
+      this.earned += v;
+      this.sparkle(p.x, p.y, 'ingot3');
+      this.refreshHud();
+      say(`+${v}`);
+    }
+    // A 360 burst from the ship itself (no pod), as strong as that gear's level.
+    if (n >= RADAR.burstEvery && n % RADAR.burstEvery === 0) {
+      const lv = Math.min(5, 1 + Math.floor((n - RADAR.burstEvery) / RADAR.burstStep));
+      this.radarBurst(lv);
+    }
+    if (n % RADAR.overdriveEvery === 0) { this.radarOverdriveUntil = now + ITEMS.overdrive.tune!.time; say('OVERDRIVE'); }
+    if (n % RADAR.invulnEvery === 0) { this.invulnUntil = Math.max(this.invulnUntil, now + RADAR.invulnMs); say('INVULNERABLE'); }
+    if (n % RADAR.holeEvery === 0) {
+      this.vortices.push({ x: W / 2, y: H / 2, t: 0, life: RADAR.holeMs, pull: RADAR.holePull, reach: RADAR.holeReach, damp: 1.5, spread: 16, hole: true });
+      say('BLACK HOLE');
+    }
+  }
+
+  private resetNearMisses() {
+    this.nearMisses = 0;
+    this.nearText?.setText('0');
+  }
+
+  // Shot Radar's 360 burst: the 360 Burst pod's rings at a level, fired from wherever the ship is.
+  private radarBurst(lv: number) {
+    const st = gearStats.burst(lv);
+    const p = this.player;
+    const ring = () => {
+      if (this.phase !== 'action') return;
+      for (let i = 0; i < st.shots; i++) this.shot(p.x, p.y, 'pellet', (i / st.shots) * 360, 220, st.damage, 'kinetic');
+    };
+    ring();
+    for (let k = 1; k < st.bursts; k++) this.time.delayedCall(k * st.gap, ring);
+    this.time.delayedCall((st.bursts - 1) * st.gap, () => {
+      if (this.phase !== 'action') return;
+      if (st.blastRadius > 0) this.splash(p.x, p.y, st.blastRadius, st.blastDamage, 'explosive', null);
+      const t = ITEMS.cluster.tune!;
+      for (let i = 0; i < st.bombs; i++) {
+        this.setFx(this.shot(p.x, p.y, 'bomblet', (i / st.bombs) * 360, 160, t.damage, 'explosive'), 'bomb').setData('splash', t.splash);
+      }
+    });
+  }
+
   private updateGear(dt: number) {
     const s = this.state;
     const now = this.time.now;
@@ -2476,7 +2602,9 @@ export class GameScene extends Phaser.Scene {
 
   private autoFire(dt: number) {
     const s = this.state;
-    const fast = this.time.now < this.overdriveUntil;
+    // An Overdrive Cell and Shot Radar's overdrive each multiply the fire rate, so together they stack.
+    const rate = ITEMS.overdrive.tune!.rate;
+    const fast = (this.time.now < this.overdriveUntil ? rate : 1) * (this.time.now < this.radarOverdriveUntil ? rate : 1);
     s.weapons.forEach((id, slot) => {
       if (!id) return;
       const def = WEAPONS[id];
@@ -2492,7 +2620,7 @@ export class GameScene extends Phaser.Scene {
         if (rear) this.beams.fillCircle(this.player.x, this.player.y + 8, 1 + k * 2);
       }
       if (this.fireTimers[slot] > 0) return;
-      this.fireTimers[slot] = fast ? stats.interval / ITEMS.overdrive.tune!.rate : stats.interval;
+      this.fireTimers[slot] = stats.interval / fast;
       // The Overcharger makes every few volleys a charged one.
       this.volleys[slot] = (this.volleys[slot] ?? 0) + 1;
       const charged = hasGear(s, 'overcharge') && this.volleys[slot] % gearStats.overcharge(gearLevel(s, 'overcharge')).every === 0;
@@ -3151,6 +3279,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.health = Math.max(0, this.health - amount);
     this.invulnUntil = now + 1200;
+    this.resetNearMisses();
     this.cameras.main.shake(120, 0.01);
     this.refreshHud();
     if (this.health <= 0) this.die();
@@ -3808,6 +3937,7 @@ export class GameScene extends Phaser.Scene {
     this.warps.update(edt);
     this.updateGear(dt);
     this.updateRedirect(dt);
+    this.updateRadar();
     this.updateCrates(dt);
     this.updateAllies(dt);
     this.drawZaps(dt);
