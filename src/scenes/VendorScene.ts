@@ -6,7 +6,7 @@ import {
 } from '../data/items';
 import {
   addConsumable, applyKit, emptyGearSlot, emptyWeaponSlot, equipFromStorage, equipGear, equipWeapon, gearLevel,
-  itemSlotFor, kitTargets, sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
+  itemCap, itemSlotFor, kitTargets, sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { ask, button, choose, text, toast } from '../ui';
@@ -108,10 +108,7 @@ export class VendorScene extends Phaser.Scene {
   private rollStock(): string[] {
     const s = this.d.state;
     const lv = s.level;
-    // The Credit Booster is rare early on: the Base vendor has it from level 4,
-    // and in-level vendors mostly pass it over before then.
-    const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare && (i !== 'booster' || this.d.mode !== 'base' || lv >= 4));
-    const skipBooster = (id: string) => id === 'booster' && Math.random() < Math.max(0, 0.85 - (lv - 1) * 0.15);
+    const common = (Object.keys(ITEMS) as ItemId[]).filter((i) => !ITEMS[i].rare);
     if (this.d.mode === 'base') {
       const weapons = (Object.keys(WEAPONS) as WeaponId[]).filter((w) => !this.owns(w) && lv >= WEAPONS[w].from);
       const gear = (Object.keys(GEAR) as GearId[]).filter((g) => !this.owns(g) && lv >= GEAR[g].from);
@@ -122,7 +119,7 @@ export class VendorScene extends Phaser.Scene {
     const consumables = Phaser.Math.RND.weightedPick([0, 1, 1, 2, 2]);
     for (let i = 0; i < consumables; i++) {
       const id = Math.random() < 0.5 ? 'repair' : Phaser.Utils.Array.GetRandom(common);
-      if (!out.includes(id) && !skipBooster(id)) out.push(id);
+      if (!out.includes(id)) out.push(id);
     }
     // Gear only shows up once gear slots can be bought (level 6 on).
     const gearOk = lv >= 6 || s.gear.length > 0;
@@ -134,7 +131,7 @@ export class VendorScene extends Phaser.Scene {
     out.push(...pickByStrength(pool, lv, Phaser.Math.Between(2, 3)));
     if (Math.random() < 0.12 + lv * 0.03) out.push(Math.random() < 0.55 ? 'wkit' : 'gkit');
     // Top up with common consumables so there are always at least four.
-    for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id) && !skipBooster(id)) out.push(id);
+    for (const id of Phaser.Utils.Array.Shuffle([...common])) if (out.length < 4 && !out.includes(id)) out.push(id);
     return out;
   }
 
@@ -369,7 +366,7 @@ export class VendorScene extends Phaser.Scene {
       box(x, iy);
       if (!it) return;
       add(this.add.image(x + 6, iy + 3, ITEMS[it.id].icon));
-      add(text(this, x + 14, iy, stackLabel(it)));
+      add(text(this, x + 14, iy, stackLabel(it, itemCap(s, it.id))));
       stowOnTap(x, iy, 40, ITEMS[it.id].name, () => unequipItem(s, i));
     });
   }
@@ -386,7 +383,7 @@ export class VendorScene extends Phaser.Scene {
     if (isGear(id)) return s.gear.length > 0;
     if (!isItem(id)) return false;
     const it = s.items[itemSlotFor(s, id) ?? 0];
-    return !(it && it.id === id && it.count >= ITEMS[id].cap);
+    return !(it && it.id === id && it.count >= itemCap(s, id));
   }
 
   // Gear with no gear slot to put it in asks first, since it can only be stowed.

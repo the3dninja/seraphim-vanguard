@@ -5,7 +5,7 @@ import {
 } from '../data/items';
 import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
 import { LEVELS, REPLAY_PAY, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
-import { gearLevel, hasGear, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
+import { extraCargo, gearLevel, hasGear, itemCap, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
@@ -265,7 +265,6 @@ export class GameScene extends Phaser.Scene {
   private flare: Phaser.GameObjects.Image | null = null; // Decoy Flare
   private flareUntil = 0;
   private lingering = false; // level cleared: a few seconds to pick up credits
-  private boostSegment = -1; // Credit Booster: the segment it boosts drops for
   private healUntil = 0; // Repair Drone
   private healAt = 0;
   private healDrone: Phaser.GameObjects.Image | null = null;
@@ -360,7 +359,6 @@ export class GameScene extends Phaser.Scene {
     this.warpUntil = 0;
     this.flare = null;
     this.flareUntil = 0;
-    this.boostSegment = -1;
     this.lingering = false;
     this.healUntil = 0;
     this.healAt = 0;
@@ -609,6 +607,9 @@ export class GameScene extends Phaser.Scene {
     if (dt <= 0 || this.dashing) return;
     const want = this.wantedStep(dt);
     if (this.time.now < this.snaredUntil) { want.x *= NET_SLOW; want.y *= NET_SLOW; }
+    const k = this.speedK();
+    want.x *= k;
+    want.y *= k;
     const wl = Math.hypot(want.x, want.y);
     if (wl > 0.01) this.lastMove = { x: want.x / wl, y: want.y / wl };
     let mx = want.x, my = want.y;
@@ -633,6 +634,12 @@ export class GameScene extends Phaser.Scene {
     if (nx !== this.player.x + mx) this.slide.x = 0;
     if (ny !== this.player.y + my) this.slide.y = 0;
     this.player.setPosition(nx, ny);
+  }
+
+  // Gear that changes the ship's speed: items carried beyond their caps slow it.
+  private speedK() {
+    const extra = extraCargo(this.state);
+    return extra ? Math.max(0.2, 1 - extra * gearStats.cargo(gearLevel(this.state, 'cargo')).slow) : 1;
   }
 
   private onIce() {
@@ -696,7 +703,7 @@ export class GameScene extends Phaser.Scene {
     this.state.items.forEach((item, i) => {
       const b = this.itemButtons[i];
       b.icon.setVisible(!!item);
-      b.count.setText(item && !this.test ? stackLabel(item) : '');
+      b.count.setText(item && !this.test ? stackLabel(item, itemCap(this.state, item.id)) : '');
       if (item) b.icon.setTexture(ITEMS[item.id].icon);
       b.box.setStrokeStyle(1, item ? 0xfcfcfc : 0x3c3c3c);
     });
@@ -783,10 +790,6 @@ export class GameScene extends Phaser.Scene {
         this.flare?.destroy();
         this.flare = this.add.image(this.player.x, this.player.y - 10, 'flare').setDepth(9.8);
         this.flareUntil = now + ITEMS.decoy.tune!.time;
-        break;
-      case 'booster':
-        this.boostSegment = this.segment;
-        toast(this, 'DOUBLE CREDITS!', H / 2 + 30, 900);
         break;
       case 'drone':
         this.healUntil = now + ITEMS.drone.tune!.time;
@@ -2588,8 +2591,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Damage after weaknesses and resistances, Shaped Charges and the Target Scanner.
+  // The Nullifier sets all of that aside for its own flat boost.
   typedDamage(dmg: number, dtype: DType | null, taken: Taken) {
     if (!dtype) return dmg;
+    if (hasGear(this.state, 'nullifier')) return dmg * gearStats.nullifier(gearLevel(this.state, 'nullifier')).damage;
     let m = typeMultiplier(dtype, taken);
     if (m < 1 && dtype === 'explosive' && hasGear(this.state, 'shaped')) m = 1;
     if (m > 1 && hasGear(this.state, 'scanner')) m *= 1 + gearStats.scanner(gearLevel(this.state, 'scanner')).bonus;
@@ -2941,10 +2946,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Credits drop as metal bars: bronze, silver, gold, and a stack of gold for big ones.
-  // Act 3 drops are worth a little more, and a Credit Booster adds half again.
+  // Act 3 drops are worth a little more, and a Credit Booster adds a share.
   dropCoin(x: number, y: number, value: number, vx = Phaser.Math.Between(-10, 10), vy = COIN_FALL) {
     if (this.state.level >= 9) value = Math.round(value * (1 + (this.state.level - 8) * 0.06));
-    if (this.boostSegment === this.segment) value = Math.round(value * ITEMS.booster.tune!.bonus);
+    if (hasGear(this.state, 'booster')) value = Math.round(value * gearStats.booster(gearLevel(this.state, 'booster')).bonus);
     if (this.replay) value = Math.max(1, Math.round(value * REPLAY_PAY));
     const key = value >= 25 ? 'ingot4' : value >= 10 ? 'ingot3' : value >= 5 ? 'ingot2' : 'ingot1';
     const c = this.coins.create(x, y, key) as Phaser.Physics.Arcade.Image;
@@ -3198,7 +3203,7 @@ export class GameScene extends Phaser.Scene {
     if (other === slot) it[slot] = null;
     else {
       if (other >= 0) it[other] = it[slot];
-      it[slot] = { id, count: ITEMS[id].cap };
+      it[slot] = { id, count: itemCap(this.state, id) };
     }
     this.itemReadyAt = [];
     this.refreshHud();

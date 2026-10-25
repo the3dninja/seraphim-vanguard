@@ -3,9 +3,10 @@
 export type WeaponId = 'pulse' | 'spread' | 'twin' | 'homing' | 'plasma' | 'ion' | 'wave' | 'rail' | 'flak'
   | 'side' | 'bio';
 export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' | 'cluster' | 'emp' | 'warp'
-  | 'decoy' | 'booster' | 'drone' | 'rewind';
+  | 'decoy' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
-  | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear';
+  | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear'
+  | 'booster' | 'nullifier' | 'cargo';
 export type KitId = 'wkit' | 'gkit';
 
 // Every weapon deals one damage type. Enemies take double damage from types
@@ -209,7 +210,6 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   },
   emp: { name: 'EMP PULSE', price: 75, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 5 SECONDS.', tune: { stun: 5000 } },
   decoy: { name: 'DECOY FLARE', price: 75, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.', tune: { time: 5000 } },
-  booster: { name: 'CREDIT BOOSTER', price: 75, icon: 'icon_booster', cap: 1, desc: '+50% CREDIT DROPS FOR THE REST OF THE SEGMENT.', tune: { bonus: 1.5 } },
   drone: { name: 'REPAIR DRONE', price: 125, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.',
     tune: { heal: 1, every: 4000, time: 20000 },
   },
@@ -223,7 +223,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
 };
 
 // A stack as it shows in a slot: how many against how many fit, like 1/3.
-export const stackLabel = (it: { id: ItemId; count: number }) => `${it.count}/${ITEMS[it.id].cap}`;
+export const stackLabel = (it: { id: ItemId; count: number }, cap = ITEMS[it.id].cap) => `${it.count}/${cap}`;
 
 // Upgrade Kits: sold only by in-level vendors. Each raises one weapon or one
 // gear by a level. Apply right away or keep it in storage for later.
@@ -315,6 +315,18 @@ export const GEAR: Record<GearId, GearDef> = {
     name: 'TARGET SCANNER', price: 300, score: 5, icon: 'icon_scanner', from: 9, where: 'base',
     desc: 'AUGMENT. SHOWS WHAT EACH ENEMY IS WEAK TO, AND +15% DAMAGE VS WEAKNESSES.', levelUp: 'A BIGGER BONUS.',
   },
+  booster: {
+    name: 'CREDIT BOOSTER', price: 150, score: 3, icon: 'icon_booster', from: 4, where: 'base',
+    desc: '+25% CREDIT DROPS.', levelUp: '+25% MORE.',
+  },
+  nullifier: {
+    name: 'NULLIFIER', price: 450, score: 6, icon: 'icon_nullifier', from: 9, where: 'base',
+    desc: 'AUGMENT. YOUR WEAPONS IGNORE WEAKNESS AND RESISTANCE, AND HIT 5% HARDER.', levelUp: '+5% DAMAGE.',
+  },
+  cargo: {
+    name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
+    desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 2%.', levelUp: '1 MORE PER SLOT.',
+  },
 };
 
 // What each upgrade costs at the Base vendor, for levels 2 to 5, weapon by
@@ -355,6 +367,10 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   overcharge: { tune: {}, levels: { every: [6, 6, 5, 5, 4] } },
   scanner: { tune: { bonus: [0.15, 0.05] } },
   rear: { tune: { damage: [0.5, 0.125] } }, // share of the paired weapon's damage
+  booster: { tune: { bonus: [1.25, 0.25] } }, // credit drops multiplied by this
+  nullifier: { tune: { damage: [1.05, 0.05] } }, // every weapon hit multiplied by this, whatever the target takes
+  // extra: items each slot holds beyond the item's own max; slow: speed lost per item carried beyond it.
+  cargo: { tune: { extra: [1, 1], slow: [0.02, 0] } },
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
@@ -366,7 +382,7 @@ export const CRATES = { every: 20000, vary: 5000, speed: 21 };
 export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
-const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every', 'bursts', 'bombs']);
+const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every', 'bursts', 'bombs', 'extra']);
 function gearAt(id: GearId, lv: number) {
   const g = GEAR_TUNE[id];
   const out: Record<string, number> = {};
@@ -394,6 +410,9 @@ export const gearStats = {
   overcharge: gs<'every'>('overcharge'),
   scanner: gs<'bonus'>('scanner'),
   rear: gs<'damage'>('rear'),
+  booster: gs<'bonus'>('booster'),
+  nullifier: gs<'damage'>('nullifier'),
+  cargo: gs<'extra' | 'slow'>('cargo'),
 };
 
 // A weapon's shot look at a level.

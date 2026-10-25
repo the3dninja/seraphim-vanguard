@@ -41,6 +41,7 @@ function migrate(data: any): SaveData | null {
     const out = { ...newSave(), ...rest };
     if (!Array.isArray(data.gear)) out.gear = Array(gearSlots ?? 0).fill(null);
     rearToGear(out);
+    boosterToGear(out);
     return out;
   }
   if (data?.v === 1) {
@@ -80,6 +81,16 @@ function rearToGear(s: SaveData) {
     delete (s.weaponLevels as Record<string, number>).rear;
     s.gearLevels.rear = lv;
   }
+}
+
+// The Credit Booster was an item and is now gear: any carried, in a slot or
+// in storage, become one Credit Booster gear in storage.
+function boosterToGear(s: SaveData) {
+  const items = s.items as ({ id: string; count: number } | null)[];
+  let had = s.storage.includes('booster');
+  items.forEach((it, i) => { if (it?.id === 'booster') { items[i] = null; had = true; } });
+  s.storage = s.storage.filter((id) => id !== 'booster');
+  if (had && !(s.gear as string[]).includes('booster')) s.storage.push('booster');
 }
 
 export function writeSave(data: SaveData) {
