@@ -130,6 +130,7 @@ export class MapScene extends Phaser.Scene {
       const img = this.add.image(x, y, l.node);
       if (i > this.next + 1) img.setAlpha(0.3);
       if (i < this.next) this.add.image(x + 8, y + 7, 'check');
+      if (levelEnder(i + 1) && i <= this.next) this.bossMark(x - 9, y - 8);
       const hit = this.add.rectangle(x, y, 28, 28, 0x000000, 0).setInteractive();
       hit.on('pointerup', () => {
         if (this.selectable({ i })) { this.selected = { i }; this.render(); }
@@ -144,11 +145,12 @@ export class MapScene extends Phaser.Scene {
       for (let s = 0.45; s < 0.8; s += 0.17) g.fillRect(Math.round(a.x + (x - a.x) * s), Math.round(a.y + (y - a.y) * s), 1, 1);
       const img = this.add.image(x, y, sd.node);
       if (state === 'coming' || state === 'missed') img.setAlpha(0.35);
-      // A treasure mission shows a pile of gold in the corner until it's cleared.
-      // It's dimmed with the moon until the mission opens.
-      if (sd.treasure && state !== 'cleared') {
-        this.add.image(x + 7, y + 5, 'goldPile').setDepth(5).setAlpha(state === 'open' ? 1 : 0.35);
+      // A treasure mission shows a pulsing pile of gold in the corner while it's open.
+      if (sd.treasure && state === 'open') {
+        const pile = this.add.image(x + 7, y + 5, 'goldPile').setDepth(5);
+        this.tweens.add({ targets: pile, scale: 1.25, alpha: 0.55, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
       }
+      if (sd.boss && (state === 'open' || state === 'cleared')) this.bossMark(x - 7, y - 6);
       if (state === 'cleared') this.add.image(x + 6, y + 5, 'check').setScale(0.75);
       // An open one blinks a ring so it stands out.
       if (state === 'open') {
@@ -166,6 +168,12 @@ export class MapScene extends Phaser.Scene {
     const n = nodePos(this.next);
     const ship = this.add.image(n.x, n.y - 15, 'ship').setScale(0.7);
     this.tweens.add({ targets: ship, y: n.y - 13, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.easeInOut' });
+  }
+
+  // A red skull pulsing on the corner of a boss or mini boss level, once it's unlocked.
+  private bossMark(x: number, y: number) {
+    const skull = this.add.image(x, y, 'bossSkull').setDepth(5);
+    this.tweens.add({ targets: skull, scale: 1.2, alpha: 0.5, yoyo: true, repeat: -1, duration: 550, ease: 'Sine.easeInOut' });
   }
 
   // Side missions that just unlocked: a banner near them that flashes a few

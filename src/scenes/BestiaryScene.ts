@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
-import { BESTIARY, discovered, type BeastEntry } from '../data/bestiary';
+import { BESTIARY, discovered, unreadFoes, type BeastEntry } from '../data/bestiary';
 import { DTYPE_COLOR, type DType } from '../data/items';
 import type { SaveData } from '../save';
 import { button, starfield, text } from '../ui';
@@ -27,6 +27,7 @@ export class BestiaryScene extends Phaser.Scene {
   private d!: BestiaryData;
   private pages: Page[] = [];
   private known = new Set<string>();
+  private unread = new Set<string>(); // found but not looked at yet: their tiles blink NEW
   private page = 0;
   private pick = 0;
   private content!: Phaser.GameObjects.Container;
@@ -37,6 +38,7 @@ export class BestiaryScene extends Phaser.Scene {
   init(data: BestiaryData) {
     this.d = data;
     this.known = discovered(data.state);
+    this.unread = new Set(unreadFoes(data.state));
     this.pages = [];
     for (const c of BESTIARY) {
       const n = Math.ceil(c.entries.length / (COLS * ROWS));
@@ -49,7 +51,9 @@ export class BestiaryScene extends Phaser.Scene {
         });
       }
     }
-    this.page = 0;
+    // Open on the first page with something new on it.
+    const p = this.pages.findIndex((pg) => pg.entries.some((e) => this.unread.has(e.id)));
+    this.page = Math.max(0, p);
     this.pick = 0;
   }
 
@@ -114,7 +118,12 @@ export class BestiaryScene extends Phaser.Scene {
       // Question marks show at double size, about half the old tile-filling size.
       img.setScale(key === 'qmark' ? 2 : Math.min(1, ICON / Math.max(img.width, img.height)));
       if (known && en.tint) img.setTint(en.tint);
+      if (this.unread.has(en.id) && i !== this.pick) {
+        const tag = add(text(this, x + TILE - 2, y + 2, 'NEW', COLOR.yellow).setOrigin(1, 0));
+        this.tweens.add({ targets: tag, alpha: 0.2, yoyo: true, repeat: -1, duration: 350 });
+      }
     });
+    this.markRead(pg.entries[this.pick]);
 
     this.info(pg.entries[this.pick], add);
 
@@ -122,6 +131,14 @@ export class BestiaryScene extends Phaser.Scene {
     add(button(this, 6, H - 22, 30, 18, '<', () => this.turn(-1), COLOR.cyan)).setEnabled(this.page > 0);
     add(button(this, 40, H - 22, W - 80, 18, 'BACK', () => this.leave(), COLOR.cyan));
     add(button(this, W - 36, H - 22, 30, 18, '>', () => this.turn(1), COLOR.cyan)).setEnabled(this.page < last);
+  }
+
+  // Once picked, an entry isn't new any more.
+  private markRead(en: BeastEntry | undefined) {
+    if (!en || !this.unread.has(en.id)) return;
+    this.unread.delete(en.id);
+    const read = (this.d.state.read ??= []);
+    if (!read.includes(en.id)) read.push(en.id);
   }
 
   // The bottom half: name, weaknesses and resistances, the write-up and the kill count.

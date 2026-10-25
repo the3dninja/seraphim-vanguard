@@ -18,6 +18,9 @@ export interface SaveData {
   sides: string[]; // side missions beaten (see data/sides.ts)
   kills: Record<string, number>; // enemies and bosses destroyed, by kind (for the Bestiary)
   seen: string[]; // enemy and boss kinds faced in flight
+  // Bestiary entries looked at. Saves from before this have none: everything
+  // they'd found counts as looked at (see unreadFoes).
+  read?: string[];
 }
 
 const KEY = 'seraphim-vanguard-save';
@@ -26,7 +29,7 @@ export function newSave(): SaveData {
   return {
     v: 2, level: 1, credits: 0, maxHealth: 5,
     weapons: ['pulse'], items: [null], gear: [], weaponLevels: {}, gearLevels: {}, storage: [], sides: [],
-    kills: {}, seen: [],
+    kills: {}, seen: [], read: [],
   };
 }
 

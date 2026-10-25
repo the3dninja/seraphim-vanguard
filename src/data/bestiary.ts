@@ -132,3 +132,11 @@ export function discovered(state: SaveData): Set<string> {
   if (seen.has('egg')) seen.add('larva');
   return seen;
 }
+
+// Discovered entries the player hasn't looked at in the Bestiary yet.
+export function unreadFoes(state: SaveData): string[] {
+  const known = [...discovered(state)];
+  state.read ??= known;
+  const read = new Set(state.read);
+  return known.filter((id) => !read.has(id) && BESTIARY.some((c) => c.entries.some((e) => e.id === id)));
+}
