@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { LEVELS, isBuilt } from '../data/levels';
+import { unreadFoes } from '../data/bestiary';
 import { closesSystem, sideById, unbeatenSides } from '../data/sides';
 import { cloneSave, writeSave, type SaveData } from '../save';
 import { button, starfield, text, toast } from '../ui';
@@ -18,6 +19,8 @@ export class BaseScene extends Phaser.Scene {
   // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
+  private foesIcon!: Phaser.GameObjects.Image;
+  private foesBlink: Phaser.Tweens.Tween | null = null;
 
   constructor() { super('Base'); }
 
@@ -79,10 +82,12 @@ export class BaseScene extends Phaser.Scene {
       });
     });
     this.tile(W - 30, 88, 'iconMap', 'MAP', () => this.openMap());
-    this.tile(30, 196, 'iconFoes', 'FOES', () => {
+    this.foesBlink = null;
+    this.foesIcon = this.tile(30, 196, 'iconFoes', 'FOES', () => {
       this.scene.pause();
-      this.scene.launch('Bestiary', { state: this.state, onLeave: () => {} });
+      this.scene.launch('Bestiary', { state: this.state, onLeave: () => { writeSave(this.state); this.blinkFoes(); } });
     });
+    this.blinkFoes();
     this.tile(W - 30, 196, 'iconGear', 'OPTIONS', () => toast(this, 'OPTIONS COMING SOON', 233), 2);
 
     button(this, 14, 246, W - 28, 34, '', () => this.launch(), COLOR.yellow);
@@ -142,11 +147,24 @@ export class BaseScene extends Phaser.Scene {
     box.add(button(this, 92, 190, 68, 22, 'FLY ON', () => { box.destroy(); this.fly(); }, COLOR.yellow));
   }
 
-  // A 34px picture button with its name underneath.
+  // A 34px picture button with its name underneath. Returns the picture.
   private tile(x: number, y: number, icon: string, label: string, onClick: () => void, scale = 1) {
     button(this, x - 17, y - 17, 34, 34, '', onClick);
-    this.add.image(x, y, icon).setScale(scale);
+    const img = this.add.image(x, y, icon).setScale(scale);
     text(this, x, y + 20, label).setOrigin(0.5, 0);
+    return img;
+  }
+
+  // The Foes picture flashes while the Bestiary has entries not looked at yet.
+  private blinkFoes() {
+    const fresh = unreadFoes(this.state).length > 0;
+    if (fresh && !this.foesBlink) {
+      this.foesBlink = this.tweens.add({ targets: this.foesIcon, alpha: 0.15, yoyo: true, repeat: -1, duration: 300 });
+    } else if (!fresh && this.foesBlink) {
+      this.foesBlink.remove();
+      this.foesBlink = null;
+      this.foesIcon.setAlpha(1);
+    }
   }
 
   private refresh() {

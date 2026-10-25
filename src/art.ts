@@ -120,6 +120,19 @@ const SPRITES: Record<string, string[]> = {
   chest: ['.vvvvvvvv.', 'vqbbbbbbev', 'vbbbbbbbev', 'vbbbbbbbev', 'vjjjjYjjzv', 'veeeeYeefv', 'veeeejeefv', 'veeeeeeefv', 'vffffffffv', '.vvvvvvvv.'],
   chestOpen: ['.vvvvvvvv.', '.veeeeeev.', '.vffffffv.', 'vvvvvvvvvv', 'vjvvvvvvzv', 'vjKKKKKKzv', 'vjjjjjjjzv', 'veeeeYeefv', 'vffffffffv', '.vvvvvvvv.'],
   // Star map treasure: three small gold bars, stacked like the big credit drop.
+  // The map's mark for a boss or mini boss level: a horned demon skull.
+  bossSkull: [
+    'O.......O',
+    'Rr.....rR',
+    '.RrRRRrR.',
+    '.ROOOOOR.',
+    'RRKKRKKRR',
+    'RRKKRKKRR',
+    '.RRRKRRR.',
+    '..RRRRR..',
+    '..RKRKR..',
+    '...rrr...',
+  ],
   goldPile: ['....qWqqz...', '...YYYYzz...', '...YYYYz....', '...jjjj.....', '.qWqqz.qWqqz', 'YYYYzzYYYYzz', 'YYYYz.YYYYz.', 'jjjj..jjjj..'],
   pip: ['YY', 'YY'],
   pipEmpty: ['DD', 'DD'],
