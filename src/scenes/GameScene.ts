@@ -53,12 +53,15 @@ export interface EnemyData {
   corrupt?: boolean; // a Corrupted ship, or a mine one laid
   leaving?: boolean; // pulling back up off the top of the screen
   back?: boolean; // already came back once after pulling back
+  shown?: boolean; // has been on screen
 }
 
 // An enemy that pulled back off the top before it was killed, waiting to
 // come back down: ms left, and the health it left with.
 interface Returner { kind: FoeKind; hp: number; t: number }
 const RETURN_AFTER: [number, number] = [8000, 12000];
+// Gunboats and Bombers leaving down the screen stop firing at the bottom third.
+const LEAVE_FIRE_STOP = (H * 2) / 3;
 
 // Anything a boss class offers the scene.
 interface Boss {
@@ -1176,7 +1179,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   // An enemy pulling back off the top: the first time, it comes back down a
-  // few seconds later with the health it had left. The second time it's gone.
+  // few seconds later with the health it had left. The second time it leaves
+  // down the screen instead (see updateEnemies).
   retreat(e: Phaser.Physics.Arcade.Sprite) {
     const d = e.getData('e') as EnemyData;
     if (!d.back && this.phase === 'action') {
@@ -1524,6 +1528,7 @@ export class GameScene extends Phaser.Scene {
       if (d.stun > 0) continue;
       d.t += dt;
       d.fireIn -= dt * 1000;
+      const y0 = e.y;
       switch (d.kind) {
         case 'dart':
           e.y += 72 * dt;
@@ -1543,12 +1548,12 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'gunboat': {
           // Fly in, park, fire a 4-shot spread (one from each gun tip), then pull
-          // back up off the top, still firing on the way.
+          // back up off the top, still firing on the way (or down, the second time).
           if (e.y < d.stopY && d.hold > 0) e.y += 50 * dt;
           else if (d.hold > 0) d.hold -= dt * 1000;
           else { e.y -= 40 * dt; d.leaving = true; }
           const parked = e.y >= d.stopY || d.leaving;
-          if (parked && d.fireIn <= 0 && firing && e.y > 6) {
+          if (parked && d.fireIn <= 0 && firing && e.y > 6 && e.y < LEAVE_FIRE_STOP) {
             d.fireIn = 2500;
             const tg = this.aimTarget();
             const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
@@ -1560,14 +1565,15 @@ export class GameScene extends Phaser.Scene {
         }
         case 'bomber': {
           // Sinks to its height, edges toward the ship dropping a bomb from under
-          // each wing, then pulls back up off the top, still dropping bombs.
+          // each wing, then pulls back up off the top, still dropping bombs (or
+          // down, the second time).
           if (e.y < d.stopY && d.hold > 0) e.y += 34 * dt;
           else if (d.hold > 0) {
             d.hold -= dt * 1000;
             e.x += Phaser.Math.Clamp(this.player.x - e.x, -10, 10) * dt;
           } else { e.y -= 30 * dt; d.leaving = true; }
           const parked = e.y >= d.stopY || d.leaving;
-          if (parked && d.fireIn <= 0 && firing && e.y > 6) {
+          if (parked && d.fireIn <= 0 && firing && e.y > 6 && e.y < LEAVE_FIRE_STOP) {
             d.fireIn = 2000;
             this.spawnEnemy('bomb', e.x - 7, e.y + 9);
             this.spawnEnemy('bomb', e.x + 7, e.y + 9);
@@ -1703,8 +1709,12 @@ export class GameScene extends Phaser.Scene {
           d.shieldImg?.setPosition(e.x, e.y + 9);
           break;
       }
+      // Back for the second time, it leaves down the screen instead of up.
+      if (d.back && d.leaving && e.y < y0) e.y = y0 + (y0 - e.y);
       if (d.leaving && e.y < -20) this.retreat(e);
-      else if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || e.y < -40) e.destroy();
+      // Ships waiting in a column or vee above the top aren't culled before they come on.
+      else if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || (e.y < -40 && d.shown)) e.destroy();
+      else if (e.y >= 0) d.shown = true;
     }
   }
 
