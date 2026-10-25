@@ -389,10 +389,17 @@ export class VendorScene extends Phaser.Scene {
     return !(it && it.id === id && it.count >= ITEMS[id].cap);
   }
 
-  private buy(id: string) {
+  // Gear with no gear slot to put it in asks first, since it can only be stowed.
+  private buy(id: string, sure = false) {
     const s = this.d.state;
     const def = defOf(id);
     if (s.credits < def.price) return;
+    if (isGear(id) && s.gear.length === 0 && !sure) {
+      ask(this, `NO GEAR SLOT YET.\nBUY ${def.name}\nAND STORE IT?`, ['YES', 'NO'], (a) => {
+        if (a === 0) this.buy(id, true);
+      });
+      return;
+    }
     s.credits -= def.price;
     this.selected = id;
     if (isItem(id)) {
@@ -419,7 +426,7 @@ export class VendorScene extends Phaser.Scene {
     this.render();
     if (isGear(id) && s.gear.length === 0) {
       s.storage.push(id);
-      ask(this, `${def.name} STOWED.\nBUY A GEAR SLOT AT THE\nBASE VENDOR TO USE IT.`, ['OK'], () => this.render());
+      this.render();
       return;
     }
     ask(this, `${def.name}\nEQUIP OR STOW?`, ['EQUIP', 'STOW'], (choice) => {

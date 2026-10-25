@@ -317,6 +317,12 @@ export const GEAR: Record<GearId, GearDef> = {
   },
 };
 
+// What each upgrade costs at the Base vendor, for levels 2 to 5, weapon by
+// weapon and gear by gear. They start at 300, 500, 700 and 900 for weapons and
+// 200 to 500 for gear.
+export const WEAPON_UP_COST = Object.fromEntries((Object.keys(WEAPONS) as WeaponId[]).map((id) => [id, [300, 500, 700, 900]])) as Record<WeaponId, number[]>;
+export const GEAR_UP_COST = Object.fromEntries((Object.keys(GEAR) as GearId[]).map((id) => [id, [200, 300, 400, 500]])) as Record<GearId, number[]>;
+
 // What each gear does at a level, 1 to 5, as the Tuner (?tune) can change it:
 // `tune` numbers are [at level 1, change per level], `levels` numbers are set
 // level by level. Read by the game while flying. Durations are in ms.
