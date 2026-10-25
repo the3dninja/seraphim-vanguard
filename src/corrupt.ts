@@ -374,7 +374,7 @@ function updateLancer(g: GameScene, e: Phaser.Physics.Arcade.Sprite, d: EnemyDat
     d.beam -= ms;
     for (const a of fanOf(d.aim)) {
       g.drawBeam(nx, ny, a, 3, 0x00a800);
-      if (firing && g.beamHits(nx, ny, a, 2.5)) g.hurt();
+      if (firing && g.laserHits(nx, ny, a, 2.5)) g.hurt();
     }
     if (d.beam <= 0) { d.step++; d.fireIn = 1700; }
   } else if (d.charge > 0) {
