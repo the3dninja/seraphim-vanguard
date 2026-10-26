@@ -98,6 +98,9 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
+const REDIRECT_FULL = 20; // shots soaked up for Energy Redirect's glow at its biggest and brightest
+const TAP_MOVE = 6; // px a press can move and still be a tap
+const TAP_MS = 300; // ... and how long it can last
 const SHOW_REDIRECT_COUNT = false; // Energy Redirect's soaked-up count over the ship
 const RADAR_TEAL = '#00e8d8'; // Shot Radar's near-miss count and lines
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
@@ -255,6 +258,9 @@ export class GameScene extends Phaser.Scene {
   // and the lasers already counted (by where they come from).
   private redirectUntil = 0;
   private redirectCount = 0;
+  private redirectHeld = false; // gathering is over and the beam waits for a tap
+  private redirectGlow!: Phaser.GameObjects.Graphics; // under the ship, growing with what it has soaked up
+  private tapFrom: { id: number; x: number; y: number; t: number } | null = null; // a press that may be a tap
   private redirectLasers = new Set<string>();
   private redirectText: Phaser.GameObjects.Text | null = null;
   private nearMisses = 0; // Shot Radar: near misses since the last hit
@@ -352,6 +358,8 @@ export class GameScene extends Phaser.Scene {
     this.burnUntil = 0;
     this.rollUntil = 0;
     this.redirectUntil = 0;
+    this.redirectHeld = false;
+    this.tapFrom = null;
     this.redirectText = null;
     this.nearMisses = 0;
     this.nearText = null;
@@ -421,6 +429,7 @@ export class GameScene extends Phaser.Scene {
     this.warps = new Warps(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
+    this.redirectGlow = this.add.graphics().setDepth(9.9).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
     this.bubble = this.add.image(0, 0, 'bubble').setDepth(11).setVisible(false);
@@ -567,6 +576,7 @@ export class GameScene extends Phaser.Scene {
       if (over.length > 0) return; // tapped a button
       const { x, y } = this.player;
       this.dragFrom = { id: p.id, px: p.x, py: p.y, sx: x, sy: y, tx: x, ty: y };
+      this.tapFrom = { id: p.id, x: p.x, y: p.y, t: this.time.now };
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!this.dragFrom || p.id !== this.dragFrom.id || !p.isDown || (this.phase !== 'action' && !this.lingering)) return;
@@ -574,6 +584,14 @@ export class GameScene extends Phaser.Scene {
       this.dragFrom.ty = Phaser.Math.Clamp(this.dragFrom.sy + (p.y - this.dragFrom.py), 24, H - 30);
     });
     const release = (p: Phaser.Input.Pointer) => { if (p.id === this.dragFrom?.id) this.dragFrom = null; };
+    // A tap (a quick press that barely moves, not on a button) fires a held Energy Redirect beam.
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const t = this.tapFrom;
+      this.tapFrom = null;
+      if (!t || t.id !== p.id) return;
+      if (Phaser.Math.Distance.Between(t.x, t.y, p.x, p.y) > TAP_MOVE || this.time.now - t.t > TAP_MS) return;
+      if (this.redirectHeld && this.phase === 'action') this.fireRedirect();
+    });
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
 
@@ -1154,6 +1172,8 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'redirect': {
+        // A beam still held from the last crate goes off at once.
+        if (this.redirectHeld) this.fireRedirect();
         if (this.redirectUntil === 0) { this.redirectCount = 0; this.redirectLasers.clear(); }
         this.redirectUntil = now + gearStats.redirect(lv).collect;
         break;
@@ -2241,6 +2261,7 @@ export class GameScene extends Phaser.Scene {
   // go: a beam straight up hurting everything in its path by the count times
   // `mult`, exactly, and a blast that wipes enemy shots around the ship.
   private updateRedirect(dt: number) {
+    this.drawRedirectGlow();
     if (!this.redirectUntil) return;
     const st = gearStats.redirect(gearLevel(this.state, 'redirect'));
     const p = this.player;
@@ -2259,8 +2280,8 @@ export class GameScene extends Phaser.Scene {
         b.setData('relT', 0).setData('heldAt', this.game.loop.frame);
       }
       const k = (this.time.now % 400) / 400;
-      this.beams.lineStyle(1, 0xf878f8, 0.3 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
-      this.beams.lineStyle(1, 0xf878f8, 0.075).strokeCircle(p.x, p.y, st.reach);
+      this.beams.lineStyle(1, 0xf878f8, 0.6 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
+      this.beams.lineStyle(1, 0xf878f8, 0.15).strokeCircle(p.x, p.y, st.reach);
       // The soaked-up count over the ship, switched off for now (Shot Radar shows its count there).
       if (SHOW_REDIRECT_COUNT) {
         this.redirectText ??= text(this, 0, 0, '', '#f878f8').setOrigin(0.5, 1).setDepth(20);
@@ -2268,10 +2289,40 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
+    // Gathering is over: whatever it soaked up is held until a tap fires it.
     this.redirectUntil = 0;
     this.redirectText?.destroy();
     this.redirectText = null;
-    if (this.phase !== 'action') return;
+    this.redirectHeld = this.redirectCount > 0 && this.phase === 'action';
+    if (this.redirectHeld) this.tipOnce('redirectTap', 'TAP TO FIRE');
+  }
+
+  // A soft pink glow under the ship, faint and half its size at first, growing
+  // and brightening with each shot soaked up to its fullest at REDIRECT_FULL,
+  // bright in the middle and fading out. It pulses, faster while held.
+  private drawRedirectGlow() {
+    const g = this.redirectGlow;
+    g.clear();
+    if ((!this.redirectUntil && !this.redirectHeld) || this.phase !== 'action') return;
+    const f = Math.min(1, this.redirectCount / REDIRECT_FULL);
+    const pulse = 1 + 0.12 * Math.sin(this.time.now / (this.redirectHeld ? 90 : 160));
+    const r = (3.5 + f * 14.5) * pulse;
+    const a = 0.15 + f * 0.45;
+    const { x, y } = this.player;
+    const RINGS = 10;
+    for (let i = 0; i < RINGS; i++) {
+      const k = 1 - i / RINGS; // outer to inner
+      g.fillStyle(0xf878f8, a * 0.22).fillCircle(x, y, r * k);
+    }
+    g.fillStyle(0xfcfcfc, a * 0.6).fillCircle(x, y, Math.max(1.5, r * 0.25));
+  }
+
+  // Lets the held Energy Redirect go: a blast that wipes enemy shots around the
+  // ship, and the beam straight up.
+  private fireRedirect() {
+    this.redirectHeld = false;
+    const st = gearStats.redirect(gearLevel(this.state, 'redirect'));
+    const p = this.player;
     // The wipe.
     for (const b of this.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
       if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.sparks.explode(2, b.x, b.y); b.destroy(); }

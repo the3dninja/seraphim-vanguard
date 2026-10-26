@@ -391,7 +391,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
 };
 
-// Shot Radar's lines: on (1) or off (0), from which level they show, and from which they
+// Shot Radar's lines: on (1) or off (0, for now: it plays better without), from which level they show, and from which they
 // turn teal for a near miss and red for a hit.
 // Its rewards, every so many near misses in a row (a hit starts the count again).
 // Speed: speedPer for each one, up to speedCap. Credits: `credits` every creditsEvery, creditsStep
@@ -399,7 +399,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
 // the first; an Overdrive Cell's effect every overdriveEvery (doubling up with one used);
 // invulnMs untouchable every invulnEvery; a black hole mid-screen for holeMs every holeEvery.
 export const RADAR = {
-  lines: 1, linesFrom: 2, colorFrom: 3,
+  lines: 0, linesFrom: 2, colorFrom: 3,
   speedPer: 0.01, speedCap: 1, creditsEvery: 3, credits: 5, creditsStep: 1,
   burstEvery: 10, burstStep: 10, overdriveEvery: 20, invulnEvery: 30, invulnMs: 7000,
   holeEvery: 40, holeMs: 7000, holeReach: 320, holePull: 90,
