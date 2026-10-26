@@ -101,7 +101,8 @@ const SHIP_SPEED_KEYS = 110; // px/s with keyboard
 const REDIRECT_FULL = 20; // shots soaked up for Energy Redirect's glow at its biggest and brightest
 const TAP_MOVE = 6; // px a press can move and still be a tap
 const TAP_MS = 300; // ... and how long it can last
-const SHOW_REDIRECT_COUNT = false; // Energy Redirect's soaked-up count over the ship
+const SHOW_REDIRECT_COUNT = true;
+const REDIRECT_WARN = 750; // ms at the end of Energy Redirect's gathering that its count flashes // Energy Redirect's soaked-up count over the ship
 const RADAR_TEAL = '#00e8d8'; // Shot Radar's near-miss count and lines
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
@@ -429,7 +430,7 @@ export class GameScene extends Phaser.Scene {
     this.warps = new Warps(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
 
-    this.redirectGlow = this.add.graphics().setDepth(9.9).setBlendMode(Phaser.BlendModes.ADD);
+    this.redirectGlow = this.add.graphics().setDepth(10.5).setBlendMode(Phaser.BlendModes.ADD); // over the ship; additive, so it still shows through
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
     this.player.body!.setSize(5, 7).setOffset(4, 3); // small hitbox, NES-shooter fair
     this.bubble = this.add.image(0, 0, 'bubble').setDepth(11).setVisible(false);
@@ -2282,10 +2283,12 @@ export class GameScene extends Phaser.Scene {
       const k = (this.time.now % 400) / 400;
       this.beams.lineStyle(1, 0xf878f8, 0.6 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
       this.beams.lineStyle(1, 0xf878f8, 0.15).strokeCircle(p.x, p.y, st.reach);
-      // The soaked-up count over the ship, switched off for now (Shot Radar shows its count there).
+      // The soaked-up count over the ship, flashing over the last REDIRECT_WARN ms.
       if (SHOW_REDIRECT_COUNT) {
         this.redirectText ??= text(this, 0, 0, '', '#f878f8').setOrigin(0.5, 1).setDepth(20);
-        this.redirectText.setText(`${this.redirectCount}`).setPosition(p.x, p.y - 10);
+        const left = this.redirectUntil - this.time.now;
+        this.redirectText.setText(`${this.redirectCount}`).setPosition(p.x, p.y - 10)
+          .setVisible(left > REDIRECT_WARN || Math.floor(left / 90) % 2 === 0);
       }
       return;
     }
@@ -2362,9 +2365,9 @@ export class GameScene extends Phaser.Scene {
     const lv = gearLevel(this.state, 'radar');
     const st = gearStats.radar(lv);
     const p = this.player;
-    // The near-miss count rides above the ship, small.
-    this.nearText ??= text(this, 0, 0, '0', RADAR_TEAL, 6).setOrigin(0.5, 1).setDepth(20);
-    this.nearText.setVisible(true).setPosition(p.x, p.y - 9);
+    // The near-miss count rides below the ship, small.
+    this.nearText ??= text(this, 0, 0, '0', RADAR_TEAL, 6).setOrigin(0.5, 0).setDepth(20);
+    this.nearText.setVisible(true).setPosition(p.x, p.y + 8);
     const lines = RADAR.lines > 0 && lv >= RADAR.linesFrom;
     // The hitbox, and a shot's reach (its radius) beyond it.
     const hb = p.body as Phaser.Physics.Arcade.Body;
