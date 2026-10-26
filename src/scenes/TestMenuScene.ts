@@ -6,7 +6,7 @@ import {
 import { gearLevel, weaponLevel } from '../inventory';
 import { TEST_BUTTONS, TEST_ICONS, TEST_SEQUENCES, type TestPanel, type TestWaves } from '../combatTest';
 import type { SaveData } from '../save';
-import { button, text } from '../ui';
+import { text } from '../ui';
 
 interface TestMenuData {
   panel: TestPanel;
@@ -47,13 +47,14 @@ const GEAR_IDS = Object.keys(GEAR) as GearId[];
 const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 const BOX = 19; // icon button size
 const CELL = 21; // icon buttons sit this far apart
-// Ship panel rows, top to bottom.
-const WEAPON_Y = 32;
-const WEAPON_LEVEL_Y = 76;
-const GEAR_Y = 126;
-const GEAR_LEVEL_Y = 170;
-const ITEM_Y = 220;
+const LEVEL_ROW = 18; // a slot's level row, and the gap to the next
+const SECTION_GAP = 8; // between the level rows and the next heading
+// The panel scrolls between the title and the name line; a drag anywhere
+// scrolls it, and only a tap (moving less than DRAG px) presses anything.
+const VIEW_TOP = 20;
 const NAME_Y = 282; // name of the last tapped weapon, gear or item
+const VIEW_BOTTOM = NAME_Y - 3;
+const DRAG = 4;
 const hexNum = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
 
 // Combat test's pause menu, opened over the paused Game scene by one of the two
@@ -66,6 +67,12 @@ export class TestMenuScene extends Phaser.Scene {
   private slotTags: { tag: Phaser.GameObjects.Text; held: () => number }[] = [];
   private pickedName!: Phaser.GameObjects.Text;
   private levelRows: LevelRow[] = [];
+  private content!: Phaser.GameObjects.Container; // everything that scrolls, laid out from 0
+  private contentH = 0;
+  private scrollY = 0;
+  private scrollBar!: Phaser.GameObjects.Rectangle;
+  private dragFrom: { y: number; scroll: number } | null = null;
+  private dragged = false;
 
   constructor() { super('TestMenu'); }
 
@@ -74,58 +81,124 @@ export class TestMenuScene extends Phaser.Scene {
     this.picker = null;
     this.slotTags = [];
     this.levelRows = [];
+    this.scrollY = 0;
+    this.dragFrom = null;
+    this.dragged = false;
   }
 
   create() {
     // Shade over the game; tapping empty space just closes the slot picker.
-    this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive()
-      .on('pointerdown', () => this.closePicker());
+    this.tap(this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive(), () => this.closePicker(), false);
+    this.content = this.add.container(0, VIEW_TOP);
+    const mask = this.make.graphics({}, false).fillRect(0, VIEW_TOP, W, VIEW_BOTTOM - VIEW_TOP);
+    this.content.setMask(mask.createGeometryMask());
+    this.scrollBar = this.add.rectangle(W - 2, VIEW_TOP, 2, 10, 0x7c7c7c).setOrigin(1, 0).setVisible(false);
     if (this.d.panel === 'waves') this.wavesPanel();
     else this.shipPanel();
     this.menuButton();
     this.panelButtons();
+    this.dragScroll();
+  }
+
+  // A drag anywhere scrolls the panel; once a press has moved DRAG px it's a
+  // drag, and lifting it presses nothing.
+  private dragScroll() {
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.dragFrom = { y: p.y, scroll: this.scrollY };
+      this.dragged = false;
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (!this.dragFrom || !p.isDown) return;
+      const dy = p.y - this.dragFrom.y;
+      if (Math.abs(dy) >= DRAG) this.dragged = true;
+      if (this.dragged) this.scrollTo(this.dragFrom.scroll - dy);
+    });
+    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.scrollTo(this.scrollY + dy * 0.5));
+  }
+
+  private scrollTo(y: number) {
+    const view = VIEW_BOTTOM - VIEW_TOP;
+    const max = Math.max(0, this.contentH - view);
+    this.scrollY = Phaser.Math.Clamp(Math.round(y), 0, max);
+    this.content.y = VIEW_TOP - this.scrollY;
+    // A thin bar on the right shows where you are, when there's more than fits.
+    this.scrollBar.setVisible(max > 0);
+    if (max > 0) {
+      const h = Math.max(12, (view * view) / this.contentH);
+      this.scrollBar.setSize(2, h).setY(VIEW_TOP + ((view - h) * this.scrollY) / max);
+    }
+  }
+
+  // Runs `fn` when a press on `obj` is lifted without having dragged (and, for
+  // things in the scrolling panel, inside the part that shows).
+  private tap(obj: Phaser.GameObjects.GameObject, fn: () => void, scrolls = true) {
+    obj.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (this.dragged) return;
+      if (scrolls && (p.y < VIEW_TOP || p.y >= VIEW_BOTTOM)) return;
+      fn();
+    });
+    return obj;
+  }
+
+  // Adds to the scrolling panel.
+  private c<T extends Phaser.GameObjects.GameObject>(obj: T): T {
+    this.content.add(obj);
+    return obj;
   }
 
   private wavesPanel() {
-    text(this, W / 2, 8, 'WAVES', COLOR.yellow).setOrigin(0.5, 0);
-    text(this, W / 2, 24, 'EACH LOOPS TILL OFF.\nSTACK ANY NUMBER.', COLOR.gray).setOrigin(0.5, 0).setAlign('center');
-    TEST_SEQUENCES.forEach((seq, i) => this.toggle(14, 56 + i * 26, W - 28, 20, seq.name, i));
+    text(this, 14, 6, 'WAVES', COLOR.yellow);
+    this.c(text(this, W / 2, 4, 'EACH LOOPS TILL OFF.\nSTACK ANY NUMBER.', COLOR.gray).setOrigin(0.5, 0).setAlign('center'));
+    TEST_SEQUENCES.forEach((seq, i) => this.toggle(14, 34 + i * 26, W - 28, 20, seq.name, i));
+    this.contentH = 34 + TEST_SEQUENCES.length * 26;
+    this.scrollTo(0);
   }
 
   private shipPanel() {
     const s = this.d.state;
-    text(this, W / 2, 8, 'SHIP', COLOR.yellow).setOrigin(0.5, 0);
+    text(this, 14, 6, 'SHIP', COLOR.yellow);
+    let y = 12; // laid out top to bottom, so rows never overlap
 
-    text(this, 14, WEAPON_Y - 11, 'WEAPONS', COLOR.gray);
-    this.grid<WeaponId>({
-      ids: WEAPON_IDS, cols: 6, y: WEAPON_Y, slots: () => s.weapons,
+    const section = <T extends string>(title: string, g: Omit<Grid<T>, 'y'>, rows?: (slot: number, y: number) => void) => {
+      this.c(text(this, 8, y - 11, title, COLOR.gray));
+      this.grid<T>({ ...g, y });
+      y += Math.ceil(g.ids.length / g.cols) * CELL + 4;
+      if (rows) {
+        [0, 1].forEach((slot) => rows(slot, y + slot * LEVEL_ROW));
+        y += 2 * LEVEL_ROW;
+      }
+      y += SECTION_GAP + 11;
+    };
+
+    section<WeaponId>('WEAPONS', {
+      ids: WEAPON_IDS, cols: 6, slots: () => s.weapons,
       name: (id) => WEAPONS[id].name, icon: (id) => WEAPONS[id].icon, equip: this.d.equip,
-    });
-    [0, 1].forEach((slot) => this.levelRow(WEAPON_LEVEL_Y + slot * 18, {
+    }, (slot, ry) => this.levelRow(ry, {
       slot, held: () => s.weapons[slot], iconOf: (id) => WEAPONS[id as WeaponId].icon,
       level: (id) => weaponLevel(s, id as WeaponId), max: MAX_WEAPON_LEVEL,
       set: (id, lv) => this.d.setLevel(id as WeaponId, lv),
     }));
 
-    text(this, 14, GEAR_Y - 11, 'GEAR', COLOR.gray);
-    this.grid<GearId>({
-      ids: GEAR_IDS, cols: 8, y: GEAR_Y, slots: () => s.gear,
+    section<GearId>('GEAR', {
+      ids: GEAR_IDS, cols: 8, slots: () => s.gear,
       name: (id) => GEAR[id].name, icon: (id) => GEAR[id].icon, equip: this.d.equipGear,
-    });
-    [0, 1].forEach((slot) => this.levelRow(GEAR_LEVEL_Y + slot * 18, {
+    }, (slot, ry) => this.levelRow(ry, {
       slot, held: () => s.gear[slot], iconOf: (id) => GEAR[id as GearId].icon,
       level: (id) => gearLevel(s, id as GearId), max: MAX_GEAR_LEVEL,
       set: (id, lv) => this.d.setGearLevel(id as GearId, lv),
     }));
 
-    text(this, 14, ITEM_Y - 11, 'ITEMS (NEVER RUN OUT)', COLOR.gray);
-    this.grid<ItemId>({
-      ids: ITEM_IDS, cols: 8, y: ITEM_Y, slots: () => s.items.map((it) => it?.id ?? null),
+    section<ItemId>('ITEMS (NEVER RUN OUT)', {
+      ids: ITEM_IDS, cols: 8, slots: () => s.items.map((it) => it?.id ?? null),
       name: (id) => ITEMS[id].name, icon: (id) => ITEMS[id].icon, equip: this.d.equipItem,
     });
+    this.contentH = y - SECTION_GAP - 11;
 
+    // Slot numbers sit over the corners of the next icons along, so they go on top.
+    for (const { tag } of this.slotTags) this.content.bringToTop(tag);
     this.pickedName = text(this, W / 2, NAME_Y, '', COLOR.white).setOrigin(0.5, 0);
     this.refreshSlots();
+    this.scrollTo(0);
   }
 
   // The swords and ship buttons, where they sit in flight. The open panel's is lit.
@@ -134,10 +207,10 @@ export class TestMenuScene extends Phaser.Scene {
     (['waves', 'ship'] as TestPanel[]).forEach((panel) => {
       const x = TEST_BUTTONS.x[panel];
       const open = panel === this.d.panel;
-      this.add.rectangle(x, y, size, size, open ? 0x3c2800 : 0x000000).setOrigin(0)
+      const box = this.add.rectangle(x, y, size, size, open ? 0x3c2800 : 0x000000).setOrigin(0)
         .setStrokeStyle(1, open ? hexNum(COLOR.yellow) : 0xfcfcfc)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => (open ? this.d.resume() : this.scene.restart({ ...this.d, panel })));
+        .setInteractive({ useHandCursor: true });
+      this.tap(box, () => (open ? this.d.resume() : this.scene.restart({ ...this.d, panel })), false);
       this.add.image(x + size / 2, y + size / 2, TEST_ICONS[panel]).setTintFill(hexNum(COLOR.yellow));
     });
   }
@@ -149,16 +222,16 @@ export class TestMenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     box.on('pointerdown', () => box.setFillStyle(0x3c3c3c));
     box.on('pointerout', () => box.setFillStyle(0x000000));
-    box.on('pointerup', () => this.d.quit());
+    this.tap(box, () => this.d.quit(), false);
     this.add.triangle(0, 0, 8, y + 11, 13, y + 6, 13, y + 16, hexNum(COLOR.red)).setOrigin(0);
     text(this, 16, y + 7, 'MENU', COLOR.red);
   }
 
   // An on/off button for one wave sequence. On shows yellow with ON.
   private toggle(x: number, y: number, w: number, h: number, label: string, i: number) {
-    const box = this.add.rectangle(x, y, w, h, 0x000000).setOrigin(0).setInteractive({ useHandCursor: true });
-    const name = text(this, x + 6, y + h / 2 - 4, label);
-    const state = text(this, x + w - 6, y + h / 2 - 4, '').setOrigin(1, 0);
+    const box = this.c(this.add.rectangle(x, y, w, h, 0x000000).setOrigin(0).setInteractive({ useHandCursor: true }));
+    const name = this.c(text(this, x + 6, y + h / 2 - 4, label));
+    const state = this.c(text(this, x + w - 6, y + h / 2 - 4, '').setOrigin(1, 0));
     const show = () => {
       const on = this.d.waves.on[i];
       const c = on ? COLOR.yellow : COLOR.gray;
@@ -166,7 +239,7 @@ export class TestMenuScene extends Phaser.Scene {
       name.setColor(c);
       state.setColor(c).setText(on ? 'ON' : 'OFF');
     };
-    box.on('pointerdown', () => { this.d.waves.toggle(i); show(); });
+    this.tap(box, () => { this.d.waves.toggle(i); show(); });
     show();
   }
 
@@ -175,13 +248,13 @@ export class TestMenuScene extends Phaser.Scene {
     g.ids.forEach((id, i) => {
       const x = left + (i % g.cols) * CELL;
       const y = g.y + Math.floor(i / g.cols) * CELL;
-      const box = this.add.rectangle(x, y, BOX, BOX, 0x000000).setOrigin(0).setStrokeStyle(1, 0x7c7c7c)
-        .setInteractive({ useHandCursor: true });
-      this.add.image(x + BOX / 2, y + BOX / 2, g.icon(id)).setScale(2);
+      const box = this.c(this.add.rectangle(x, y, BOX, BOX, 0x000000).setOrigin(0).setStrokeStyle(1, 0x7c7c7c)
+        .setInteractive({ useHandCursor: true }));
+      this.c(this.add.image(x + BOX / 2, y + BOX / 2, g.icon(id)).setScale(2));
       // Which slot it's in, if any, in the corner.
-      const tag = text(this, x + BOX + 1, y - 2, '', COLOR.cyan).setOrigin(1, 0).setDepth(1);
+      const tag = this.c(text(this, x + BOX + 1, y - 2, '', COLOR.cyan).setOrigin(1, 0));
       this.slotTags.push({ tag, held: () => g.slots().indexOf(id) });
-      box.on('pointerdown', () => this.openPicker(g, id, x, y));
+      this.tap(box, () => this.openPicker(g, id, x, y));
     });
   }
 
@@ -189,14 +262,14 @@ export class TestMenuScene extends Phaser.Scene {
     slot: number; held: () => string | null; iconOf: (id: string) => string;
     level: (id: string) => number; max: number; set: (id: string, lv: number) => void;
   }) {
-    text(this, 14, y + 4, `${o.slot + 1}`, COLOR.cyan);
-    const icon = this.add.image(32, y + 8, 'icon_pulse').setScale(2);
+    this.c(text(this, 14, y + 4, `${o.slot + 1}`, COLOR.cyan));
+    const icon = this.c(this.add.image(32, y + 8, 'icon_pulse').setScale(2));
     const levels = [];
     for (let lv = 1; lv <= o.max; lv++) {
       const x = 50 + (lv - 1) * 23;
-      const box = this.add.rectangle(x, y, 21, 16, 0x000000).setOrigin(0).setInteractive({ useHandCursor: true });
-      const label = text(this, x + 11, y + 4, `${lv}`).setOrigin(0.5, 0);
-      box.on('pointerdown', () => {
+      const box = this.c(this.add.rectangle(x, y, 21, 16, 0x000000).setOrigin(0).setInteractive({ useHandCursor: true }));
+      const label = this.c(text(this, x + 11, y + 4, `${lv}`).setOrigin(0.5, 0));
+      this.tap(box, () => {
         this.closePicker();
         const id = o.held();
         if (!id) return;
@@ -212,15 +285,20 @@ export class TestMenuScene extends Phaser.Scene {
   private openPicker<T extends string>(g: Grid<T>, id: T, x: number, y: number) {
     this.closePicker();
     this.pickedName.setText(g.name(id));
-    const c = this.add.container(0, 0).setDepth(5);
+    const c = this.c(this.add.container(0, 0));
     const n = g.slots().length;
     const left = Phaser.Math.Clamp(x + BOX / 2 - (n * 13 - 1) / 2, 2, W - 2 - n * 13);
     g.slots().forEach((held, slot) => {
-      c.add(button(this, left + slot * 13, y + BOX + 1, 12, 13, `${slot + 1}`, () => {
+      const color = held === id ? COLOR.cyan : COLOR.white;
+      const bx = left + slot * 13, by = y + BOX + 1;
+      const box = this.add.rectangle(bx, by, 12, 13, 0x000000).setOrigin(0).setStrokeStyle(1, hexNum(color))
+        .setInteractive({ useHandCursor: true });
+      this.tap(box, () => {
         g.equip(slot, id);
         this.closePicker();
         this.refreshSlots();
-      }, held === id ? COLOR.cyan : COLOR.white));
+      });
+      c.add([box, text(this, bx + 6, by + 7, `${slot + 1}`, color).setOrigin(0.5)]);
     });
     this.picker = c;
   }

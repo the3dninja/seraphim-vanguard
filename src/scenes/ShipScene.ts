@@ -41,9 +41,9 @@ const TABS: { f: Filter; label: string }[] = [
 const TAB_Y = 146;
 const LIST_Y = 164;
 const ROW_H = 20;
-const MAX_ROWS = 4;
+const MAX_ROWS = 3;
 const PAGER_Y = LIST_Y + MAX_ROWS * ROW_H + 2;
-const INFO_Y = 262;
+const INFO_Y = PAGER_Y + 20; // under the pager, leaving room for long descriptions above the buttons
 const DRAG_START = 5; // px of movement before a press becomes a drag
 
 const SLOT_ART: Record<Kind, string> = { weapon: 'slotWeapon', item: 'slotItem', gear: 'slotGear' };
