@@ -129,11 +129,15 @@ export class TestMenuScene extends Phaser.Scene {
     }
   }
 
-  // Runs `fn` when a press on `obj` is lifted without having dragged (and, for
-  // things in the scrolling panel, inside the part that shows).
+  // Runs `fn` when a press that began on `obj` is lifted without having dragged
+  // (and, for things in the scrolling panel, inside the part that shows). The
+  // press must start here, so lifting the tap that opened this menu doesn't
+  // press the button under it.
   private tap(obj: Phaser.GameObjects.GameObject, fn: () => void, scrolls = true) {
+    let pressedAt = -1; // the press (by its start time) that began on it
+    obj.on('pointerdown', (p: Phaser.Input.Pointer) => { pressedAt = p.downTime; });
     obj.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (this.dragged) return;
+      if (pressedAt !== p.downTime || this.dragged) return;
       if (scrolls && (p.y < VIEW_TOP || p.y >= VIEW_BOTTOM)) return;
       fn();
     });
