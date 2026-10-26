@@ -334,7 +334,7 @@ export const GEAR: Record<GearId, GearDef> = {
   radar: {
     name: 'SHOT RADAR', price: 400, score: 6, icon: 'icon_radar', from: 6, where: 'base',
     desc: 'FAINT LINES SHOW WHERE ENEMY SHOTS ARE HEADED. NEAR MISSES ADD UP TO REWARDS: SPEED, CREDITS, 360 BURSTS, OVERDRIVE, INVULNERABILITY AND A BLACK HOLE. A HIT RESETS THE COUNT.',
-    levelUp: 'LINES SHOW SOONER. FROM LV 3 THEY TURN TEAL FOR A NEAR MISS AND RED FOR A HIT.',
+    levelUp: 'LINES FROM LV 2, SHOWING SOONER EACH LEVEL. FROM LV 3 THEY TURN TEAL FOR A NEAR MISS AND RED FOR A HIT. A WIDER NEAR MISS.',
   },
 };
 
@@ -384,21 +384,25 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // radius (px) it drags travelling shots in from, and how hard (px/s each second);
   // mult: beam damage per thing soaked up (ignores weakness and resistance);
   // radius: the blast around the ship that wipes enemy shots as it fires (px).
-  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], mult: [1, 0.25], radius: [20, 5] } },
+  // damp: how fast shots it pulls lose speed, like Blink Drive's vortex (per second).
+  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5] } },
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
-  // hitbox that counts as a near miss; color 1: lines turn teal (near miss) or red (hit).
-  radar: { tune: { lineDist: [100, 15], near: [5, 0] }, levels: { color: [0, 0, 1, 1, 1] } },
+  // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
+  radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
 };
 
-// Shot Radar's rewards, every so many near misses in a row (a hit starts the count again).
+// Shot Radar's lines: on (1) or off (0), from which level they show, and from which they
+// turn teal for a near miss and red for a hit.
+// Its rewards, every so many near misses in a row (a hit starts the count again).
 // Speed: speedPer for each one, up to speedCap. Credits: `credits` every creditsEvery, creditsStep
 // more each time. A 360 burst from the ship every burstEvery, a level stronger every burstStep after
 // the first; an Overdrive Cell's effect every overdriveEvery (doubling up with one used);
 // invulnMs untouchable every invulnEvery; a black hole mid-screen for holeMs every holeEvery.
 export const RADAR = {
-  speedPer: 0.01, speedCap: 0.5, creditsEvery: 5, credits: 10, creditsStep: 1,
-  burstEvery: 15, burstStep: 30, overdriveEvery: 30, invulnEvery: 60, invulnMs: 7000,
-  holeEvery: 120, holeMs: 7000, holeReach: 320, holePull: 90,
+  lines: 1, linesFrom: 2, colorFrom: 3,
+  speedPer: 0.01, speedCap: 1, creditsEvery: 3, credits: 5, creditsStep: 1,
+  burstEvery: 10, burstStep: 10, overdriveEvery: 20, invulnEvery: 30, invulnMs: 7000,
+  holeEvery: 40, holeMs: 7000, holeReach: 320, holePull: 90,
 };
 
 // Supply crates: each equipped active gear drops in as a crate, one every
@@ -441,8 +445,8 @@ export const gearStats = {
   booster: gs<'bonus'>('booster'),
   nullifier: gs<'damage'>('nullifier'),
   cargo: gs<'extra' | 'slow'>('cargo'),
-  redirect: gs<'collect' | 'reach' | 'pull' | 'mult' | 'radius'>('redirect'),
-  radar: gs<'lineDist' | 'near' | 'color'>('radar'),
+  redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius'>('redirect'),
+  radar: gs<'lineDist' | 'near'>('radar'),
 };
 
 // A weapon's shot look at a level.
