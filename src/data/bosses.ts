@@ -16,9 +16,9 @@ export const BOSS_STATS: Record<BossStatsKind, BossStats> = {
   frostjaw: { hp: { core: 135, plate: 65, midPlate: 80 }, taken: { body: t(100, 150, 100, 100, 200) } },
   dreadnought: {
     hp: { outerTurret: 50, innerTurret: 75, bridge: 200 },
-    taken: { body: t(50, 75, 100, 150, 100) },
+    taken: { body: t(100, 50, 100, 200, 100) },
   },
-  watcher: { hp: { body: 450 }, taken: { body: t(100, 100, 100, 200, 100) } },
+  watcher: { hp: { body: 450 }, taken: { body: t(100, 50, 100, 200, 100) } },
   hollowwatcher: { hp: { body: 2500 }, taken: { body: t(50, 50, 250, 50, 50) } },
   // The shield also takes half of what this table says, and comes back at 60%.
   voss: {
