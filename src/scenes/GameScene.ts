@@ -98,6 +98,7 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
+const SHOW_REDIRECT_COUNT = false; // Energy Redirect's soaked-up count over the ship
 const RADAR_TEAL = '#00e8d8'; // Shot Radar's near-miss count and lines
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
@@ -675,8 +676,6 @@ export class GameScene extends Phaser.Scene {
     }
     this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
     this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
-    // Shot Radar's near misses, under the credits.
-    if (hasGear(this.state, 'radar')) this.nearText = text(this, W - 6, 14, '0', RADAR_TEAL).setOrigin(1, 0).setDepth(900);
 
     // Bottom left: one box per gear slot (active gear fills with gray until
     // its next supply crate), with the weapon readout above. Bottom right: one item
@@ -978,6 +977,7 @@ export class GameScene extends Phaser.Scene {
     for (const b of this.enemyBullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
       const was = b.getData('vSpeed') as number | undefined;
       if (was == null || caught.has(b) || !b.body) continue;
+      if ((b.getData('heldAt') ?? -9) >= this.game.loop.frame - 1) continue; // Energy Redirect still has it
       if (b.getData('relT') === 0) b.setData('relFrom', b.body.velocity.length());
       const t = Math.min(1, (b.getData('relT') as number) + dt);
       b.setData('relT', t);
@@ -2249,14 +2249,23 @@ export class GameScene extends Phaser.Scene {
         if (!b.body) continue;
         const d = Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y);
         if (d > st.reach || d < 1) continue;
-        b.body.velocity.x += ((p.x - b.x) / d) * st.pull * dt;
-        b.body.velocity.y += ((p.y - b.y) / d) * st.pull * dt;
+        // Damped like a vortex, so pulled shots don't slingshot past; once free they
+        // get their speed back over a second (see updateVortices).
+        if (b.getData('vSpeed') == null) b.setData('vSpeed', b.body.velocity.length());
+        const slow = Math.exp(-st.damp * dt);
+        b.body.velocity.x = (b.body.velocity.x + ((p.x - b.x) / d) * st.pull * dt) * slow;
+        b.body.velocity.y = (b.body.velocity.y + ((p.y - b.y) / d) * st.pull * dt) * slow;
+        if (b.body.velocity.length() < 1) b.body.velocity.setLength(1);
+        b.setData('relT', 0).setData('heldAt', this.game.loop.frame);
       }
       const k = (this.time.now % 400) / 400;
-      this.beams.lineStyle(1, 0xf878f8, 0.6 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
-      this.beams.lineStyle(1, 0xf878f8, 0.15).strokeCircle(p.x, p.y, st.reach);
-      this.redirectText ??= text(this, 0, 0, '', '#f878f8').setOrigin(0.5, 1).setDepth(20);
-      this.redirectText.setText(`${this.redirectCount}`).setPosition(p.x, p.y - 10);
+      this.beams.lineStyle(1, 0xf878f8, 0.3 * (1 - k)).strokeCircle(p.x, p.y, 8 + k * 6);
+      this.beams.lineStyle(1, 0xf878f8, 0.075).strokeCircle(p.x, p.y, st.reach);
+      // The soaked-up count over the ship, switched off for now (Shot Radar shows its count there).
+      if (SHOW_REDIRECT_COUNT) {
+        this.redirectText ??= text(this, 0, 0, '', '#f878f8').setOrigin(0.5, 1).setDepth(20);
+        this.redirectText.setText(`${this.redirectCount}`).setPosition(p.x, p.y - 10);
+      }
       return;
     }
     this.redirectUntil = 0;
@@ -2298,9 +2307,14 @@ export class GameScene extends Phaser.Scene {
   private updateRadar() {
     const g = this.radarGfx;
     g.clear();
-    if (!hasGear(this.state, 'radar') || this.phase !== 'action') return;
-    const st = gearStats.radar(gearLevel(this.state, 'radar'));
+    if (!hasGear(this.state, 'radar') || this.phase !== 'action') { this.nearText?.setVisible(false); return; }
+    const lv = gearLevel(this.state, 'radar');
+    const st = gearStats.radar(lv);
     const p = this.player;
+    // The near-miss count rides above the ship, small.
+    this.nearText ??= text(this, 0, 0, '0', RADAR_TEAL, 6).setOrigin(0.5, 1).setDepth(20);
+    this.nearText.setVisible(true).setPosition(p.x, p.y - 9);
+    const lines = RADAR.lines > 0 && lv >= RADAR.linesFrom;
     // The hitbox, and a shot's reach (its radius) beyond it.
     const hb = p.body as Phaser.Physics.Arcade.Body;
     const cx = hb.center.x, cy = hb.center.y, hw = hb.halfWidth, hh = hb.halfHeight;
@@ -2323,12 +2337,12 @@ export class GameScene extends Phaser.Scene {
       const head = Math.atan2(v.y, v.x);
       const last = b.getData('radarHead') as number | undefined;
       b.setData('radarHead', head);
-      if (last === undefined || speed < 1 || b.getData('vSpeed') != null) continue;
+      if (!lines || last === undefined || speed < 1 || b.getData('vSpeed') != null) continue;
       if (Math.abs(Phaser.Math.Angle.Wrap(head - last)) > 0.002) continue;
       if (Phaser.Math.Distance.Between(bx, by, cx, cy) > st.lineDist) continue;
       const ux = v.x / speed, uy = v.y / speed;
       let color = 0xfcfcfc, alpha = 0.15;
-      if (st.color) {
+      if (lv >= RADAR.colorFrom) {
         // Closest the shot comes to the hitbox along its path ahead.
         const along = Math.max(0, (cx - bx) * ux + (cy - by) * uy);
         let best = Infinity;

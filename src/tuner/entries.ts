@@ -96,6 +96,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'redirect.collect': { label: 'MS IT SOAKS UP SHOTS', step: 100 },
   'redirect.reach': { label: 'MAGNET RADIUS: PULLS TRAVELLING SHOTS IN FROM THIS FAR (PX)', step: 2 },
   'redirect.pull': { label: 'MAGNET STRENGTH (PX/S EACH SECOND)', step: 10 },
+  'redirect.damp': { label: 'DAMPING (HIGHER SLOWS THE SHOTS IT PULLS MORE)', step: 0.25 },
   mult: { label: 'BEAM DAMAGE PER SHOT SOAKED UP (EXACT, IGNORES WEAKNESS AND RESISTANCE)', step: 0.05 },
   'redirect.radius': { label: 'SHOT-WIPING BLAST RADIUS (PX)', step: 1 },
   'radar.lineDist': { label: 'LINE SHOWS ONCE A SHOT IS THIS CLOSE (PX)', step: 5 },
@@ -115,7 +116,6 @@ export const LEVEL_PROPS: Record<string, { label: string; min: number; max: numb
   targets: { label: 'SHOTS DOWN THIS MANY AT ONCE', min: 1, max: 5, whole: true },
   'incendiary.burnTime': { label: 'BURN MS (0 = NO BURN, JUST THE SCORCH)', min: 0, max: 20000 },
   every: { label: 'A CHARGED SHOT EVERY N VOLLEYS', min: 1, max: 20, whole: true },
-  'radar.color': { label: 'COLORED LINES (1 = TEAL NEAR MISS, RED HIT)', min: 0, max: 1, whole: true },
 };
 export const propOf = (e: TuneEntry, key: string) => PROPS[`${e.id}.${key}`] ?? PROPS[key] ?? { label: key.toUpperCase(), step: 1 };
 export const levelPropOf = (e: TuneEntry, key: string) =>
@@ -153,6 +153,7 @@ const weapons: TuneEntry[] = (Object.keys(WEAPONS) as WeaponId[]).map((id) => ({
 
 // Shot Radar's rewards, the same at every level.
 const RADAR_LABELS: Record<keyof typeof RADAR, [string, number]> = {
+  lines: ['PREVIEW LINES (1 = ENABLED, 0 = DISABLED)', 1], linesFrom: ['LINES SHOW FROM LV', 1], colorFrom: ['LINES TURN TEAL / RED FROM LV', 1],
   speedPer: ['SPEED PER NEAR MISS (0.01 = +1%)', 0.005], speedCap: ['MOST EXTRA SPEED (0.5 = +50%)', 0.05],
   creditsEvery: ['CREDITS EVERY N NEAR MISSES', 1], credits: ['CREDITS THE FIRST TIME', 1], creditsStep: ['CREDITS MORE EACH TIME AFTER', 1],
   burstEvery: ['360 BURST EVERY N', 1], burstStep: ['BURST A LEVEL STRONGER EVERY N AFTER THE FIRST', 1],
