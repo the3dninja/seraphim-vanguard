@@ -101,7 +101,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pulse: {
     name: 'PULSE BLASTER', price: 40, score: 1, icon: 'icon_pulse', texture: 'bullet', dtype: 'kinetic', where: 'start', from: 1,
     desc: 'KINETIC. FAST STRAIGHT SHOTS. RELIABLE BUT NARROW.',
-    tune: { damage: [1, 0.2], interval: [140, -15], angle: [0, 0], gap: [6, 0], speed: [300, 10] },
+    tune: { damage: [1, 0.2], interval: [140, -15], angle: [0, 0], gap: [0, 0], speed: [300, 10] },
     levels: { shots: [1, 1, 1, 1, 2] },
     stats: tunedStats,
   },
@@ -116,7 +116,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   twin: {
     name: 'TWIN LASER', price: 150, score: 3, icon: 'icon_twin', texture: 'laser', dtype: 'laser', where: 'level', from: 2,
     desc: 'LASER. TWO FAST PARALLEL BEAMS, 3 AT LV 3. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.',
-    tune: { damage: [0.75, 0.1], interval: [170, -12.5], angle: [0, -0.5], gap: [6, 0], speed: [450, 10] },
+    tune: { damage: [0.75, 0.1], interval: [170, -12.5], angle: [0, 0.5], gap: [6, 0], speed: [450, 10] },
     levels: { shots: [2, 2, 3, 3, 4] },
     stats: tunedStats,
   },
@@ -181,7 +181,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fx: 'seek', desc: 'EXPLOSIVE. FAST LITTLE MISSILES OUT TO THE SIDES THAT SEEK ENEMIES THERE. TINY BLAST.',
     // Shots go straight out to each side: `shots` is how many a side, fanned
     // evenly across `angle` degrees centred on straight out (0 = all straight out).
-    tune: { damage: [0.5, 0.05], interval: [300, 0], angle: [30, -2], speed: [260, 5], splash: [6, 1], turn: [7, 0.5] },
+    tune: { damage: [0.5, 0.05], interval: [300, 0], angle: [15, 0], speed: [260, 5], splash: [6, 1], turn: [7, 0.5] },
     levels: { shots: [1, 2, 4, 5, 7] },
     stats(lv) {
       const n = Math.max(1, Math.round(this.levels!.shots[lv - 1]));
@@ -206,18 +206,18 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   shield: { name: 'SHIELD CELL', price: 75, icon: 'icon_shield', cap: 2, desc: 'BLOCKS ALL DAMAGE FOR 5 SECONDS.', tune: { time: 5000 } },
   overdrive: { name: 'OVERDRIVE CELL', price: 75, icon: 'icon_overdrive', cap: 3, desc: 'DOUBLE FIRE RATE FOR 5 SECONDS.', tune: { time: 5000, rate: 2 } },
   cluster: { name: 'CLUSTER BOMB', price: 100, icon: 'icon_cluster', cap: 2, desc: 'DROPS 10 BOMBLETS IN A CONE AHEAD. HALF DAMAGE TO BOSSES.',
-    tune: { bomblets: 10, angle: 7, damage: 10, splash: 10, bossShare: 0.5 },
+    tune: { bomblets: 10, angle: 10, damage: 15, splash: 20, bossShare: 0.5 },
   },
   emp: { name: 'EMP PULSE', price: 75, icon: 'icon_emp', cap: 2, desc: 'STUNS MACHINES AND STRIPS SHIELDS ON SCREEN FOR 5 SECONDS.', tune: { stun: 5000 } },
-  decoy: { name: 'DECOY FLARE', price: 75, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.', tune: { time: 5000 } },
+  decoy: { name: 'DECOY FLARE', price: 50, icon: 'icon_decoy', cap: 3, desc: 'AIMED SHOTS, SEEKERS AND LUNGES CHASE THE FLARE FOR 5 SECONDS.', tune: { time: 5000 } },
   drone: { name: 'REPAIR DRONE', price: 125, icon: 'icon_drone', cap: 2, desc: 'HEALS 1 HEALTH EVERY 4 SECONDS FOR 20 SECONDS.',
     tune: { heal: 1, every: 4000, time: 20000 },
   },
   fullrepair: { name: 'FULL REPAIR', price: 200, score: 4, icon: 'icon_fullrepair', cap: 1, rare: true, desc: 'RESTORES ALL HEALTH.' },
   nova: { name: 'NOVA BOMB', price: 125, score: 7, icon: 'icon_nova', cap: 1, rare: true, desc: 'BLASTS EVERYTHING ON SCREEN AND CLEARS ENEMY SHOTS.', tune: { damage: 16 } },
-  warp: { name: 'TIME WARP', price: 75, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 5 SECONDS.', tune: { time: 5000, slow: 0.5 } },
+  warp: { name: 'TIME WARP', price: 50, score: 5, icon: 'icon_warp', cap: 1, rare: true, desc: 'ENEMIES AND THEIR SHOTS MOVE AT HALF SPEED FOR 5 SECONDS.', tune: { time: 5000, slow: 0.5 } },
   rewind: {
-    name: 'REWIND BEACON', price: 250, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
+    name: 'REWIND BEACON', price: 100, score: 9, icon: 'icon_rewind', cap: 1, rare: true,
     desc: 'IF YOUR SHIP IS DESTROYED, RESTART AT THE LAST VENDOR WITH FULL HEALTH.',
   },
 };
@@ -285,7 +285,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   burst: {
     name: '360 BURST', price: 450, score: 7, icon: 'icon_burst', from: 10, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: LEAVES A POD THAT FIRES RINGS OF SHOTS IN EVERY DIRECTION.', levelUp: 'ONE MORE RING, MORE SHOTS, HITTING HARDER. IT BLOWS UP AT LV 3, AND THROWS BOMBLETS AT LV 5.',
+    desc: 'SUPPLY CRATES: LEAVES A POD THAT FIRES RINGS OF SHOTS IN EVERY DIRECTION.', levelUp: 'ONE MORE RING, MORE SHOTS, HITTING HARDER. IT BLOWS UP FROM LV 2, AND THROWS BOMBLETS FROM LV 4.',
   },
   antimissile: {
     name: 'ANTI-MISSILE', price: 500, score: 8, icon: 'icon_antimissile', from: 9, where: 'base',
@@ -329,7 +329,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   cargo: {
     name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
-    desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 2%.', levelUp: '1 MORE PER SLOT.',
+    desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 10%.', levelUp: '1 MORE PER SLOT, AND 1% LESS SLOWDOWN.',
   },
   radar: {
     name: 'SHOT RADAR', price: 400, score: 6, icon: 'icon_radar', from: 6, where: 'base',
@@ -359,14 +359,14 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // vortexDamp: how fast shots and credits inside it lose speed, so they don't slingshot out (per second).
   // stun: ms enemies it swaps are stunned for (none for now: they fly on, and the vortex pulls them).
   // vortexSpread: px/s enemies a vortex has held drift apart afterward, so they don't stay bunched up.
-  blink: { tune: { safe: [750, 50], radius: [30, 3], stun: [0, 0], vortex: [2000, 250], vortexPull: [60, 8], vortexReach: [70, 5], vortexDamp: [2.5, 0], vortexSpread: [16, 0] } },
+  blink: { tune: { safe: [750, 50], radius: [30, 5], stun: [0, 0], vortex: [2000, 250], vortexPull: [50, 10], vortexReach: [70, 5], vortexDamp: [2, 0.25], vortexSpread: [16, 0] } },
   afterburner: { tune: { burn: [2200, 400], ram: [3, 1] } },
   roll: { tune: { spin: [600, 120] } },
   // A pod that fires `bursts` rings, `gap` ms apart, popping as it fires the last: with a
-  // blast (blastRadius px, blastDamage) from level 3, and `bombs` cluster bomblets as well at 5.
+  // blast (blastRadius px, blastDamage) from level 2, and `bombs` cluster bomblets as well from 4.
   burst: {
-    tune: { shots: [12, 2], damage: [1, 0.2], gap: [500, 0] },
-    levels: { bursts: [2, 3, 4, 5, 6], blastRadius: [0, 0, 20, 20, 20], blastDamage: [0, 0, 10, 10, 10], bombs: [0, 0, 0, 0, 5] },
+    tune: { shots: [16, 1], damage: [2.5, 0.2], gap: [400, -50] },
+    levels: { bursts: [2, 3, 5, 7, 10], blastRadius: [0, 15, 20, 25, 30], blastDamage: [0, 5, 10, 15, 20], bombs: [0, 0, 0, 10, 25] },
   },
   antimissile: { tune: { interval: [900, -75], radius: [45, 5] }, levels: { targets: [1, 1, 2, 2, 3] } },
   // Scorch is extra plasma damage on the hit (a share of it); a burn time of 0 means no burn.
@@ -379,12 +379,12 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   booster: { tune: { bonus: [1.25, 0.25] } }, // credit drops multiplied by this
   nullifier: { tune: { damage: [1.05, 0.05] } }, // every weapon hit multiplied by this, whatever the target takes
   // extra: items each slot holds beyond the item's own max; slow: speed lost per item carried beyond it.
-  cargo: { tune: { extra: [1, 1], slow: [0.02, 0] } },
+  cargo: { tune: { extra: [1, 1], slow: [0.1, -0.01] } },
   // collect: ms it soaks up shots and lasers (each laser counts once); reach and pull: the
   // radius (px) it drags travelling shots in from, and how hard (px/s each second);
   // mult: beam damage per thing soaked up (ignores weakness and resistance);
   // radius: the blast around the ship that wipes enemy shots as it fires (px).
-  redirect: { tune: { collect: [2000, 250], reach: [40, 5], pull: [300, 50], mult: [0.5, 0.1], radius: [20, 5] } },
+  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], mult: [1, 0.25], radius: [20, 5] } },
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
   // hitbox that counts as a near miss; color 1: lines turn teal (near miss) or red (hit).
   radar: { tune: { lineDist: [100, 15], near: [5, 0] }, levels: { color: [0, 0, 1, 1, 1] } },
@@ -405,7 +405,7 @@ export const RADAR = {
 // `every` ms give or take up to `vary` ms (the first of a level in half that), falling at `speed` px/s. With two, the second slot's first
 // crate comes halfway through the first slot's second wait, so they stay apart.
 // A level can switch them off for a segment (LevelDef.noCrates).
-export const CRATES = { every: 20000, vary: 5000, speed: 21 };
+export const CRATES = { every: 15000, vary: 5000, speed: 20 };
 // The gear that comes in crates (the active ones), for the crate art.
 export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst', 'redirect'];
 
