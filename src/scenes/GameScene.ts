@@ -98,7 +98,7 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
-const GLOW_SCALE = 0.7; // Energy Redirect's glow size at every stage
+const GLOW_SCALE = 1.3; // Energy Redirect's glow size at every stage
 const REDIRECT_FULL = 20; // shots soaked up for Energy Redirect's glow at its biggest and brightest
 const TAP_MOVE = 6; // px a press can move and still be a tap
 const TAP_MS = 300; // ... and how long it can last
