@@ -24,6 +24,7 @@ import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
+import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
@@ -185,7 +186,7 @@ export class GameScene extends Phaser.Scene {
   // Each player shot's damage, type and look, kept outside the shot itself:
   // bosses read it after destroying the shot, when its data is already gone.
   // fx and incend (Incendiary Ammo's level) mirror the shot's own data.
-  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean; lv: number; fx?: string; incend?: number }>();
+  private shotInfo = new WeakMap<object, { dmg: number; dtype: DType; blob: boolean; lv: number; fx?: string; incend?: number; pool?: { left: number } }>();
   private scroll!: ReturnType<typeof starfield>;
   private scenery: Phaser.GameObjects.TileSprite | null = null;
   private planet: Phaser.GameObjects.Image | null = null;
@@ -1177,6 +1178,22 @@ export class GameScene extends Phaser.Scene {
         if (this.redirectHeld) this.fireRedirect();
         if (this.redirectUntil === 0) { this.redirectCount = 0; this.redirectLasers.clear(); }
         this.redirectUntil = now + gearStats.redirect(lv).collect;
+        break;
+      }
+      case 'lightning': {
+        this.dragFrom = null;
+        this.tapFrom = null;
+        const st = gearStats.lightning(lv);
+        this.scene.pause();
+        this.scene.launch('Lightning', {
+          ship: { x: p.x, y: p.y }, dist: st.dist, reach: st.reach, orb: st.orb,
+          vanish: () => p.setVisible(false),
+          done: (path: Pt[], ptr: Phaser.Input.Pointer | null) => {
+            this.scene.stop('Lightning');
+            this.scene.resume();
+            this.lightningStrike(path, ptr);
+          },
+        });
         break;
       }
       case 'burst': {
@@ -2366,6 +2383,52 @@ export class GameScene extends Phaser.Scene {
     if (this.boss) this.setFx(this.shot(x, top, 'bullet', 0, 1800, dmg, 'kinetic'), 'redirect').setVisible(false);
   }
 
+  // Lightning Round, once the orb has run the drawn path and play goes on: the
+  // ship is back at the end, the path flashes with bolts popping off it, and
+  // every enemy it touches is destroyed. A boss it touches takes `boss` damage,
+  // once, through still, unseen shots along the path (bosses take hits through
+  // their own shot checks), gone a moment later.
+  private lightningStrike(path: Pt[], ptr: Phaser.Input.Pointer | null) {
+    const st = gearStats.lightning(gearLevel(this.state, 'lightning'));
+    const p = this.player;
+    const end = path[path.length - 1];
+    p.setPosition(end.x, end.y).setVisible(true);
+    this.invulnUntil = Math.max(this.invulnUntil, this.time.now + st.safe);
+    // A finger still down steers on from where the ship landed.
+    if (ptr?.isDown) this.dragFrom = { id: ptr.id, px: ptr.x, py: ptr.y, sx: end.x, sy: end.y, tx: end.x, ty: end.y };
+
+    const g = this.add.graphics().setDepth(12).setBlendMode(Phaser.BlendModes.ADD);
+    const stroke = (w: number, c: number) => {
+      g.lineStyle(w, c, 1).beginPath();
+      path.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)));
+      g.strokePath();
+    };
+    stroke(3, 0xa4e4fc);
+    stroke(1, 0xfcfcfc);
+    this.tweens.add({ targets: g, alpha: 0, duration: 140, ease: 'Stepped', easeParams: [3], onComplete: () => g.destroy() });
+    const total = pathLength(path);
+    for (let s = Phaser.Math.Between(0, 4); s < total; s += Phaser.Math.Between(6, 10)) {
+      const q = pointAlong(path, s);
+      const bolt = this.add.image(q.x + Phaser.Math.Between(-2, 2), q.y + Phaser.Math.Between(-2, 2), 'lbolt')
+        .setDepth(12).setFlipX(Math.random() < 0.5).setAngle(Phaser.Math.Between(0, 3) * 90).setVisible(false);
+      this.time.delayedCall(Phaser.Math.Between(0, 90), () => bolt.setVisible(true));
+      this.time.delayedCall(Phaser.Math.Between(110, 150), () => bolt.destroy());
+    }
+
+    for (const e of (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).slice()) {
+      if (!e.active) continue;
+      if (distToPath(path, e.x, e.y) <= Math.min(e.displayWidth, e.displayHeight) / 2 + st.width) this.killEnemy(e, true);
+    }
+    if (this.boss || this.treasure) {
+      const pool = { left: st.boss };
+      for (let s = 0; s <= total; s += 3) {
+        const q = pointAlong(path, s);
+        const t = this.setFx(this.shot(q.x, q.y, 'px', 0, 0, st.boss, 'kinetic'), 'lightning').setVisible(false);
+        this.shotInfo.get(t)!.pool = pool;
+      }
+    }
+  }
+
   // A shot or laser soaked up by Energy Redirect.
   private soak(x: number, y: number) {
     this.redirectCount++;
@@ -2782,6 +2845,7 @@ export class GameScene extends Phaser.Scene {
           if (t > 0.35) b.destroy();
           break;
         case 'tick':
+        case 'lightning':
           if (t > 0.05) b.destroy();
           break;
         case 'bomb':
@@ -2958,6 +3022,7 @@ export class GameScene extends Phaser.Scene {
     const info = this.shotInfo.get(b);
     const fx = info?.fx;
     if (fx === 'redirect') return info!.dmg; // exactly what Energy Redirect soaked up
+    if (fx === 'lightning') { const n = info!.pool!.left; info!.pool!.left = 0; return n; } // Lightning Round: once per strike
     if (fx !== 'tick') {
       if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
       this.hitFx(b);
@@ -2974,7 +3039,7 @@ export class GameScene extends Phaser.Scene {
     const d = e.getData('e') as EnemyData;
     if (d.cloaked) return; // shots pass through a cloaked Phantom
     const fx = b.getData('fx');
-    if (fx === 'tick' || fx === 'redirect' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; Energy Redirect's boss shot; flak shrapnel past its first target
+    if (fx === 'tick' || fx === 'redirect' || fx === 'lightning' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; Energy Redirect's boss shot; flak shrapnel past its first target
     const lv = this.shotInfo.get(b)?.lv ?? 1;
     const dtype = (b.getData('dtype') as DType) ?? 'kinetic';
     let dmg = (b.getData('dmg') as number) ?? 1;
