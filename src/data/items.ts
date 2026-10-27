@@ -387,7 +387,7 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // widthMin/Max: the beam's width (px), and glowMin/Max: the glow's radius (px), with 1 shot
   // soaked up and with 20 (REDIRECT_FULL in GameScene), in between for counts between.
   // damp: how fast shots it pulls lose speed, like Blink Drive's vortex (per second).
-  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5], widthMin: [3, 1], widthMax: [8, 2], glowMin: [5.5, 0], glowMax: [23.5, 0] } },
+  redirect: { tune: { collect: [5000, 500], reach: [40, 5], pull: [150, 75], damp: [2.5, 0.25], mult: [1.5, 0.5], radius: [35, 5], widthMin: [5, 2.5], widthMax: [15, 5], glowMin: [8, 1], glowMax: [16, 1.5] } },
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
   // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
