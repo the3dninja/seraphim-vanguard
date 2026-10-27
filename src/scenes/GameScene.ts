@@ -2298,11 +2298,17 @@ export class GameScene extends Phaser.Scene {
     this.redirectText?.destroy();
     this.redirectText = null;
     if (this.phase !== 'action') return;
+    // A filled pink disc the size of the blast pulses out once, and each shot it
+    // clears pops into small pink bits.
+    this.impact.setParticleTint([0xfcfcfc, 0xf878f8, 0xf878f8]);
     for (const b of this.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
-      if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.sparks.explode(2, b.x, b.y); b.destroy(); }
+      if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.impact.explode(5, b.x, b.y); b.destroy(); }
     }
-    const ring = this.add.circle(p.x, p.y, st.radius).setStrokeStyle(2, 0xf878f8).setDepth(12).setScale(0.2);
-    this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    const disc = this.add.circle(p.x, p.y, st.radius, 0xf878f8, 0.5).setDepth(12).setScale(0.5);
+    this.tweens.chain({ targets: disc, tweens: [
+      { scale: 1.08, duration: 110, ease: 'Quad.easeOut' },
+      { scale: 1, alpha: 0, duration: 170, ease: 'Quad.easeIn' },
+    ], onComplete: () => disc.destroy() });
     this.redirectHeld = this.redirectCount > 0;
     if (this.redirectHeld) this.tipOnce('redirectTap', 'TAP TO FIRE');
   }
