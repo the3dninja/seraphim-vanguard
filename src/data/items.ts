@@ -397,9 +397,10 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
   // dist: px of path the player can draw; reach: how near the ship (px) the drawing must start;
-  // boss: damage to a boss the path touches (exact, once); orb: ms the orb takes along the path;
-  // width: px either side of the path that touches; safe: ms untouchable after landing.
-  lightning: { tune: { dist: [75, 12.5], reach: [24, 0], boss: [20, 3], orb: [300, 0], width: [2, 0], safe: [500, 0] } },
+  // boss: damage to a boss the path touches (exact, once); orbSpeed: px/s the orb runs the path at;
+  // width: px either side of the path that touches; safe: ms untouchable after landing;
+  // thick: px the path's flash swells to; boltSize: px tall the bolts popping off it are.
+  lightning: { tune: { dist: [75, 12.5], reach: [24, 0], boss: [20, 3], orbSpeed: [250, 0], width: [2, 0], safe: [500, 0], thick: [5, 0], boltSize: [8, 0] } },
 };
 
 // Shot Radar's lines: on (1) or off (0, for now: it plays better without), from which level they show, and from which they
@@ -458,7 +459,7 @@ export const gearStats = {
   cargo: gs<'extra' | 'slow'>('cargo'),
   redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius' | 'widthMin' | 'widthMax' | 'glowMin' | 'glowMax'>('redirect'),
   radar: gs<'lineDist' | 'near'>('radar'),
-  lightning: gs<'dist' | 'reach' | 'boss' | 'orb' | 'width' | 'safe'>('lightning'),
+  lightning: gs<'dist' | 'reach' | 'boss' | 'orbSpeed' | 'width' | 'safe' | 'thick' | 'boltSize'>('lightning'),
 };
 
 // A weapon's shot look at a level.

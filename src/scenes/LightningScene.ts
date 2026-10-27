@@ -8,7 +8,7 @@ interface LightningData {
   ship: Pt; // where the ship is
   dist: number; // px of path to draw
   reach: number; // the drawing starts this near the ship
-  orb: number; // ms the orb takes along the path
+  orb: number; // the orb's speed along the path (px/s)
   vanish: () => void; // the ship disappears
   done: (path: Pt[], pointer: Phaser.Input.Pointer | null) => void; // the orb is at the end
 }
@@ -130,7 +130,7 @@ export class LightningScene extends Phaser.Scene {
     const total = pathLength(this.path);
     const at = { t: 0 };
     this.tweens.add({
-      targets: at, t: 1, duration: this.d.orb,
+      targets: at, t: 1, duration: (total / this.d.orb) * 1000,
       onUpdate: () => { const q = pointAlong(this.path, at.t * total); orb.setPosition(q.x, q.y); },
       onComplete: () => this.d.done(this.path, p),
     });
