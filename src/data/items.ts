@@ -325,7 +325,7 @@ export const GEAR: Record<GearId, GearDef> = {
   },
   redirect: {
     name: 'ENERGY REDIRECT', price: 500, score: 7, icon: 'icon_redirect', from: 9, where: 'level', active: true,
-    desc: 'SUPPLY CRATES: SOAKS UP ENEMY SHOTS AND LASERS FOR A MOMENT, PULLING NEARBY SHOTS IN, THEN FIRES THEM BACK AS A BEAM AHEAD AND WIPES SHOTS AROUND YOU.', levelUp: 'LONGER, STRONGER PULL, A HARDER BEAM, A WIDER WIPE.',
+    desc: 'SUPPLY CRATES: SOAKS UP ENEMY SHOTS AND LASERS FOR A MOMENT, PULLING NEARBY SHOTS IN, THEN FIRES THEM BACK AS A BEAM AHEAD AND WIPES SHOTS AROUND YOU.', levelUp: 'LONGER, STRONGER PULL, A HARDER AND WIDER BEAM, A WIDER WIPE.',
   },
   cargo: {
     name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
@@ -383,9 +383,9 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // collect: ms it soaks up shots and lasers (each laser counts once); reach and pull: the
   // radius (px) it drags travelling shots in from, and how hard (px/s each second);
   // mult: beam damage per thing soaked up (ignores weakness and resistance);
-  // radius: the blast around the ship that wipes enemy shots as it fires (px).
+  // radius: the blast around the ship that wipes enemy shots as it fires (px); width: the beam's (px).
   // damp: how fast shots it pulls lose speed, like Blink Drive's vortex (per second).
-  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5] } },
+  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5], width: [8, 2] } },
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
   // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
@@ -445,7 +445,7 @@ export const gearStats = {
   booster: gs<'bonus'>('booster'),
   nullifier: gs<'damage'>('nullifier'),
   cargo: gs<'extra' | 'slow'>('cargo'),
-  redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius'>('redirect'),
+  redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius' | 'width'>('redirect'),
   radar: gs<'lineDist' | 'near'>('radar'),
 };
 

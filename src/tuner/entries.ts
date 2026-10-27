@@ -99,6 +99,7 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'redirect.damp': { label: 'DAMPING (HIGHER SLOWS THE SHOTS IT PULLS MORE)', step: 0.25 },
   mult: { label: 'BEAM DAMAGE PER SHOT SOAKED UP (EXACT, IGNORES WEAKNESS AND RESISTANCE)', step: 0.05 },
   'redirect.radius': { label: 'SHOT-WIPING BLAST RADIUS (PX)', step: 1 },
+  'redirect.width': { label: 'BEAM WIDTH (PX)', step: 1 },
   'radar.lineDist': { label: 'LINE SHOWS ONCE A SHOT IS THIS CLOSE (PX)', step: 5 },
   'radar.near': { label: 'NEAR MISS: PX AROUND THE HITBOX', step: 1 },
   'rear.damage': { label: 'BACKWARD SHOT DAMAGE (0.5 = 50% OF THE WEAPON\'S)', step: 0.025 },
