@@ -23,6 +23,8 @@ export const SPRITES3: Record<string, string[]> = {
     '.KGDDDDK.',
     '..DDKDD..',
   ],
+  // Lightning Round's bolts, flashing along its path.
+  lbolt: ['...WY', '..WY.', '.WWWY', '..WY.', '.WY..', 'WY...'],
   // The Hollow.
   spore: [
     '...NNNN...',
@@ -204,6 +206,7 @@ export const SPRITES3: Record<string, string[]> = {
   icon_nullifier: ['..PPPP..', '.P....P.', 'P....W.P', 'P...W..P', 'P..W...P', 'P.W....P', '.P....P.', '..PPPP..'],
   icon_redirect: ['...F....', '..FWF...', '.F.W.F..', '...W....', 'F..W..F.', '.F.W.F..', '..FFF...', 'F.....F.'],
   icon_radar: ['..TTTT..', '.T....T.', 'T..TT..T', 'T.T..WT.', 'T.T.T..T', 'T..TT..T', '.T....T.', '..TTTT..'],
+  icon_lightning: ['....YW..', '...YW...', '..YW....', '.YWWWY..', '...YW...', '..YW....', '.YW.....', 'YW......'],
   icon_cargo: ['.ffffff.', 'fbbbbbbf', 'fbbbTbbf', 'fbbTTTbf', 'fbbbTbbf', 'fbbbbbbf', 'feeeeeef', '.ffffff.'],
 
   // Item icons.

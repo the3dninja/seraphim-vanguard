@@ -106,6 +106,12 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   'radar.lineDist': { label: 'LINE SHOWS ONCE A SHOT IS THIS CLOSE (PX)', step: 5 },
   'radar.near': { label: 'NEAR MISS: PX AROUND THE HITBOX', step: 1 },
   'rear.damage': { label: 'BACKWARD SHOT DAMAGE (0.5 = 50% OF THE WEAPON\'S)', step: 0.025 },
+  'lightning.dist': { label: 'PATH LENGTH THE PLAYER CAN DRAW (PX)', step: 2.5 },
+  'lightning.reach': { label: 'DRAWING MUST START THIS NEAR THE SHIP (PX)', step: 2 },
+  'lightning.boss': { label: 'DAMAGE TO A BOSS THE PATH TOUCHES (EXACT, ONCE)', step: 1 },
+  'lightning.orb': { label: 'MS THE ORB TAKES ALONG THE PATH', step: 25 },
+  'lightning.width': { label: 'PX EITHER SIDE OF THE PATH THAT COUNT AS TOUCHING', step: 0.5 },
+  'lightning.safe': { label: 'MS UNTOUCHABLE AFTER LANDING', step: 50 },
 };
 
 // Numbers set level by level: what each means, the lowest and highest it can

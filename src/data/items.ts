@@ -6,7 +6,7 @@ export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' |
   | 'decoy' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
   | 'antimissile' | 'burst' | 'incendiary' | 'ioncoat' | 'shaped' | 'overcharge' | 'scanner' | 'rear'
-  | 'booster' | 'nullifier' | 'cargo' | 'redirect' | 'radar';
+  | 'booster' | 'nullifier' | 'cargo' | 'redirect' | 'radar' | 'lightning';
 export type KitId = 'wkit' | 'gkit';
 
 // Every weapon deals one damage type. Enemies take double damage from types
@@ -327,6 +327,11 @@ export const GEAR: Record<GearId, GearDef> = {
     name: 'ENERGY REDIRECT', price: 500, score: 7, icon: 'icon_redirect', from: 9, where: 'level', active: true,
     desc: 'SUPPLY CRATES: SOAKS UP ENEMY SHOTS AND LASERS FOR A MOMENT, PULLING NEARBY SHOTS IN, THEN FIRES THEM BACK AS A BEAM AHEAD AND WIPES SHOTS AROUND YOU.', levelUp: 'LONGER, STRONGER PULL, A HARDER AND WIDER BEAM, A WIDER WIPE.',
   },
+  lightning: {
+    name: 'LIGHTNING ROUND', price: 550, score: 8, icon: 'icon_lightning', from: 10, where: 'level', active: true,
+    desc: 'SUPPLY CRATES: TIME STOPS. DRAW A PATH FROM YOUR SHIP: LIGHTNING STRIKES ALONG IT, DESTROYING EVERY ENEMY IT TOUCHES AND HURTING BOSSES, AND YOUR SHIP LANDS AT ITS END.',
+    levelUp: 'A LONGER PATH, AND MORE DAMAGE TO BOSSES.',
+  },
   cargo: {
     name: 'CARGO BAY EXPANSION', price: 350, score: 4, icon: 'icon_cargo', from: 6, where: 'base',
     desc: 'EACH ITEM SLOT HOLDS 1 MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU 10%.', levelUp: '1 MORE PER SLOT, AND 1% LESS SLOWDOWN.',
@@ -391,6 +396,10 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
   // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
+  // dist: px of path the player can draw; reach: how near the ship (px) the drawing must start;
+  // boss: damage to a boss the path touches (exact, once); orb: ms the orb takes along the path;
+  // width: px either side of the path that touches; safe: ms untouchable after landing.
+  lightning: { tune: { dist: [75, 12.5], reach: [24, 0], boss: [20, 3], orb: [300, 0], width: [2, 0], safe: [500, 0] } },
 };
 
 // Shot Radar's lines: on (1) or off (0, for now: it plays better without), from which level they show, and from which they
@@ -413,7 +422,7 @@ export const RADAR = {
 // A level can switch them off for a segment (LevelDef.noCrates).
 export const CRATES = { every: 15000, vary: 5000, speed: 20 };
 // The gear that comes in crates (the active ones), for the crate art.
-export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst', 'redirect'];
+export const CRATE_GEAR: GearId[] = ['dodge', 'blink', 'afterburner', 'roll', 'burst', 'redirect', 'lightning'];
 
 // A gear's numbers at a level, by name. Counts are rounded to whole numbers.
 const GEAR_COUNTS = new Set(['health', 'hits', 'drones', 'shots', 'targets', 'every', 'bursts', 'bombs', 'extra']);
@@ -449,6 +458,7 @@ export const gearStats = {
   cargo: gs<'extra' | 'slow'>('cargo'),
   redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius' | 'widthMin' | 'widthMax' | 'glowMin' | 'glowMax'>('redirect'),
   radar: gs<'lineDist' | 'near'>('radar'),
+  lightning: gs<'dist' | 'reach' | 'boss' | 'orb' | 'width' | 'safe'>('lightning'),
 };
 
 // A weapon's shot look at a level.
