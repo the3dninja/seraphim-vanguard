@@ -1186,7 +1186,7 @@ export class GameScene extends Phaser.Scene {
         const st = gearStats.lightning(lv);
         this.scene.pause();
         this.scene.launch('Lightning', {
-          ship: { x: p.x, y: p.y }, dist: st.dist, reach: st.reach, orb: st.orb,
+          ship: { x: p.x, y: p.y }, dist: st.dist, reach: st.reach, orb: st.orbSpeed,
           vanish: () => p.setVisible(false),
           done: (path: Pt[], ptr: Phaser.Input.Pointer | null) => {
             this.scene.stop('Lightning');
@@ -2397,19 +2397,31 @@ export class GameScene extends Phaser.Scene {
     // A finger still down steers on from where the ship landed.
     if (ptr?.isDown) this.dragFrom = { id: ptr.id, px: ptr.x, py: ptr.y, sx: end.x, sy: end.y, tx: end.x, ty: end.y };
 
+    // The path flashes: it swells from a thin line to `thick` px and back,
+    // flickering, a white core in a pale blue glow.
     const g = this.add.graphics().setDepth(12).setBlendMode(Phaser.BlendModes.ADD);
     const stroke = (w: number, c: number) => {
       g.lineStyle(w, c, 1).beginPath();
       path.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)));
       g.strokePath();
     };
-    stroke(3, 0xa4e4fc);
-    stroke(1, 0xfcfcfc);
-    this.tweens.add({ targets: g, alpha: 0, duration: 140, ease: 'Stepped', easeParams: [3], onComplete: () => g.destroy() });
+    const flash = { t: 0 };
+    this.tweens.add({
+      targets: flash, t: 1, duration: 160,
+      onUpdate: () => {
+        g.clear();
+        if (Math.floor(flash.t * 6) % 3 === 2) return; // flicker
+        const w = 1 + (st.thick - 1) * Math.sin(flash.t * Math.PI);
+        stroke(w, 0xa4e4fc);
+        stroke(Math.max(1, w * 0.4), 0xfcfcfc);
+      },
+      onComplete: () => g.destroy(),
+    });
     const total = pathLength(path);
+    const boltScale = st.boltSize / 6; // the bolt sprite is 6 px tall
     for (let s = Phaser.Math.Between(0, 4); s < total; s += Phaser.Math.Between(6, 10)) {
       const q = pointAlong(path, s);
-      const bolt = this.add.image(q.x + Phaser.Math.Between(-2, 2), q.y + Phaser.Math.Between(-2, 2), 'lbolt')
+      const bolt = this.add.image(q.x + Phaser.Math.Between(-2, 2), q.y + Phaser.Math.Between(-2, 2), 'lbolt').setScale(boltScale)
         .setDepth(12).setFlipX(Math.random() < 0.5).setAngle(Phaser.Math.Between(0, 3) * 90).setVisible(false);
       this.time.delayedCall(Phaser.Math.Between(0, 90), () => bolt.setVisible(true));
       this.time.delayedCall(Phaser.Math.Between(110, 150), () => bolt.destroy());
