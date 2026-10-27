@@ -98,7 +98,6 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
-const GLOW_SCALE = 1.3; // Energy Redirect's glow size at every stage
 const REDIRECT_FULL = 20; // shots soaked up for Energy Redirect's glow at its biggest and brightest
 const TAP_MOVE = 6; // px a press can move and still be a tap
 const TAP_MS = 300; // ... and how long it can last
@@ -2308,9 +2307,10 @@ export class GameScene extends Phaser.Scene {
     const g = this.redirectGlow;
     g.clear();
     if ((!this.redirectUntil && !this.redirectHeld) || this.phase !== 'action') return;
-    const f = Math.min(1, this.redirectCount / REDIRECT_FULL);
+    const st = gearStats.redirect(gearLevel(this.state, 'redirect'));
+    const f = this.redirectFill();
     const pulse = 1 + 0.12 * Math.sin(this.time.now / (this.redirectHeld ? 90 : 160));
-    const r = (3.5 + f * 14.5) * pulse * GLOW_SCALE;
+    const r = Phaser.Math.Linear(st.glowMin, st.glowMax, f) * pulse;
     const a = 0.15 + f * 0.45;
     const { x, y } = this.player;
     const RINGS = 10;
@@ -2319,6 +2319,11 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(0xf878f8, a * 0.22).fillCircle(x, y, r * k);
     }
     g.fillStyle(0xfcfcfc, a * 0.6).fillCircle(x, y, Math.max(1.5, r * 0.25));
+  }
+
+  // How far Energy Redirect's count is from 1 shot (0) to REDIRECT_FULL (1), for its glow and beam.
+  private redirectFill() {
+    return Phaser.Math.Clamp((this.redirectCount - 1) / (REDIRECT_FULL - 1), 0, 1);
   }
 
   // Lets the held Energy Redirect go: a blast that wipes enemy shots around the
@@ -2336,7 +2341,7 @@ export class GameScene extends Phaser.Scene {
     // The beam.
     const dmg = this.redirectCount * st.mult;
     if (dmg <= 0) return;
-    const x = p.x, top = p.y - 6, w = st.width, core = Math.max(1, Math.round(w * 0.375));
+    const x = p.x, top = p.y - 6, w = Phaser.Math.Linear(st.widthMin, st.widthMax, this.redirectFill()), core = Math.max(1, Math.round(w * 0.375));
     const beam = this.add.graphics().setDepth(12);
     beam.fillStyle(0xf878f8, 0.7).fillRect(x - w / 2, 0, w, top);
     beam.fillStyle(0xfcfcfc, 1).fillRect(x - core / 2, 0, core, top);

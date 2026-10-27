@@ -383,9 +383,11 @@ export const GEAR_TUNE: Record<GearId, { tune: Record<string, Tuned>; levels?: R
   // collect: ms it soaks up shots and lasers (each laser counts once); reach and pull: the
   // radius (px) it drags travelling shots in from, and how hard (px/s each second);
   // mult: beam damage per thing soaked up (ignores weakness and resistance);
-  // radius: the blast around the ship that wipes enemy shots as it fires (px); width: the beam's (px).
+  // radius: the blast around the ship that wipes enemy shots as it fires (px).
+  // widthMin/Max: the beam's width (px), and glowMin/Max: the glow's radius (px), with 1 shot
+  // soaked up and with 20 (REDIRECT_FULL in GameScene), in between for counts between.
   // damp: how fast shots it pulls lose speed, like Blink Drive's vortex (per second).
-  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5], width: [8, 2] } },
+  redirect: { tune: { collect: [3000, 500], reach: [40, 5], pull: [300, 50], damp: [2, 0.25], mult: [1, 0.25], radius: [20, 5], widthMin: [3, 1], widthMax: [8, 2], glowMin: [5.5, 0], glowMax: [23.5, 0] } },
   // lineDist: px from the ship an enemy shot starts showing its line; near: px around the
   // hitbox that counts as a near miss. (Which levels show lines, and colored ones, is in RADAR.)
   radar: { tune: { lineDist: [100, 15], near: [7, 1] } },
@@ -445,7 +447,7 @@ export const gearStats = {
   booster: gs<'bonus'>('booster'),
   nullifier: gs<'damage'>('nullifier'),
   cargo: gs<'extra' | 'slow'>('cargo'),
-  redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius' | 'width'>('redirect'),
+  redirect: gs<'collect' | 'reach' | 'pull' | 'damp' | 'mult' | 'radius' | 'widthMin' | 'widthMax' | 'glowMin' | 'glowMax'>('redirect'),
   radar: gs<'lineDist' | 'near'>('radar'),
 };
 
