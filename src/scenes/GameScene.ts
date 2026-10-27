@@ -98,6 +98,7 @@ interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; 
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
 
 const SHIP_SPEED_KEYS = 110; // px/s with keyboard
+const GLOW_SCALE = 0.7; // Energy Redirect's glow size at every stage
 const REDIRECT_FULL = 20; // shots soaked up for Energy Redirect's glow at its biggest and brightest
 const TAP_MOVE = 6; // px a press can move and still be a tap
 const TAP_MS = 300; // ... and how long it can last
@@ -2309,7 +2310,7 @@ export class GameScene extends Phaser.Scene {
     if ((!this.redirectUntil && !this.redirectHeld) || this.phase !== 'action') return;
     const f = Math.min(1, this.redirectCount / REDIRECT_FULL);
     const pulse = 1 + 0.12 * Math.sin(this.time.now / (this.redirectHeld ? 90 : 160));
-    const r = (3.5 + f * 14.5) * pulse;
+    const r = (3.5 + f * 14.5) * pulse * GLOW_SCALE;
     const a = 0.15 + f * 0.45;
     const { x, y } = this.player;
     const RINGS = 10;
@@ -2335,13 +2336,13 @@ export class GameScene extends Phaser.Scene {
     // The beam.
     const dmg = this.redirectCount * st.mult;
     if (dmg <= 0) return;
-    const x = p.x, top = p.y - 6;
+    const x = p.x, top = p.y - 6, w = st.width, core = Math.max(1, Math.round(w * 0.375));
     const beam = this.add.graphics().setDepth(12);
-    beam.fillStyle(0xf878f8, 0.7).fillRect(x - 4, 0, 8, top);
-    beam.fillStyle(0xfcfcfc, 1).fillRect(x - 1, 0, 3, top);
+    beam.fillStyle(0xf878f8, 0.7).fillRect(x - w / 2, 0, w, top);
+    beam.fillStyle(0xfcfcfc, 1).fillRect(x - core / 2, 0, core, top);
     this.tweens.add({ targets: beam, alpha: 0, duration: 350, onComplete: () => beam.destroy() });
     for (const e of this.enemies.getChildren().slice() as Phaser.Physics.Arcade.Sprite[]) {
-      if (!e.active || e.y > top || e.y < -10 || Math.abs(e.x - x) > 4 + e.displayWidth / 2) continue;
+      if (!e.active || e.y > top || e.y < -10 || Math.abs(e.x - x) > w / 2 + e.displayWidth / 2) continue;
       this.damageEnemy(e, dmg, null);
     }
     // Bosses take it from a fast shot up the same line (see shotDamage); other enemies let it pass.
