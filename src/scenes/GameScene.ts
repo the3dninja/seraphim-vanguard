@@ -2292,11 +2292,18 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
-    // Gathering is over: whatever it soaked up is held until a tap fires it.
+    // Gathering is over: a blast wipes the enemy shots around the ship right
+    // away, and whatever it soaked up is held until a tap fires the beam.
     this.redirectUntil = 0;
     this.redirectText?.destroy();
     this.redirectText = null;
-    this.redirectHeld = this.redirectCount > 0 && this.phase === 'action';
+    if (this.phase !== 'action') return;
+    for (const b of this.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
+      if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.sparks.explode(2, b.x, b.y); b.destroy(); }
+    }
+    const ring = this.add.circle(p.x, p.y, st.radius).setStrokeStyle(2, 0xf878f8).setDepth(12).setScale(0.2);
+    this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    this.redirectHeld = this.redirectCount > 0;
     if (this.redirectHeld) this.tipOnce('redirectTap', 'TAP TO FIRE');
   }
 
@@ -2326,18 +2333,11 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp((this.redirectCount - 1) / (REDIRECT_FULL - 1), 0, 1);
   }
 
-  // Lets the held Energy Redirect go: a blast that wipes enemy shots around the
-  // ship, and the beam straight up.
+  // Lets the held Energy Redirect go: the beam straight up.
   private fireRedirect() {
     this.redirectHeld = false;
     const st = gearStats.redirect(gearLevel(this.state, 'redirect'));
     const p = this.player;
-    // The wipe.
-    for (const b of this.enemyBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
-      if (Phaser.Math.Distance.Between(b.x, b.y, p.x, p.y) <= st.radius) { this.sparks.explode(2, b.x, b.y); b.destroy(); }
-    }
-    const ring = this.add.circle(p.x, p.y, st.radius).setStrokeStyle(2, 0xf878f8).setDepth(12).setScale(0.2);
-    this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
     // The beam.
     const dmg = this.redirectCount * st.mult;
     if (dmg <= 0) return;
