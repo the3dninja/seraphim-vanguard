@@ -195,6 +195,7 @@ export class MawGate {
     }
     if (f) this.drawFinale(f);
     if (g.phase === 'action' && this.inEntry) this.hitEntry();
+    if (g.phase === 'action') this.blockShots();
   }
 
   // --- The way in ---------------------------------------------------------------
@@ -280,6 +281,25 @@ export class MawGate {
       const lo = Math.min(...xs) - 6, hi = Math.max(...xs) + 6;
       p.x = Phaser.Math.Clamp(p.x - lo < hi - p.x && lo > l + 6 ? lo : hi < r - 6 ? hi : lo, 6, W - 6);
       return;
+    }
+  }
+
+  // The structure stops the ship's shots (the Wave Beam passes through), but
+  // lets enemy shots by.
+  private blockShots() {
+    const g = this.g;
+    const bands = this.rings.map((rg) => this.s - rg.u);
+    if (this.fin) bands.push(STOP_Y - this.fin.d);
+    const onBand = (x: number, y: number) => bands.some((cy) => {
+      const dx = x - W / 2;
+      return Math.abs(dx) > GAP / 2 && Math.abs(Math.hypot(dx, y - cy) - R) < BAND + 1;
+    });
+    for (const b of g.playerBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
+      const fx = b.getData('fx');
+      if (!b.active || fx === 'wave' || fx === 'probe' || fx === 'blast') continue; // Mine Layer's unseen shots too
+      if (!(this.inEntry && this.solidAt(b.x, b.y)) && !onBand(b.x, b.y)) continue;
+      g.tink(b.x, b.y);
+      b.destroy();
     }
   }
 
@@ -433,7 +453,9 @@ export class MawGate {
     const g = this.g;
     if (!this.fin) return;
     this.fin.alarmUntil = this.t + flashes * 520;
-    for (let i = 0; i < flashes; i++) g.time.delayedCall(i * 520, () => g.cameras.main.flash(260, 200, 0, 0));
+    // An ambient red wash, not a full-screen flash.
+    const wash = g.add.rectangle(0, 0, W, H, 0xd82800, 0).setOrigin(0).setDepth(950);
+    g.tweens.add({ targets: wash, alpha: 0.3, duration: 130, yoyo: true, hold: 60, repeat: flashes - 1, repeatDelay: 140, onComplete: () => wash.destroy() });
     const t = text(g, W / 2, H / 2 - 10, msg, COLOR.red).setOrigin(0.5).setAlign('center').setDepth(1000)
       .setBackgroundColor('#000000').setPadding(3, 3, 3, 3);
     g.tweens.add({ targets: t, alpha: 0.15, yoyo: true, repeat: flashes, duration: 260, onComplete: () => t.destroy() });
