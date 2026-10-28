@@ -150,12 +150,9 @@ export class MawGate {
   at(y: number) {
     if (!this.inEntry) return { l: -99, r: W + 99 };
     const u = this.s - y;
-    return { l: edgeAt(L_KEYS, u) + this.wob(u), r: edgeAt(R_KEYS, u) - this.wob(u + 40) };
+    return { l: edgeAt(L_KEYS, u), r: edgeAt(R_KEYS, u) };
   }
 
-  private wob(u: number) {
-    return u > 344 && u < 1070 ? Math.sin(u / 29) * 2 + Math.max(0, Math.sin(u / 71)) * 4 : 0;
-  }
 
   // A piece's corners on screen right now.
   private piecePts(p: { u: number; pts: Pt[] }) {
@@ -208,61 +205,100 @@ export class MawGate {
   private drawEntry() {
     const gx = this.gfx;
     const pulse = 0.55 + 0.45 * Math.sin(this.t / 260);
-    for (let y = -2; y < H + 3; y += 3) {
+    const BAND = 13;
+    for (let y = -2; y < H + 3; y += 1) {
       const u = this.s - y;
       const { l, r } = this.at(y);
       if (l <= -2 && r >= W + 2) continue;
-      const mouth = u > MOUTH[0] && u < MOUTH[1];
-      const plate = Math.floor(u / 14) % 2 === 0;
+      const seam = ((Math.floor(u) % 16) + 16) % 16;
       for (const [x0, x1, edge] of [[0, l, l], [r, W, r]] as const) {
         if (x1 <= x0) continue;
-        const inner = edge === l ? 1 : -1;
-        gx.fillStyle(mouth ? (plate ? 0x2c0838 : 0x24062c) : plate ? 0x1c0418 : 0x160314, 1).fillRect(x0, y, x1 - x0, 3);
-        // A glowing seam along the inner edge, and a living vein just behind it.
-        gx.fillStyle(0xa40080, 1).fillRect(edge === l ? l - 2 : r, y, 2, 3);
-        gx.fillStyle(0xf878f8, 0.5 + 0.5 * pulse).fillRect(edge === l ? l - 1 : r, y, 1, Math.floor(u / 3) % 4 === 0 ? 3 : 1);
-        const vx = edge - inner * (9 + Math.round(Math.sin(u / 17) * 3));
-        if (vx > x0 && vx < x1) gx.fillStyle(0x4c0040, 1).fillRect(vx, y, 2, 3);
-        // Ribs across the wall where the plates meet.
-        if (Math.floor(u) % 14 < 3) gx.fillStyle(0x3c1c7c, 1).fillRect(x0, y, x1 - x0, 1);
+        const inw = edge === l ? -1 : 1; // into the wall
+        // Deep interior: dark plating.
+        const deep = (Math.floor(u / 16) + (edge === l ? 0 : 1)) % 2 ? 0x24062c : 0x1c0c3c;
+        gx.fillStyle(deep, 1).fillRect(x0, y, x1 - x0, 1);
+        // The band along the edge, like the gate ring: dark outline, purple body,
+        // a lighter stripe down the middle, pink at the edge.
+        const bx0 = edge === l ? Math.max(x0, l - BAND) : r, bx1 = edge === l ? l : Math.min(x1, r + BAND);
+        gx.fillStyle(0x3c1c7c, 1).fillRect(bx0, y, bx1 - bx0, 1);
+        const mid = edge + inw * Math.round(BAND / 2);
+        gx.fillStyle(0x6844fc, 1).fillRect(mid - 1, y, 2, 1);
+        gx.fillStyle(0xa40080, 1).fillRect(edge + inw * BAND, y, 1, 1);
+        gx.fillStyle(0x0c0010, 1).fillRect(edge + inw * (BAND + 1), y, 1, 1).fillRect(edge === l ? l - 2 : r + 1, y, 1, 1);
+        gx.fillStyle(0xf878f8, 1).fillRect(edge === l ? l - 1 : r, y, 1, 1);
+        // Seams between plates.
+        if (seam < 1) gx.fillStyle(0x0c0010, 1).fillRect(x0, y, x1 - x0, 1);
+        {
+          if (seam === 1) gx.fillStyle(0x6844fc, 0.7).fillRect(x0, y, x1 - x0, 1); // bevel: lit top edge
+          if (seam === 15) gx.fillStyle(0x0c0010, 0.6).fillRect(x0, y, x1 - x0, 1);
+          if (seam === 8) for (let x = Math.ceil(x0 / 8) * 8 + 3; x < x1; x += 8) if (Math.abs(x - edge) > BAND + 3) gx.fillStyle(0x6844fc, 1).fillRect(x, y, 1, 1);
+        }
+        {
+          // A lit conduit down the middle of the band.
+          const on = Math.floor((u + this.t / 12) / 6) % 4 !== 0;
+          gx.fillStyle(0x3cbcfc, on ? 0.9 : 0.35).fillRect(mid - 1, y, 2, 1);
+        }
       }
     }
-    // Runes set into the walls, and around the mouth.
-    for (let u = Math.ceil((this.s - H) / 46) * 46; u < this.s + 10; u += 46) {
+    // Knots outside the band, as on the ring.
+    for (let u = Math.ceil((this.s - H) / 32) * 32; u < this.s + 10; u += 32) {
       const y = this.s - u;
       const { l, r } = this.at(y);
-      const k = Math.floor(u / 46);
-      if (l > 14) this.glyph(gx, l - 10, y, k, 0xd800cc, 0.35 + 0.6 * pulse);
-      if (r < W - 14) this.glyph(gx, r + 7, y, k + 3, 0x3cbcfc, 0.35 + 0.6 * (1 - pulse));
+      const k = Math.floor(u / 32);
+      if (l > 14) {
+        if (k % 2 === 0) { gx.fillStyle(0x4c0040, 1).fillCircle(l - BAND - 3, y + 16, 3); gx.fillStyle(0xa40080, 1).fillRect(l - BAND - 4, y + 15, 1, 1); }
+      }
+      if (r < W - 14) {
+        if (k % 2 === 1) { gx.fillStyle(0x4c0040, 1).fillCircle(r + BAND + 3, y + 16, 3); gx.fillStyle(0xa40080, 1).fillRect(r + BAND + 2, y + 15, 1, 1); }
+      }
     }
     const my = this.s - (MOUTH[0] + MOUTH[1]) / 2;
-    if (my > -40 && my < H + 40) {
-      // The mouth: a ring of runes framing the opening, lit from inside.
+    if (my > -50 && my < H + 50) {
+      // The mouth: a ring segment like the gate's, framing the opening.
       for (const [a0, a1] of [[Math.PI * 1.16, Math.PI * 1.84], [Math.PI * 0.16, Math.PI * 0.84]]) {
-        gx.lineStyle(2, 0xa40080, 1).beginPath().arc(W / 2, my, 40, a0, a1).strokePath();
-        gx.lineStyle(1, 0xf878f8, 0.4 + 0.6 * pulse).beginPath().arc(W / 2, my, 43, a0, a1).strokePath();
+        gx.lineStyle(10, 0x0c0010, 1).beginPath().arc(W / 2, my, 44, a0, a1).strokePath();
+        gx.lineStyle(6, 0x3c1c7c, 1).beginPath().arc(W / 2, my, 44, a0, a1).strokePath();
+        gx.lineStyle(2, 0x6844fc, 1).beginPath().arc(W / 2, my, 43, a0, a1).strokePath();
+        gx.lineStyle(1, 0xa40080, 1).beginPath().arc(W / 2, my, 40, a0, a1).strokePath();
+        gx.lineStyle(1, 0xf878f8, 1).beginPath().arc(W / 2, my, 48, a0, a1).strokePath();
       }
       for (let i = 0; i < 14; i++) {
         const a = Math.PI * (1.2 + (i % 7) * 0.1) + (i >= 7 ? -Math.PI : 0);
-        this.glyph(gx, W / 2 + Math.cos(a) * 49 - 1, my + Math.sin(a) * 49 - 2, i, i % 2 ? 0x3cbcfc : 0xd800cc, 0.5 + 0.5 * Math.sin(this.t / 200 + i));
+        this.glyph(gx, W / 2 + Math.cos(a) * 44 - 1, my + Math.sin(a) * 44 - 2, i, 0x3cbcfc, 0.5 + 0.5 * Math.sin(this.t / 200 + i));
       }
-      for (const x of [8, 26, W - 31, W - 13]) this.glyph(gx, x, my - 2, x, 0xd800cc, 0.4 + 0.5 * pulse);
     }
-    // Girders and pillars.
+    // Girders and pillars: plated like the ring, with a pylon light at the tip.
     for (const p of PIECES) {
       const pts = this.piecePts(p);
-      if (pts.every((q) => q.y > H + 4) || pts.every((q) => q.y < -4)) continue;
-      gx.fillStyle(0x24062c, 1).fillPoints(pts, true);
-      gx.lineStyle(1, 0xa40080, 1).strokePoints(pts, true, true);
+      if (pts.every((q) => q.y > H + 6) || pts.every((q) => q.y < -6)) continue;
+      gx.lineStyle(3, 0x0c0010, 1).strokePoints(pts, true, true);
+      gx.fillStyle(0x3c1c7c, 1).fillPoints(pts, true);
       const cx = pts.reduce((n, q) => n + q.x, 0) / pts.length, cy = pts.reduce((n, q) => n + q.y, 0) / pts.length;
-      // A brighter spine, a rune, and a living knot at the root.
-      gx.lineStyle(1, 0x3c1c7c, 1).lineBetween(pts[0].x, pts[0].y, cx, cy);
-      this.glyph(gx, cx - 1, cy - 2, p.u, 0x3cbcfc, 0.5 + 0.5 * Math.sin(this.t / 180 + p.u));
-      const root = pts[0].x < W / 2 ? 20 : W - 20;
-      if (Math.abs(pts[0].x - root) < 1) {
-        gx.fillStyle(0x4c0040, 1).fillCircle(root + (root < W / 2 ? 4 : -4), cy, 6);
-        gx.fillStyle(0xa40080, 1).fillCircle(root + (root < W / 2 ? 3 : -3), cy - 2, 2);
+      const root = pts[0], tipI = pts.reduce((bi, q, i) => (Math.abs(q.x - root.x) > Math.abs(pts[bi].x - root.x) ? i : bi), 0);
+      const tip = pts[tipI];
+      const girderish = Math.abs(root.x - 20) < 1 || Math.abs(root.x - (W - 20)) < 1;
+      if (girderish) {
+        const ry = (pts[0].y + pts[pts.length - 1].y) / 2;
+        // Stripe down the middle, and seams across.
+        gx.lineStyle(2, 0x6844fc, 1).lineBetween(root.x, ry, tip.x, tip.y);
+        gx.lineStyle(2, 0x3cbcfc, 0.5 + 0.5 * pulse).lineBetween(root.x, ry, tip.x, tip.y);
+        for (let k = 1; k < 5; k++) {
+          const x = root.x + (tip.x - root.x) * (k / 5);
+          const half = 11 * (1 - (k / 5) * 0.6);
+          gx.lineStyle(1, 0x0c0010, 1).lineBetween(x, ry - half, x, ry + half);
+        }
+        gx.lineStyle(1, 0x6844fc, 0.8).strokePoints(pts.slice(0, Math.ceil(pts.length / 2)), false);
+      } else {
+        gx.lineStyle(2, 0x6844fc, 1).lineBetween(cx, pts[0].y + 3, cx, pts[Math.floor(pts.length / 2)].y - 3);
       }
+      gx.lineStyle(1, 0xf878f8, 1).strokePoints(pts, true, true);
+      this.glyph(gx, cx - 1, cy - 2, p.u, 0x3cbcfc, 0.5 + 0.5 * Math.sin(this.t / 180 + p.u));
+      // A pylon at the tip, with a blinking light.
+      const on = Math.floor(this.t / 300) % 2 === 0;
+      gx.fillStyle(0x0c0010, 1).fillCircle(tip.x, tip.y, 5);
+      gx.fillStyle(0x2c0838, 1).fillCircle(tip.x, tip.y, 4);
+      gx.fillStyle(on ? 0x3cbcfc : 0x4c0040, 1).fillCircle(tip.x, tip.y, 1.5);
+      if (on) this.glow.fillStyle(0x3cbcfc, 0.35).fillCircle(tip.x, tip.y, 5);
     }
   }
 
