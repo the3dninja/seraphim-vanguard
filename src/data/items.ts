@@ -1,7 +1,7 @@
 // Prices and stats are placeholders for playtesting, not final numbers.
 
 export type WeaponId = 'pulse' | 'spread' | 'twin' | 'homing' | 'plasma' | 'ion' | 'wave' | 'rail' | 'flak'
-  | 'side' | 'bio';
+  | 'side' | 'bio' | 'mines';
 export type ItemId = 'repair' | 'shield' | 'overdrive' | 'fullrepair' | 'nova' | 'cluster' | 'emp' | 'warp'
   | 'decoy' | 'drone' | 'rewind';
 export type GearId = 'deflector' | 'magnet' | 'plating' | 'satellite' | 'dodge' | 'blink' | 'afterburner' | 'roll'
@@ -23,8 +23,9 @@ export interface Shot { dx: number; deg: number } // x offset from the nose, deg
 // chains to nearby enemies on a hit and fades at short range, wave weaves and
 // passes through cover, rail charges then fires a fast piercing lance, flak
 // bursts into shrapnel partway up, latch homes slowly and clings to what it
-// hits, burning it, seek steers only at enemies in a cone ahead of the shot.
-export type WeaponFx = 'homing' | 'pierce' | 'arc' | 'wave' | 'rail' | 'flak' | 'latch' | 'seek';
+// hits, burning it, seek steers only at enemies in a cone ahead of the shot,
+// mine drifts where it's laid and blasts when an enemy comes near or it runs out.
+export type WeaponFx = 'homing' | 'pierce' | 'arc' | 'wave' | 'rail' | 'flak' | 'latch' | 'seek' | 'mine';
 
 export interface WeaponDef {
   name: string;
@@ -198,6 +199,17 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     tune: { damage: [0.5, 0.1], interval: [350, 0], burn: [2, 0.5], burnTime: [3000, 500], cling: [3, 1], angle: [24, 0], speed: [160, 0] },
     levels: { shots: [1, 2, 3, 4, 5] },
     stats: tunedStats,
+  },
+  mines: {
+    name: 'MINE LAYER', price: 160, score: 3, icon: 'icon_mines', texture: 'playermine', dtype: 'explosive', where: 'base', from: 3,
+    fx: 'mine', desc: 'EXPLOSIVE. LAYS MINES BEHIND YOU THAT BLAST EVERYTHING NEARBY WHEN AN ENEMY TOUCHES ONE, OR WHEN IT RUNS OUT.',
+    // A mine every `interval` ms, staying where it's laid (or drifting down at `speed` px/s). It lasts `life` ms and
+    // goes off when an enemy comes within `prox` px (0: only when one touches it), or
+    // when it runs out, hitting everything within `splash` px for `damage` (see updateShots).
+    tune: { damage: [1, 1], interval: [1500, -100], splash: [25, 3], life: [5000, 500], prox: [0, 2], speed: [0, 0], angle: [0, 0] },
+    levels: { shots: [1, 1, 1, 1, 1] },
+    // Laid from the tail, straight back.
+    stats(lv) { return { ...tunedStats.call(this, lv), shots: fan(180) }; },
   },
 };
 
@@ -493,4 +505,83 @@ export function scoreOf(id: string) {
   if (isGear(id)) return GEAR[id].score;
   if (isKit(id)) return KITS[id].score;
   return ITEMS[id as ItemId]?.score ?? 1;
+}
+
+// --- Descriptions by level ---------------------------------------------------
+
+const secs = (ms: number) => `${Math.round(ms / 100) / 10}`;
+const pct = (k: number) => `${Math.round(k * 100)}%`;
+const nth = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'TH' : (['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH')}`;
+const plural = (n: number, one: string, many = `${one}S`) => `${n} ${n === 1 ? one : many}`;
+const shotsAt = (id: WeaponId, lv: number) => Math.max(1, Math.round(WEAPONS[id].levels!.shots[lv - 1]));
+// "2 AT ONCE. " once a weapon fires more than one shot a volley.
+const atOnce = (id: WeaponId, lv: number) => (shotsAt(id, lv) > 1 ? ` ${shotsAt(id, lv)} AT ONCE.` : '');
+
+// What a weapon or gear does at a level, with its numbers at that level (as
+// the Tuner has them). Anything else reads its usual description.
+export function describe(id: string, lv = 1): string {
+  lv = Math.min(5, Math.max(1, lv));
+  if (isWeapon(id)) {
+    const n = shotsAt(id, lv);
+    switch (id) {
+      case 'pulse': return `KINETIC. FAST STRAIGHT SHOTS.${atOnce(id, lv)} RELIABLE BUT NARROW.`;
+      case 'spread': return `KINETIC. ${n} SHOTS IN A FAN. COVERS THE SCREEN. FIRES FASTER EACH LEVEL.`;
+      case 'twin': return `LASER. ${n} FAST PARALLEL BEAMS. GOOD VS LIGHT ARMOR, WEAK VS SHIELDS.`;
+      case 'homing': return `EXPLOSIVE. SLOW MISSILES THAT SEEK AND BLAST.${atOnce(id, lv)} LOW FIRE RATE.`;
+      case 'plasma': return `PLASMA. BIG SLOW BLOBS THAT PIERCE.${atOnce(id, lv)} MELTS ARMOR AND THE HOLLOW.`;
+      case 'ion': {
+        const t = WEAPONS.ion.tune!;
+        const jumps = Math.round(atLv(t.jumps, lv));
+        return `ION. SHORT RANGE LIGHTNING THAT JUMPS ON TO ${plural(jumps, 'MORE TARGET', 'MORE TARGETS')}.${atOnce(id, lv)} STRIPS SHIELDS. ${WEAPONS.ion.levels!.stunChance[lv - 1]}% STUN CHANCE.`;
+      }
+      case 'wave': return `LASER. A WEAVING BEAM THAT PASSES THROUGH COVER AND WALLS.${atOnce(id, lv)}`;
+      case 'rail': return `KINETIC. CHARGES, THEN FIRES A LANCE THAT PIERCES EVERYTHING. HUGE HIT.${atOnce(id, lv)}`;
+      case 'flak': return `EXPLOSIVE. SHELLS BURST INTO SHRAPNEL MID SCREEN. GREAT VS SWARMS.${atOnce(id, lv)} ${lv >= 5 ? 'A DIRECT HIT BURSTS TOO.' : 'AT LV 5 A DIRECT HIT BURSTS TOO.'}`;
+      case 'side': return `EXPLOSIVE. FAST LITTLE MISSILES, ${n} OUT TO EACH SIDE, THAT SEEK ENEMIES THERE. TINY BLAST.`;
+      case 'bio': return `PLASMA. SEEKING SPORES THAT CLING ON AND BURN, UP TO ${Math.round(atLv(WEAPONS.bio.tune!.cling, lv))} ON ONE ENEMY.${atOnce(id, lv)} GREAT VS THE HOLLOW.`;
+      case 'mines': {
+        const t = WEAPONS.mines.tune!;
+        const prox = atLv(t.prox, lv);
+        return `EXPLOSIVE. A MINE EVERY ${secs(atLv(t.interval, lv))} SEC. EACH BLASTS ALL WITHIN ${Math.round(atLv(t.splash, lv))} PX ${prox > 0 ? `WHEN A FOE IS ${Math.round(prox)} PX AWAY` : 'ON CONTACT'}, OR AFTER ${secs(atLv(t.life, lv))} SEC.`;
+      }
+    }
+  }
+  if (isGear(id)) {
+    switch (id) {
+      case 'plating': return `+${gearStats.plating(lv).health} MAX HEALTH ON TOP OF HULL UPGRADES.`;
+      case 'deflector': {
+        const st = gearStats.deflector(lv);
+        return `ABSORBS ${plural(st.hits, 'HIT')}, THEN RECHARGES IN ${secs(st.recharge)} SECONDS.`;
+      }
+      case 'satellite': {
+        const st = gearStats.satellite(lv);
+        return `${st.drones === 1 ? 'A MINI DRONE CIRCLES' : `${st.drones} MINI DRONES CIRCLE`} YOU AND FIRE${st.drones === 1 ? 'S' : ''} SMALL SHOTS.`;
+      }
+      case 'antimissile': {
+        const more = gearStats.antimissile(lv).targets - 1;
+        return `A TURRET THAT SHOOTS DOWN ENEMY SHOTS AND SEEKERS NEAR YOU, LEVEL AND AHEAD FIRST.${more > 0 ? ` EACH ZAP ARCS ON TO ${more} MORE.` : ''}`;
+      }
+      case 'burst': {
+        const st = gearStats.burst(lv);
+        return `SUPPLY CRATES: LEAVES A POD THAT FIRES ${st.bursts} RINGS OF ${st.shots} SHOTS IN EVERY DIRECTION${st.blastRadius > 0 ? ', THEN BLOWS UP' : ''}${st.bombs > 0 ? `, THROWING ${st.bombs} BOMBLETS` : ''}.`;
+      }
+      case 'incendiary': {
+        const st = gearStats.incendiary(lv);
+        return `AUGMENT. KINETIC SHOTS GLOW HOT, SCORCH WHAT THEY HIT AND SET IT BURNING FOR ${secs(st.burnTime)} SECONDS.`;
+      }
+      case 'ioncoat': return `AUGMENT. LASER WEAPONS DEAL ION DAMAGE, SO THEY BREAK SHIELDS, AND STUN FOR ${secs(gearStats.ioncoat(lv).stun)} SECONDS.`;
+      case 'shaped': return `AUGMENT. EXPLOSIVE WEAPONS IGNORE RESISTANCE, AND THEIR SPLASH IS ${Math.round(gearStats.shaped(lv).splash)} PX BIGGER.`;
+      case 'overcharge': return `AUGMENT. EVERY ${nth(gearStats.overcharge(lv).every)} VOLLEY IS A CHARGED SHOT WITH TRIPLE DAMAGE.`;
+      case 'scanner': return `AUGMENT. SHOWS WHAT EACH ENEMY IS WEAK TO, AND +${pct(gearStats.scanner(lv).bonus)} DAMAGE VS WEAKNESSES.`;
+      case 'rear': return `THE WEAPON IN THE SAME NUMBERED SLOT ALSO FIRES BACKWARD, AT ${pct(gearStats.rear(lv).damage)} DAMAGE.`;
+      case 'booster': return `+${pct(gearStats.booster(lv).bonus - 1)} CREDIT DROPS.`;
+      case 'nullifier': return `AUGMENT. YOUR WEAPONS IGNORE WEAKNESS AND RESISTANCE, AND HIT ${pct(gearStats.nullifier(lv).damage - 1)} HARDER.`;
+      case 'cargo': {
+        const st = gearStats.cargo(lv);
+        return `EACH ITEM SLOT HOLDS ${st.extra} MORE. EACH ITEM BEYOND ITS USUAL MAX SLOWS YOU ${pct(st.slow)}.`;
+      }
+    }
+    return GEAR[id].desc;
+  }
+  return defOf(id).desc;
 }

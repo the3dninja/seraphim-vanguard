@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  GEAR, ITEMS, KITS, WEAPONS, defOf, isGear, isItem, isKit, isWeapon, kindOf, scoreOf, stackLabel, type GearId, type ItemId, type KitId,
+  GEAR, ITEMS, KITS, WEAPONS, defOf, describe, isGear, isItem, isKit, isWeapon, kindOf, scoreOf, stackLabel, type GearId, type ItemId, type KitId,
   type WeaponId,
 } from '../data/items';
 import {
@@ -9,7 +9,7 @@ import {
   itemCap, itemSlotFor, kitTargets, sellFromStorage, sellPrice, unequipGear, unequipItem, upgradesFor, weaponLevel, type Upgrade,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
-import { ask, button, choose, text, toast } from '../ui';
+import { ask, button, choose, richText, text, toast } from '../ui';
 
 interface VendorData {
   state: SaveData;
@@ -17,7 +17,7 @@ interface VendorData {
   from: string; // scene to resume on Leave
   onLeave: () => void;
   repair?: Repair; // in-level vendors fix the hull for credits
-  first?: boolean; // the campaign's very first vendor stop (level 1, after segment 1)
+  first?: boolean; // the campaign's very first vendor stop (level 2, after segment 1)
 }
 
 // The ship's health as the level knows it, for the in-level Repair tab.
@@ -90,6 +90,12 @@ export class VendorScene extends Phaser.Scene {
     this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setInteractive();
     this.content = this.add.container(0, 0);
     this.render();
+    // The first in-level vendor stop says what sets these vendors apart.
+    const s = this.d.state;
+    if (this.d.mode === 'level' && !s.notes?.includes('vendor')) {
+      s.notes = [...(s.notes ?? []), 'vendor'];
+      ask(this, 'VENDORS OUT ON MISSIONS CARRY SOME THINGS YOU WON\'T FIND AT BASE.', ['OK'], () => {});
+    }
   }
 
   private owns(id: WeaponId | GearId) {
@@ -177,10 +183,10 @@ export class VendorScene extends Phaser.Scene {
     const sel = this.selected;
     const up = sel && this.tab === 'upgrade' ? upgradesFor(s).find((u) => u.key === sel) : null;
     const info = up ? up.desc
-      : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel) || isKit(sel)) ? defOf(sel).desc
+      : sel && !sel.includes(':') && (isWeapon(sel) || isItem(sel) || isGear(sel) || isKit(sel)) ? describe(sel, this.levelOf(sel))
       : this.tab === 'repair' ? `REPAIRS COST ${repairPrice(s.level)} CR A HEART AT THIS VENDOR.`
       : 'TAP AN ENTRY FOR INFO';
-    add(text(this, 6, INFO_Y, info, sel || this.tab === 'repair' ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+    add(richText(this, 6, INFO_Y, info, W - 12, sel || this.tab === 'repair' ? COLOR.white : COLOR.dim));
 
     // Storage, at a fixed spot above the equipped slots. The Sell tab lists storage already.
     if (this.tab !== 'sell') this.storageStrip(add, STORE_Y);
@@ -188,6 +194,12 @@ export class VendorScene extends Phaser.Scene {
     this.slotStrip(add, STRIP_Y);
 
     add(button(this, 6, H - 22, W - 12, 18, this.d.mode === 'base' ? 'BACK' : 'LEAVE', () => this.leave(), COLOR.cyan));
+  }
+
+  // The level a weapon or gear is at, or will start at when bought.
+  private levelOf(id: string) {
+    const s = this.d.state;
+    return isWeapon(id) && this.owns(id) ? weaponLevel(s, id) : isGear(id) && this.owns(id) ? gearLevel(s, id) : 1;
   }
 
   // The Buy, Sell or Upgrade list: three rows a page, each with what kind of

@@ -1,14 +1,14 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import {
-  KITS, defOf, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type KitId, type WeaponId,
+  KITS, defOf, describe, isGear, isItem, isKit, isWeapon, stackLabel, type GearId, type KitId, type WeaponId,
 } from '../data/items';
 import {
   applyKit, equipFromStorage, equipGear, equipStack, equipWeapon, gearLevel, gearSlotPrice, itemCap, itemSlotPrice, kitTargets,
   unequipGear, unequipItem, unequipWeapon, weaponLevel, weaponSlotPrice,
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
-import { button, choose, text } from '../ui';
+import { button, choose, richText, text } from '../ui';
 
 interface ShipData {
   state: SaveData;
@@ -252,11 +252,11 @@ export class ShipScene extends Phaser.Scene {
     if (id) {
       title = isWeapon(id) ? `${defOf(id).name} LV${weaponLevel(this.s, id)}`
         : isGear(id) ? `${defOf(id).name} LV${gearLevel(this.s, id)}` : defOf(id).name;
-      body = defOf(id).desc;
+      body = describe(id, isWeapon(id) ? weaponLevel(this.s, id) : isGear(id) ? gearLevel(this.s, id) : 1);
       if (isItem(id)) add(text(this, W - 6, INFO_Y, `MAX ${itemCap(this.s, id)}`, COLOR.gray).setOrigin(1, 0));
     }
     if (title) add(text(this, 6, INFO_Y, title, COLOR.cyan));
-    add(text(this, 6, title ? INFO_Y + 11 : INFO_Y, body, title ? COLOR.white : COLOR.dim).setWordWrapWidth(W - 12));
+    add(richText(this, 6, title ? INFO_Y + 11 : INFO_Y, body, W - 12, title ? COLOR.white : COLOR.dim));
   }
 
   private focusable(id: string, x: number, y: number, w: number, h: number, activate: () => void) {

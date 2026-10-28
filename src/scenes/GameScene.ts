@@ -63,6 +63,8 @@ interface Returner { kind: FoeKind; hp: number; t: number }
 const RETURN_AFTER: [number, number] = [8000, 12000];
 // The share of the credits picked up in a run that the ship keeps if it's destroyed.
 const DEATH_KEEP = 0.25;
+// Shown on the star map after the first loss past level 1.
+const REPLAY_NOTE = `CLEARED LEVELS CAN\nBE REPLAYED HERE\nFOR ${REPLAY_PAY === 0.5 ? 'HALF' : 'FEWER'} CREDITS`;
 // Gunboats and Bombers leaving down the screen stop firing at the bottom third.
 const LEAVE_FIRE_STOP = (H * 2) / 3;
 
@@ -772,19 +774,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Tips take turns, so two that come up together don't print over each other.
-  private blinkTip(msg: string) {
+  private blinkTip(msg: string, y = H / 2 + 30) {
     const wait = this.tipFreeAt - this.time.now;
     if (wait > 0) {
       this.tipFreeAt += 3750;
-      this.time.delayedCall(wait, () => this.showTip(msg));
+      this.time.delayedCall(wait, () => this.showTip(msg, y));
       return;
     }
     this.tipFreeAt = this.time.now + 3750;
-    this.showTip(msg);
+    this.showTip(msg, y);
   }
 
-  private showTip(msg: string) {
-    const t = text(this, W / 2, H / 2 + 30, msg, COLOR.yellow).setOrigin(0.5).setDepth(1000);
+  private showTip(msg: string, y: number) {
+    const t = text(this, W / 2, y, msg, COLOR.yellow).setOrigin(0.5).setDepth(1000);
     t.setAlign('center');
     this.tweens.add({ targets: t, alpha: 0.2, yoyo: true, repeat: 3, duration: 450, onComplete: () => t.destroy() });
   }
@@ -1584,7 +1586,8 @@ export class GameScene extends Phaser.Scene {
       if (d.burnTick <= 0) {
         d.burnTick = 400;
         this.sparks.explode(2, e.x, e.y);
-        if (this.damageEnemy(e, d.burnDmg, 'plasma')) return true;
+        const { x, y, displayWidth: w, displayHeight: h } = e;
+        if (this.damageEnemy(e, d.burnDmg, 'plasma')) { this.burnDeath(x, y, w, h); return true; }
       }
     }
     return false;
@@ -1625,7 +1628,7 @@ export class GameScene extends Phaser.Scene {
           e.x = d.baseX + d.dir * d.t * 42 + Math.sin(d.t * 3.6) * 12 * d.dir;
           break;
         case 'gunboat': {
-          // Fly in, park, fire a 4-shot spread (one from each gun tip), then pull
+          // Fly in, park, fire a 3-shot spread (the outer gun tips and the middle), then pull
           // back up off the top, still firing on the way (or down, the second time).
           if (e.y < d.stopY && d.hold > 0) e.y += 50 * dt;
           else if (d.hold > 0) d.hold -= dt * 1000;
@@ -1635,8 +1638,7 @@ export class GameScene extends Phaser.Scene {
             d.fireIn = 2500;
             const tg = this.aimTarget();
             const a = Phaser.Math.Angle.Between(e.x, e.y, tg.x, tg.y);
-            // Gun tips: the inner pair reach one pixel lower than the outer pair.
-            for (const g of [{ dx: -5, dy: 4, off: -0.3 }, { dx: -3, dy: 5, off: -0.1 }, { dx: 3, dy: 5, off: 0.1 }, { dx: 5, dy: 4, off: 0.3 }])
+            for (const g of [{ dx: -5, dy: 4, off: -0.25 }, { dx: 0, dy: 5, off: 0 }, { dx: 5, dy: 4, off: 0.25 }])
               this.enemyShoot(e.x + g.dx, e.y + g.dy, a + g.off);
           }
           break;
@@ -2237,6 +2239,7 @@ export class GameScene extends Phaser.Scene {
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
     if (!b.active || !h.active || b.getData('fx') === 'wave') return; // the Wave Beam passes through cover
+    if (b.getData('fx') === 'mine') { this.blast(b); return; }
     const dmg = (b.getData('dmg') as number) ?? 1;
     b.destroy();
     this.plasmaSplash(b);
@@ -2806,12 +2809,13 @@ export class GameScene extends Phaser.Scene {
         if (def.fx === 'wave') b.setData('ox', b.x).setData('phase', i % 2 ? Math.PI : 0);
         if (def.fx === 'arc') b.setData('life', arcLife(lv));
         if (def.fx === 'seek') b.setData('dir', Phaser.Math.DegToRad(deg - 90));
+        if (def.fx === 'mine') b.setData('life', atLv(def.tune!.life, lv)).setData('prox', atLv(def.tune!.prox, lv));
         if (charged) b.setScale(1.6).setTint(0xfcfcfc);
       };
       const dmg = stats.damage * (charged ? 3 : 1);
       stats.shots.forEach((sh, i) => {
         volley(sh.deg, sh.dx, i, dmg);
-        if (rear) volley(180 - sh.deg, -sh.dx, i, dmg * rear);
+        if (rear && def.fx !== 'mine') volley(180 - sh.deg, -sh.dx, i, dmg * rear);
       });
       if (def.fx === 'rail') {
         this.zaps.push({ x1: this.player.x, y1: this.player.y - 8, x2: this.player.x, y2: -10, t: 110, color: 0xa4e4fc });
@@ -2863,6 +2867,14 @@ export class GameScene extends Phaser.Scene {
         case 'bomb':
           if (t > BOMB_FUSE) this.blast(b);
           break;
+        case 'mine': {
+          // Mine Layer: goes off when it runs out or an enemy comes near, its
+          // light blinking faster over its last second.
+          const left = (b.getData('life') as number) - t * 1000;
+          if (left <= 0 || this.enemyNear(b.x, b.y, b.getData('prox') as number)) { this.blast(b); break; }
+          b.setTexture(Math.floor(t * 1000 / (left < 1000 ? 100 : 400)) % 2 ? 'playermineLit' : 'playermine');
+          break;
+        }
       }
     }
   }
@@ -3076,7 +3088,7 @@ export class GameScene extends Phaser.Scene {
     if (hits) {
       if (hits.has(e)) return;
       hits.add(e);
-    } else if (fx === 'bomb') {
+    } else if (fx === 'bomb' || fx === 'mine') {
       this.blast(b);
       return;
     } else if (fx === 'flak' && lv >= 5) this.flakBurst(b, e);
@@ -3123,6 +3135,21 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // An enemy burned to death goes up in a handful of flames that fizzle out
+  // fast, so it's clear what got it.
+  private burnDeath(x: number, y: number, w: number, h: number) {
+    const lv = Math.max(1, gearLevel(this.state, 'incendiary'));
+    this.embers.setParticleSpeed(20 + lv * 8, 40 + lv * 16);
+    this.embers.explode(6 + lv * 2, x, y);
+    const n = Math.round(4 + Math.min(4, (w * h) / 120));
+    for (let i = 0; i < n && this.flames.length < 60; i++) {
+      this.flames.push({
+        on: null, ox: x + Phaser.Math.Between(-w / 2, w / 2) * 0.8, oy: y + Phaser.Math.Between(-h / 2, h / 2) * 0.8,
+        t: 0, life: Phaser.Math.Between(260, 480), lv: lv + 1,
+      });
+    }
+  }
+
   private drawFlames(dt: number) {
     const g = this.beams;
     for (const f of this.flames.slice()) {
@@ -3130,12 +3157,35 @@ export class GameScene extends Phaser.Scene {
       if (f.t >= f.life || (f.on && !f.on.active)) { this.flames.splice(this.flames.indexOf(f), 1); continue; }
       const x = Math.round(f.on ? f.on.x + f.ox : f.ox);
       const y = Math.round(f.on ? f.on.y + f.oy : f.oy);
-      const k = 1 - f.t / f.life;
-      const h = Math.max(1, Math.round((1 + f.lv * 0.6) * k + Math.random()));
-      g.fillStyle(0xe45c10, 0.9 * k).fillRect(x - 1, y - h + 1, 3, h);
-      g.fillStyle(0xf8b800, k).fillRect(x, y - h, 1, h);
-      if (f.lv >= 3) g.fillStyle(0xfce0a8, k).fillRect(x, y - Math.floor(h / 2), 1, 1);
+      this.flame(g, x, y, f.lv, 1 - f.t / f.life);
     }
+    // Every burning enemy carries a flame that pulses for as long as it burns,
+    // two on a big one, dying down over the last moment of the burn.
+    const lv = Math.max(1, gearLevel(this.state, 'incendiary'));
+    const now = this.time.now;
+    for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+      const d = o.getData('e') as EnemyData;
+      if (!o.active || !d || d.burn <= 0 || d.cloaked) continue;
+      const k = Math.min(1, d.burn / 300);
+      const pulse = (ph: number) => 0.75 + 0.35 * Math.sin(now / 75 + ph);
+      // Licking up over its top edge, so it stands out from the ship's own colors.
+      const spots = o.displayWidth >= 12 ? [-o.displayWidth / 4, o.displayWidth / 4] : [0];
+      const y = Math.round(o.y - o.displayHeight / 4);
+      spots.forEach((dx, i) => this.flame(g, Math.round(o.x + dx), y, lv + 1, k * pulse(i * 2.1 + o.x)));
+    }
+  }
+
+  // One flame, `k` from 0 (gone) to 1 (full, and a little over while it pulses):
+  // a red-orange body, a yellow middle and, from level 3, a hot white core.
+  private flame(g: Phaser.GameObjects.Graphics, x: number, y: number, lv: number, k: number) {
+    const a = Math.min(1, k);
+    const h = Math.max(1, Math.round((2 + lv * 1.1) * k + Math.random()));
+    // Tapering up: wide at the base, a single flickering pixel at the tip.
+    const base = Math.ceil(h * 0.5);
+    g.fillStyle(0xd82800, 0.6 * a).fillRect(x - 2, y - base + 1, 5, base);
+    g.fillStyle(0xe45c10, 0.9 * a).fillRect(x - 1, y - h + 2, 3, h - 1);
+    g.fillStyle(0xf8b800, a).fillRect(x, y - h, 1, h);
+    if (lv >= 3) g.fillStyle(0xfce0a8, a).fillRect(x, y - Math.floor(h / 2), 1, Math.max(1, Math.floor(h / 3)));
   }
 
   // Bio Seeker: a spore that hits clings on and burns for a while. Each enemy
@@ -3219,6 +3269,13 @@ export class GameScene extends Phaser.Scene {
     b.destroy();
     this.sparks.explode(8, x, y);
     this.splash(x, y, r, dmg, 'explosive', null);
+  }
+
+  // Whether an enemy's edge is within `prox` px of a point (a Mine Layer mine; 0 never counts, contact does that).
+  private enemyNear(x: number, y: number, prox: number) {
+    if (!(prox > 0)) return false;
+    return (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).some((o) => o.active && !(o.getData('e') as EnemyData).cloaked
+      && Phaser.Math.Distance.Between(x, y, o.x, o.y) <= prox + 3 + Math.max(o.displayWidth, o.displayHeight) / 2);
   }
 
   // Ion Arc: lightning jumps from the target to the nearest enemies (two unless tuned).
@@ -3495,7 +3552,10 @@ export class GameScene extends Phaser.Scene {
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
       if (kept > 0) text(this, W / 2, H / 2 + 20, `KEPT ${kept} CREDITS`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
     });
-    this.time.delayedCall(3000, () => this.leaveTo('Base', back));
+    // The first loss past level 1: Base opens on the star map first, saying cleared levels can be replayed.
+    const note = !this.test && back.level > 1 && !back.notes?.includes('replay');
+    if (note) back.notes = [...(back.notes ?? []), 'replay'];
+    this.time.delayedCall(3000, () => this.leaveTo('Base', back, note, [], note ? REPLAY_NOTE : undefined));
   }
 
   // --- Combat test --------------------------------------------------------------
@@ -3713,6 +3773,12 @@ export class GameScene extends Phaser.Scene {
     this.patches = [];
   }
 
+  // The campaign's very first vendor stop: level 2, after its first segment
+  // (level 1 has none).
+  private firstVendor() {
+    return !this.side && !this.replay && this.state.level === 2 && this.segment === 0;
+  }
+
   // The station drifts in and keeps scrolling. The ship lines up, barrel-rolls,
   // and starts sinking toward the station partway through its last roll, timed
   // so the station passes right under it as it bottoms out.
@@ -3722,10 +3788,11 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(true); // it may have been mid-blink from a hit
     this.enemyBullets.clear(true, true);
     this.gatherCoins(() => {
-      if (this.state.level === 1) this.blinkTip('VENDOR AHEAD');
+      // Above where the ship lines up, so it isn't covered.
+      if (this.firstVendor()) this.blinkTip('VENDOR AHEAD', H / 2 - 24);
       const shipY = Math.round(H * 0.62);
       const speed = 0.044; // px per ms the station scrolls
-      const station = this.add.image(W / 2, -20, 'station').setAlpha(0.55).setScale(1.6).setDepth(5);
+      const station = this.add.image(W / 2, -20, 'station').setScale(1.6).setDepth(5);
       this.tweens.add({ targets: station, y: H + 40, duration: (H + 60) / speed, ease: 'Linear' });
       this.tweens.add({ targets: this.player, x: W / 2, y: shipY, duration: 1400, ease: 'Sine.easeInOut' });
 
@@ -3759,7 +3826,7 @@ export class GameScene extends Phaser.Scene {
                 max: this.maxHp,
                 heal: (n: number) => { this.health = Math.min(this.maxHp, this.health + n); },
               };
-              const first = !this.side && this.state.level === 1 && this.segment === 0;
+              const first = this.firstVendor();
               this.scene.launch('Vendor', { state: this.state, mode: 'level', from: 'Game', onLeave: () => {}, repair, first });
             });
           },
@@ -3780,7 +3847,7 @@ export class GameScene extends Phaser.Scene {
       this.clearForCutscene();
       const shipY = Math.round(H * 0.62);
       const stopY = shipY - 52;
-      const station = this.add.image(W / 2, -20, 'station').setAlpha(0.55).setScale(1.6).setDepth(5);
+      const station = this.add.image(W / 2, -20, 'station').setScale(1.6).setDepth(5);
       this.tweens.add({ targets: this.player, x: W / 2, y: shipY, duration: 1400, ease: 'Sine.easeInOut' });
       this.tweens.add({
         targets: station, y: stopY, duration: 3600, ease: 'Sine.easeOut',
@@ -4018,18 +4085,19 @@ export class GameScene extends Phaser.Scene {
     if (!this.test && !this.state.seen.includes(kind)) this.state.seen.push(kind);
   }
 
-  // Kills and sightings stick even when the ship is lost or rewinds.
+  // Kills, sightings and one-time messages stick even when the ship is lost or rewinds.
   private keepLog(s: SaveData) {
     s.kills = { ...this.state.kills };
     s.seen = [...this.state.seen];
+    s.notes = [...new Set([...(s.notes ?? []), ...(this.state.notes ?? [])])];
   }
 
   // Every mission ends back at the Base menu. A level that unlocks side missions
   // first shows the star map for a moment, announcing them.
-  private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = []) {
+  private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = [], note?: string) {
     this.keepLog(state);
     this.cameras.main.fadeOut(400);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap, unlocked }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap, unlocked, note }));
   }
 
   // Level 14: the allied fleet's battle with the gate, far behind the action.

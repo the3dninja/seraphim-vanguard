@@ -173,6 +173,9 @@ export const SPRITES3: Record<string, string[]> = {
   sidebolt: ['W', 'L', 'L'],
   sidemissile: ['W', 'L', 'L', 'Y'], // Side Winder missile: thin, with a hot tail
   sporeshot: ['.TN.', 'TWTN', 'NTTN', '.NN.'],
+  // Mine Layer mine, its light blinking (lit), faster as it runs out.
+  playermine: ['...Y...', '.Y.G.Y.', '..GLG..', 'YGLRLGY', '..GLG..', '.Y.G.Y.', '...Y...'],
+  playermineLit: ['...Y...', '.Y.G.Y.', '..GLG..', 'YGLWLGY', '..GLG..', '.Y.G.Y.', '...Y...'],
   bomblet: ['.GG.', 'GDDG', 'GDRG', '.GG.'],
   allyion: ['C', 'A', 'C'],
   allyplasma: ['TT', 'NN'],
@@ -189,6 +192,7 @@ export const SPRITES3: Record<string, string[]> = {
   icon_flak: ['..Y.Y...', '.Y.Y.Y..', '..YWY...', '.YYWYY..', '..YWY...', '...Y....', '...G....', '..GGG...'],
   icon_side: ['........', '........', 'WYY..YYW', '........', '...CC...', '..CCCC..', '........', '........'],
   icon_rear: ['...CC...', '..CCCC..', '........', '...R....', '...R....', '...R....', '...W....', '........'],
+  icon_mines: ['....Y...', '..Y.G.Y.', '...GLG..', '.YGLRLGY', '...GLG..', '..Y.G.Y.', 'Y...Y...', '.YY.....'],
   icon_bio: ['.T....T.', '..T..T..', '...NN...', '..NTTN..', '..NTTN..', '...NN...', '..T..T..', '.T....T.'],
 
   // Gear icons.

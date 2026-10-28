@@ -63,6 +63,11 @@ export const PROPS: Record<string, { label: string; step: number; from?: number 
   fuse: { label: 'MS UNTIL A SHELL BURSTS', step: 20 },
   shrapnel: { label: 'SHRAPNEL PIECES', step: 1 },
   shrapDamage: { label: 'SHRAPNEL DAMAGE (0.8 = 80% OF HIT)', step: 0.05 },
+  'mines.damage': { label: 'BLAST DAMAGE TO EVERYTHING IN THE RADIUS', step: 0.5 },
+  'mines.interval': { label: 'MS BETWEEN MINES', step: 50 },
+  'mines.speed': { label: 'MINE DRIFT DOWN (PX/S)', step: 2 },
+  'mines.life': { label: 'MINE LIFE MS', step: 100 },
+  'mines.prox': { label: 'GOES OFF WHEN AN ENEMY IS THIS NEAR (PX, 0 = ONLY ON CONTACT)', step: 1 },
   // Gear
   health: { label: 'EXTRA MAX HEALTH', step: 1 },
   radius: { label: 'RADIUS (PX)', step: 2 },

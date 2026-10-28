@@ -20,6 +20,8 @@ export class BaseScene extends Phaser.Scene {
   // Back from a level that unlocked side missions: show the star map briefly, announcing them.
   private toMap = false;
   private unlocked: string[] = [];
+  private note: string | undefined; // a message to show on that map
+
   // A side mission or cleared level picked on the map, flown instead of the next level.
   private pick: Pick | null = null;
   private nextLabel!: Phaser.GameObjects.Text;
@@ -30,10 +32,11 @@ export class BaseScene extends Phaser.Scene {
 
   constructor() { super('Base'); }
 
-  init(data: { state: SaveData; toMap?: boolean; unlocked?: string[] }) {
+  init(data: { state: SaveData; toMap?: boolean; unlocked?: string[]; note?: string }) {
     this.state = cloneSave(data.state);
     this.toMap = !!data.toMap;
     this.unlocked = data.unlocked ?? [];
+    this.note = data.note;
     this.pick = null;
     // Playtest helpers: ?rich tops credits up to 5000, ?level=N jumps to level N.
     const params = new URLSearchParams(location.search);
@@ -106,7 +109,7 @@ export class BaseScene extends Phaser.Scene {
 
     text(this, W / 2, H - 14, 'PROGRESS SAVED', COLOR.dim).setOrigin(0.5);
 
-    if (this.toMap) this.openMap(this.unlocked, true);
+    if (this.toMap) this.openMap(this.unlocked, true, this.note);
 
     const jump = new URLSearchParams(location.search).get('side');
     if (jump && sideById(jump) && !sideJumpDone) {
@@ -135,10 +138,10 @@ export class BaseScene extends Phaser.Scene {
     this.nextNote.setText(replay ? 'HALF CREDITS' : '');
   }
 
-  private openMap(unlocked: string[] = [], announce = false) {
+  private openMap(unlocked: string[] = [], announce = false, note?: string) {
     this.scene.pause();
     this.scene.launch('Map', {
-      state: this.state, unlocked, announce, pick: this.pick,
+      state: this.state, unlocked, announce, note, pick: this.pick,
       onLeave: () => {},
       onPick: (pick: Pick | null) => { this.pick = pick; this.showNext(); },
       onLaunch: (pick: Pick) => this.fly(pick),
