@@ -56,6 +56,7 @@ export interface EnemyData {
   leaving?: boolean; // pulling back up off the top of the screen
   back?: boolean; // already came back once after pulling back
   shown?: boolean; // has been on screen
+  arena?: boolean; // spawned in an arena: holds its height and stays until killed (see holdInArena)
 }
 
 // An enemy that pulled back off the top before it was killed, waiting to
@@ -113,6 +114,10 @@ const RADAR_TEAL = '#00e8d8'; // Shot Radar's near-miss count and lines
 const ICE_GRIP = 2.2; // how fast the ship's speed catches up with the controls on ice (per second)
 const BULWARK_SHIELD = 12;
 const COIN_FALL = 26; // px/s credits fall
+// Arena fights: what doesn't hold its place there (shots in all but name, and
+// short-lived things), and the stay timers that are kept topped up.
+const ARENA_LOOSE = new Set<string>(['bomb', 'mine', 'pmine', 'seeker', 'larva', 'egg', 'boulder']);
+const ARENA_STAY = 1000; // ms a stay timer (d.hold) is kept at, at least
 const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
@@ -235,7 +240,9 @@ export class GameScene extends Phaser.Scene {
   private warps!: Warps; // Maw Gate: enemies warping in
   private warpsDone = new Set<number>(); // which one-off warp-ins have happened
   private warpIn: number | null = null; // ms to the next repeating warp-in
-  private gate: MawGate | null = null; // Maw Gate's structure: the way in, warp rings, the last gate
+  private gate: MawGate | null = null;
+  private arena = false; // an arena fight is on (see setArena)
+  private arenaBand: [number, number] = [40, 144]; // Maw Gate's structure: the way in, warp rings, the last gate
   private homeUntil = 0; // credits dropped before this curve toward the ship (a boss's gold)
   private pops: Pop[] = [];
   private glitter: Glitter[] = [];
@@ -350,6 +357,7 @@ export class GameScene extends Phaser.Scene {
     this.warpsDone = new Set();
     this.warpIn = null;
     this.gate = null;
+    this.arena = false;
     this.homeUntil = 0;
     this.pops = [];
     this.flames = [];
@@ -1408,6 +1416,7 @@ export class GameScene extends Phaser.Scene {
       e.once('destroy', () => data.shieldImg?.destroy());
       if (this.state.level === 5) this.tipOnce('bulwark', 'BREAK THE SHIELD\nTO HIT THE HULL');
     }
+    if (this.arena && !ARENA_LOOSE.has(kind)) data.arena = true;
     return e;
   }
 
@@ -1805,13 +1814,49 @@ export class GameScene extends Phaser.Scene {
           d.shieldImg?.setPosition(e.x, e.y + 9);
           break;
       }
+      if (d.arena) this.holdInArena(e, d, y0);
       // Back for the second time, it leaves down the screen instead of up.
       if (d.back && d.leaving && e.y < y0) e.y = y0 + (y0 - e.y);
       if (d.leaving && e.y < -20) this.retreat(e);
       // Ships waiting in a column or vee above the top aren't culled before they come on.
-      else if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || (e.y < -40 && d.shown)) e.destroy();
-      else if (e.y >= 0) d.shown = true;
+      else if (e.y > H + 16 || e.x < -24 || e.x > W + 24 || (e.y < -40 && d.shown)) {
+        if (d.arena) this.reenterArena(e, d);
+        else e.destroy();
+      } else if (e.y >= 0) d.shown = true;
     }
+  }
+
+  // --- Arenas -----------------------------------------------------------------
+
+  // An arena is a fight where the screen doesn't scroll (Maw Gate's last gate).
+  // While one is on, enemies spawned keep their side-to-side moves and their
+  // dashes but don't sink with the screen or pull back, and stay until killed;
+  // credits don't fall. `top` to `bottom` is where enemies come back in to.
+  setArena(on: boolean, top = 40, bottom = Math.round(H * 0.45)) {
+    this.arena = on;
+    this.arenaBand = [top, bottom];
+  }
+
+  // After an arena enemy's own move this frame (from y0): sinking below where
+  // it settled is undone (a dash isn't), it never pulls back, and timers that
+  // would end its stay are topped up.
+  private holdInArena(e: Phaser.Physics.Arcade.Sprite, d: EnemyData, y0: number) {
+    const dashing = (d.kind === 'tendril' && d.step === 2) || d.kind === 'driller' || d.kind === 'cdriller';
+    if (d.leaving) { e.y = y0; d.leaving = false; }
+    else if (!dashing && e.y > y0 && e.y > d.stopY) e.y = Math.max(y0, d.stopY);
+    if (d.kind === 'mimic' || d.kind === 'gunboat' || d.kind === 'bomber' || d.kind === 'carrier') d.hold = Math.max(d.hold, ARENA_STAY);
+    if (d.kind === 'phantom' && d.step >= 3) d.step = 0;
+  }
+
+  // An arena enemy that dashed off the screen comes back in from the top, to a
+  // new spot in the arena, and starts over.
+  private reenterArena(e: Phaser.Physics.Arcade.Sprite, d: EnemyData) {
+    e.setPosition(Phaser.Math.Between(16, W - 16), -10).setRotation(0);
+    d.baseX = e.x;
+    d.stopY = Phaser.Math.Between(...this.arenaBand);
+    d.step = 0;
+    d.t = 0;
+    d.shown = false;
   }
 
   // Driller: slides in from its side, lines up with the ship (shaking, its drill
@@ -3452,7 +3497,9 @@ export class GameScene extends Phaser.Scene {
     c.setData('key', key);
     c.setData('glint', Phaser.Math.Between(0, 2000));
     c.setDepth(9.7); // shows in the dark
-    c.setVelocity(vx, vy);
+    // In an arena they don't fall: a little scatter that slows to a stop.
+    if (this.arena) c.setVelocity(vx, Phaser.Math.Between(-12, 12)).setDrag(24);
+    else c.setVelocity(vx, vy);
     c.body!.setSize(c.width + 6, c.height + 6); // generous pickup radius
     if (this.time.now < this.homeUntil) c.setData('home', true);
     if (this.state.level === 1) this.tipOnce('coin', 'SHIPS DROP CREDITS');

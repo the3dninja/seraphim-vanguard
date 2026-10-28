@@ -425,7 +425,10 @@ export class MawGate {
     if (f.stage === 'talk') {
       if (f.t > 1400 && f.said === 1) { f.said = 2; g.radio('REYES: BENEATH THAT\nSTORM? THEN WE GO\nTHROUGH IT.'); }
       if (f.t > 6200 && f.said === 2) { f.said = 3; this.alarm('WARNING\nINCOMING!'); g.radio('VEX: HERE THEY COME!'); }
-      if (f.t > 8800) { f.stage = 'waves'; f.wave = 0; f.burst = 0; f.next = 0; f.t = 0; }
+      if (f.t > 8800) {
+        f.stage = 'waves'; f.wave = 0; f.burst = 0; f.next = 0; f.t = 0;
+        g.setArena(true, 50, STOP_Y); // no scrolling here: they hold their ground inside the ring
+      }
       return;
     }
     if (f.stage === 'waves') {
@@ -450,6 +453,7 @@ export class MawGate {
         this.alarm(f.wave === FINAL_WAVES.length - 1 ? 'FINAL WAVE!' : 'MORE INCOMING!');
       } else {
         f.stage = 'spin';
+        g.setArena(false);
         g.gateCalm();
         g.radio('REYES: THE GATE...\nIT\'S OPENING!');
       }
