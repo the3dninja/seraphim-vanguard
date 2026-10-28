@@ -39,7 +39,8 @@ export class Warps {
     }));
     const g = this.g;
     g.tipOnce('warp', 'ENEMIES WARPING IN!');
-    if (big) {
+    // Inside a ring (Maw Gate's last gate) the gate's own alarm does this job.
+    if (big && !area) {
       g.cameras.main.shake(BIG_WARN, 0.003);
       g.cameras.main.flash(300, 120, 0, 110);
     }
