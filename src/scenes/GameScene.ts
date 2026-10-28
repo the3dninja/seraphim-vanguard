@@ -439,6 +439,11 @@ export class GameScene extends Phaser.Scene {
     this.sideHaz = new SideHazards(this);
     this.warps = new Warps(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
+    // Playtest helper: ?gateend skips Maw Gate straight to its last gate.
+    if (this.level.gate && new URLSearchParams(location.search).has('gateend')) {
+      this.segment = this.level.segments.length - 1;
+      this.waveIndex = this.level.segments[this.segment].length;
+    }
     if (this.level.gate) this.gate = new MawGate(this, this.scenery, this.segment === 0, this.scenery ? 3 : 2);
 
     this.redirectGlow = this.add.graphics().setDepth(10.5).setBlendMode(Phaser.BlendModes.ADD); // over the ship; additive, so it still shows through

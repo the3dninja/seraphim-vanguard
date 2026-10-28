@@ -343,6 +343,15 @@ export class MawGate {
           this.glyph(gx, x - 1, y - 2, k, alarm ? 0xd82800 : grand ? 0x3cbcfc : 0xd800cc, spinning ? 1 : lit);
         }
       }
+      // Red lights round the inner edge, once the alarm has gone off.
+      const red = grand ? this.redK() : 0;
+      if (red > 0) {
+        for (let a = a0 + 0.1; a < a1 - 0.05; a += 0.27) {
+          const x = cx + Math.cos(a) * (R - th / 2 - 4), y = cy + Math.sin(a) * (R - th / 2 - 4);
+          if (y < -8 || y > H + 8 || x < -8 || x > W + 8) continue;
+          this.redLight(x, y, red, a * 6);
+        }
+      }
       if (grand) {
         // A second circle of runes outside, glowing.
         for (let a = a0; a < a1; a += 0.075) {
@@ -448,6 +457,22 @@ export class MawGate {
     if (f.t > 3900 && !f.sucked) { f.sucked = true; g.gateVortex(W / 2, STOP_Y); }
   }
 
+  // How bright the last gate's red lights are: off until the first alarm,
+  // full while it sounds and as the gate spins up, dim through the waves.
+  private redK() {
+    const f = this.fin;
+    if (!f || f.alarmUntil === 0) return 0;
+    return this.t < f.alarmUntil || f.stage === 'spin' ? 1 : 0.4;
+  }
+
+  // One red light, pulsing (`phase` staggers neighbours).
+  private redLight(x: number, y: number, k: number, phase: number) {
+    const lit = 0.55 + 0.45 * Math.sin(this.t / 250 + phase);
+    this.glow.fillStyle(0xd82800, 0.45 * lit * k).fillCircle(x, y, 2 + 5 * k);
+    this.gfx.fillStyle(0x4c0010, 1).fillCircle(x, y, 2.5);
+    this.gfx.fillStyle(lit * k > 0.6 ? 0xfc7460 : 0xd82800, 0.5 + 0.5 * k).fillCircle(x, y, 1.5);
+  }
+
   // Red lights flash, and a warning blinks in the middle.
   private alarm(msg: string, flashes: number) {
     const g = this.g;
@@ -485,6 +510,15 @@ export class MawGate {
         this.glyph(gx, cx + Math.cos(a - 0.12) * b.r - 1, y + Math.sin(a - 0.12) * b.r - 2, k + i, col, 0.4 + 0.6 * f.spin);
       }
     });
+    // Red lights on the first ring behind, turning with it.
+    const red = this.redK();
+    if (red > 0) {
+      const b = BACK[0], y = STOP_Y - f.d * b.f, n = 10;
+      for (let k = 0; k < n; k++) {
+        const a = f.angles[0] + ((k + 0.81) / n) * Math.PI * 2;
+        this.redLight(cx + Math.cos(a) * b.r, y + Math.sin(a) * b.r, red, k * 1.3);
+      }
+    }
     // Light gathering in the middle.
     if (f.glow > 0) {
       const pulse = 1 + 0.08 * Math.sin(this.t / 90);
