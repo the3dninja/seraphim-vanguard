@@ -100,3 +100,40 @@ export function choose(scene: Phaser.Scene, title: string, options: { label: str
   layer.add(button(scene, 14, top + h - 24, W - 28, 18, 'CANCEL', () => done(-1), COLOR.gray));
   return layer;
 }
+
+// Damage type words in a description, in their type's color.
+const TYPE_WORDS: Record<string, string> = {
+  KINETIC: '#bcbcbc', LASER: '#d82800', PLASMA: '#58d854', ION: '#3cbcfc', EXPLOSIVE: '#f8b800',
+};
+
+// Wrapped text with each damage type named in it (LASER, ION...) in that
+// type's color. The font is monospaced, so words are laid out by character.
+export function richText(scene: Phaser.Scene, x: number, y: number, str: string, width: number, color = COLOR.white, size = 8) {
+  const c = scene.add.container(x, y);
+  const perLine = Math.max(1, Math.floor(width / size));
+  const lines: string[][] = [];
+  for (const para of str.split('\n')) {
+    let line: string[] = [];
+    let len = 0;
+    for (const word of para.split(' ').filter(Boolean)) {
+      if (len && len + 1 + word.length > perLine) { lines.push(line); line = []; len = 0; }
+      line.push(word);
+      len += (len ? 1 : 0) + word.length;
+    }
+    lines.push(line);
+  }
+  lines.forEach((words, row) => {
+    // Runs of words in one color, each drawn as one text from its first word's column.
+    let col = 0;
+    let run: { str: string; color: string; col: number } | null = null;
+    const flush = () => { if (run) c.add(text(scene, run.col * size, row * (size + 3), run.str, run.color, size)); };
+    for (const word of words) {
+      const wc = TYPE_WORDS[word.replace(/[^A-Z]/g, '')] ?? color;
+      if (run && run.color === wc) run.str += ` ${word}`;
+      else { flush(); run = { str: word, color: wc, col }; }
+      col += word.length + 1;
+    }
+    flush();
+  });
+  return c;
+}

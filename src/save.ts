@@ -21,6 +21,9 @@ export interface SaveData {
   // Bestiary entries looked at. Saves from before this have none: everything
   // they'd found counts as looked at (see unreadFoes).
   read?: string[];
+  // One-time messages already shown: 'vendor' (what in-level vendors carry),
+  // 'replay' (cleared levels can be replayed, after the first loss past level 1).
+  notes?: string[];
 }
 
 const KEY = 'seraphim-vanguard-save';
@@ -29,7 +32,7 @@ export function newSave(): SaveData {
   return {
     v: 2, level: 1, credits: 0, maxHealth: 5,
     weapons: ['pulse'], items: [null], gear: [], weaponLevels: {}, gearLevels: {}, storage: [], sides: [],
-    kills: {}, seen: [], read: [],
+    kills: {}, seen: [], read: [], notes: [],
   };
 }
 

@@ -72,7 +72,7 @@ export interface LevelDef {
   noCrates?: number[]; // segments where gear supply crates don't drop (see CRATES)
   allies?: number; // wingmen flying with the ship (act 3)
   dark?: boolean; // only a pool of light around the ship (level 13)
-  // Level 15: segments run straight into each other with no vendor stop.
+  // Segments run straight into each other with no vendor stop (levels 1 and 15).
   vendorless?: boolean;
   segmentThemes?: Theme[]; // per segment, in place of `theme`
   segmentBoss?: (BossKind | undefined)[]; // a mini boss at the end of a segment
@@ -116,6 +116,8 @@ export const LEVELS: LevelDef[] = [
     desc: 'HOME SYSTEM PATROL. RAIDER SCOUTS PROBE THE OUTPOST. A GOOD PLACE TO LEARN.',
     node: 'node_gas',
     theme: 'outpost',
+    // No vendor stop yet: the first one is on level 2.
+    vendorless: true,
     segments: [
       [
         { delay: 2500, kind: 'dart', pattern: 'column', count: 4, x: 0.5 },

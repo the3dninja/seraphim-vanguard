@@ -14,6 +14,7 @@ interface MapData {
   // Just back from a level that unlocked side missions: show them with no
   // buttons, then return to Base on its own after a few seconds.
   announce?: boolean;
+  note?: string; // a message to show while announcing (cleared levels can be replayed)
   onLeave: () => void;
   // Fly the picked level or side mission; Base takes it from there.
   onLaunch?: (pick: Pick) => void;
@@ -80,7 +81,7 @@ export class MapScene extends Phaser.Scene {
       // Nothing to tap: the map shows itself, then goes back to the menu.
       this.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0).setInteractive().setDepth(20);
       this.render();
-      this.time.delayedCall(3000, () => this.leave());
+      this.time.delayedCall(this.d.note ? 5000 : 3000, () => this.leave());
       return;
     }
     const kb = this.input.keyboard!;
@@ -200,6 +201,7 @@ export class MapScene extends Phaser.Scene {
   // Side missions that just unlocked: a banner near them that flashes a few
   // times and fades. Their moons already blink a ring while open.
   private announce() {
+    if (this.d.note) this.noteBanner(this.d.note);
     const fresh = SIDES.filter((sd) => this.d.unlocked?.includes(sd.id));
     if (!fresh.length) return;
     const { y } = sidePos(fresh[0]);
@@ -213,6 +215,15 @@ export class MapScene extends Phaser.Scene {
       targets: banner, alpha: 0.15, yoyo: true, repeat: 3, duration: 250, delay: 300,
       onComplete: () => this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 400, onComplete: () => banner.destroy() }),
     });
+  }
+
+  // A message for the player over the level info, until the map closes. Its words blink a few times.
+  private noteBanner(msg: string) {
+    const by = INFO_Y + 40;
+    const h = msg.split('\n').length * 11 + 14;
+    this.add.rectangle(W / 2, by, W - 16, h, 0x000000).setStrokeStyle(1, 0xf8b800).setDepth(10);
+    const t = text(this, W / 2, by + 1, msg, COLOR.yellow).setOrigin(0.5).setAlign('center').setDepth(10);
+    this.tweens.add({ targets: t, alpha: 0.15, yoyo: true, repeat: 2, duration: 250, delay: 300 });
   }
 
   private render() {
