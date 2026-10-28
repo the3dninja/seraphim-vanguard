@@ -406,7 +406,7 @@ export class MawGate {
       alarmUntil: 0, spin: 0, angles: BACK.map(() => 0), glow: 0, vortex: 0, sucked: false,
     };
     this.makePlanet();
-    this.wash = this.g.add.rectangle(0, 0, W, H, 0xd82800, 0).setOrigin(0).setDepth(950);
+    this.wash = this.g.add.rectangle(0, 0, W, H, 0xd82800).setOrigin(0).setDepth(950).setAlpha(0); // fully filled; its alpha is the wash
   }
 
   private runFinale(dt: number, f: NonNullable<MawGate['fin']>) {
