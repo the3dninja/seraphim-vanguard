@@ -16,6 +16,7 @@ import { HollowMind } from '../hollowmind';
 import { Sporeheart } from '../sporeheart';
 import { Wyrm } from '../wyrm';
 import { Barriers, Tunnel } from '../heart';
+import { MawGate } from '../mawgate';
 import { SideHazards } from '../sidehaz';
 import { Storm, stormPlan } from '../storm';
 import { Treasure } from '../treasure';
@@ -234,6 +235,7 @@ export class GameScene extends Phaser.Scene {
   private warps!: Warps; // Maw Gate: enemies warping in
   private warpsDone = new Set<number>(); // which one-off warp-ins have happened
   private warpIn: number | null = null; // ms to the next repeating warp-in
+  private gate: MawGate | null = null; // Maw Gate's structure: the way in, warp rings, the last gate
   private homeUntil = 0; // credits dropped before this curve toward the ship (a boss's gold)
   private pops: Pop[] = [];
   private glitter: Glitter[] = [];
@@ -347,6 +349,7 @@ export class GameScene extends Phaser.Scene {
     this.corruptSeen = false;
     this.warpsDone = new Set();
     this.warpIn = null;
+    this.gate = null;
     this.homeUntil = 0;
     this.pops = [];
     this.flames = [];
@@ -436,6 +439,7 @@ export class GameScene extends Phaser.Scene {
     this.sideHaz = new SideHazards(this);
     this.warps = new Warps(this);
     this.startTunnel(); // a Rewind Beacon can restart in the tunnel
+    if (this.level.gate) this.gate = new MawGate(this, this.scenery, this.segment === 0, this.scenery ? 3 : 2);
 
     this.redirectGlow = this.add.graphics().setDepth(10.5).setBlendMode(Phaser.BlendModes.ADD); // over the ship; additive, so it still shows through
     this.player = this.physics.add.sprite(W / 2, H - 50, 'ship').setDepth(10);
@@ -1061,6 +1065,7 @@ export class GameScene extends Phaser.Scene {
   // Whether a point is inside level walls: the tunnel's, blast doors, coral,
   // barrier cells, or a rock, wreck or other hazard.
   private solidAt(x: number, y: number) {
+    if (this.gate?.solidAt(x, y)) return true;
     if (this.tunnel) {
       const { l, r } = this.tunnel.at(y);
       if (x < l || x > r) return true;
@@ -1246,7 +1251,9 @@ export class GameScene extends Phaser.Scene {
       // straight on without waiting for the screen to clear, unless a boss is next.
       const last = this.segment >= this.level.segments.length - 1;
       const flows = this.level.vendorless && !last && !this.level.segmentBoss?.[this.segment];
-      if ((flows || this.enemies.countActive() === 0) && (!this.tunnel || this.tunnel.done)) {
+      // Maw Gate waits for a warp ring to pass, and its last gate runs on its own.
+      if (this.gate?.finale) return;
+      if ((flows || this.enemies.countActive() === 0) && (!this.tunnel || this.tunnel.done) && (!this.gate || this.gate.idle)) {
         this.tunnel?.destroy();
         this.tunnel = null;
         this.endSegment();
@@ -2003,6 +2010,7 @@ export class GameScene extends Phaser.Scene {
 
   private runHazards(dt: number) {
     if (this.boss && !this.level.bossHazards) return;
+    if (this.gate?.calm) return;
     if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
@@ -2030,17 +2038,21 @@ export class GameScene extends Phaser.Scene {
     plan.at.forEach((w, i) => {
       if (w.seg !== this.segment || this.warpsDone.has(i) || prog < w.p) return;
       this.warpsDone.add(i);
-      this.warps.open(w.big ? 8 : 4, !!w.big);
+      if (this.gate) this.gate.ring();
+      else this.warps.open(w.big ? 10 : 5, !!w.big);
     });
     const ev = plan.every;
     if (!ev || ev.seg !== this.segment || prog >= ev.until) return;
+    // With Maw Gate's rings, the wait only runs once the last ring has passed.
+    if (this.gate && !this.gate.idle) return;
     // The gap shrinks from `start` to `end` as the run goes on.
     const gap = () => Phaser.Math.Linear(Phaser.Math.Between(...ev.start), Phaser.Math.Between(...ev.end), prog / ev.until);
     if (this.warpIn === null) { this.warpIn = gap(); return; }
     this.warpIn -= dt * 1000;
     if (this.warpIn > 0) return;
     this.warpIn = gap();
-    this.warps.open(4, false);
+    if (this.gate) this.gate.ring();
+    else this.warps.open(5, false);
   }
 
   private spawnHazard(kind: 'debris' | 'satchunk' | 'rock' | 'shard' | 'pebble' | 'shelter', x: number, y: number) {
@@ -3772,6 +3784,7 @@ export class GameScene extends Phaser.Scene {
 
   private endSegment() {
     if (this.phase !== 'action') return;
+    if (this.gate && this.segment === this.level.segments.length - 1) { this.gate.startFinale(); return; }
     const midBoss = this.level.segmentBoss?.[this.segment];
     if (this.level.riftAfter === this.segment) this.riftSequence();
     else if (this.level.riftExitAfter === this.segment) this.riftExit();
@@ -3823,6 +3836,7 @@ export class GameScene extends Phaser.Scene {
     this.clearTimedHazards();
     this.patches.forEach((pt) => pt.destroy());
     this.patches = [];
+    this.gate?.clearRings();
   }
 
   // The campaign's very first vendor stop: level 2, after its first segment
@@ -4081,7 +4095,8 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private endLevel(last: boolean) {
+  // `flyOut`: the ship climbs away off the top (not when it's already gone).
+  private endLevel(last: boolean, flyOut = true) {
     this.gatherCoins(() => {
       if (last) { this.ending(); return; }
       if (this.side) {
@@ -4095,7 +4110,7 @@ export class GameScene extends Phaser.Scene {
       }
       text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
       text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
-      this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+      if (flyOut) this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
       if (this.replay) {
         // A replay doesn't move the ship on, or open anything new.
         this.state.level = this.startState.level;
@@ -4152,6 +4167,50 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap, unlocked, note }));
   }
 
+  // --- Maw Gate's last gate (see mawgate.ts) ---------------------------------
+
+  // Enemies warping in, inside a warp ring when `area` is given.
+  warpEnemies(n: number, big: boolean, area?: { x: number; y: number; r: number }, kinds?: FoeKind[]) {
+    this.warps.open(n, big, area, kinds);
+  }
+
+  // Enemies left to beat: on screen, due back, or still warping in.
+  foesLeft() {
+    return this.enemies.countActive() + this.returners.length + (this.warps.pending ? 1 : 0);
+  }
+
+  // The last wave is beaten: shots and hazards are cleared away.
+  gateCalm() {
+    this.enemyBullets.clear(true, true);
+    this.clearTimedHazards();
+    this.hazards.clear(true, true);
+  }
+
+  // The vortex has opened at (x, y): credits are gathered in, the ship and its
+  // wingmen are pulled in spinning, the screen goes white, and the level ends.
+  gateVortex(x: number, y: number) {
+    if (this.phase !== 'action') return;
+    this.phase = 'arrival';
+    this.dragFrom = null;
+    this.player.setVisible(true);
+    this.enemyBullets.clear(true, true);
+    this.gatherCoins(() => {
+      this.cameras.main.shake(1600, 0.004);
+      this.tweens.add({ targets: this.player, x, y, scale: 0.1, angle: 900, duration: 1500, ease: 'Quad.easeIn' });
+      this.time.delayedCall(1250, () => {
+        this.cameras.main.fadeOut(350, 252, 252, 252);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+          this.player.setVisible(false);
+          this.allies.forEach((a) => a.img.setVisible(false));
+          this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setDepth(900);
+          this.cameras.main.fadeIn(700, 252, 252, 252);
+          this.phase = 'clear';
+          this.endLevel(!this.side && !this.replay && this.state.level === LEVELS.length, false);
+        });
+      });
+    });
+  }
+
   // Level 14: the allied fleet's battle with the gate, far behind the action.
   private drawFleetBattle() {
     if (this.theme !== 'gate' || Math.random() > 0.08) return;
@@ -4173,7 +4232,7 @@ export class GameScene extends Phaser.Scene {
     const slow = now < this.warpUntil;
     const edt = slow ? dt * ITEMS.warp.tune!.slow : dt;
     // Inside the rift, space rushes by three times as fast.
-    const rush = this.rush;
+    const rush = this.rush * (this.gate?.bgK ?? 1); // Maw Gate's last gate brings it all to a stop
     this.scroll(dt, speed * rush);
     if (this.scenery) this.scenery.tilePositionY -= 11 * speed * rush * dt;
     if (this.planet) this.planet.y += 1.2 * dt;
@@ -4213,6 +4272,15 @@ export class GameScene extends Phaser.Scene {
       for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
         if (o.y < 0) continue;
         const { l, r } = this.tunnel.at(o.y);
+        if (r - l > 16) o.x = Phaser.Math.Clamp(o.x, l + 7, r - 7);
+      }
+    }
+    if (this.gate) {
+      this.gate.update(edt);
+      // Enemies keep inside the gate's walls too.
+      for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
+        if (o.y < 0) continue;
+        const { l, r } = this.gate.at(o.y);
         if (r - l > 16) o.x = Phaser.Math.Clamp(o.x, l + 7, r - 7);
       }
     }

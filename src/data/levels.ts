@@ -34,7 +34,8 @@ export interface HazardSpec { kind: HazardKind; every: [number, number]; ramp?: 
 // Enemies warping into the top half of the screen (level 14): one-off warp-ins
 // at points `p` (0..1) through a segment, `big` ones with twice the enemies;
 // and in `every`'s segment, a warp-in every `start` ms at first, closing to
-// every `end` ms, until `until` through it.
+// every `end` ms, until `until` through it. With a gate, each warp-in comes in
+// a warp ring, and the wait for the next only runs once the last has passed.
 export interface WarpPlan {
   at: { seg: number; p: number; big?: boolean }[];
   every?: { seg: number; until: number; start: [number, number]; end: [number, number] };
@@ -81,6 +82,9 @@ export interface LevelDef {
   // part runs (px) and where its chambers start.
   tunnel?: { segment: number; len: number; chambers: number[] };
   warps?: WarpPlan;
+  // Maw Gate's structure (mawgate.ts): the way in through the gate's hull,
+  // warp rings around every warp-in, and the last gate in place of a boss.
+  gate?: boolean;
   // Star map "common enemies" for levels that aren't built yet. Built levels
   // count their own wave scripts instead.
   enemies?: [string, number][];
@@ -880,16 +884,19 @@ export const LEVELS: LevelDef[] = [
     node: 'node_gate',
     theme: 'gate',
     allies: 3,
-    hazards: [{ kind: 'tentacle', every: [5000, 8000] }],
-    // A third of the way in and just before the vendor; then after the vendor
-    // every 15 to 25 s, closing to 10 to 15 s, until two thirds of the way,
-    // and a last big warp-in at seven eighths.
+    gate: true,
+    hazards: [{ kind: 'tentacle', every: [5000, 8000], ramp: 1.8 }],
+    segmentRadio: [undefined, 'VOSS: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
+    // A third of the way in and just before the vendor; then after the vendor,
+    // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
+    // two thirds of the way. The last gate's three waves follow the last wave.
     warps: {
-      at: [{ seg: 0, p: 0.33 }, { seg: 0, p: 0.9 }, { seg: 1, p: 0.875, big: true }],
-      every: { seg: 1, until: 2 / 3, start: [15000, 25000], end: [10000, 15000] },
+      at: [{ seg: 0, p: 0.33 }, { seg: 0, p: 0.9 }],
+      every: { seg: 1, until: 2 / 3, start: [7000, 12000], end: [3000, 6000] },
     },
+    // Both segments build: waves come closer together and grow as they go.
     segments: [
-      [
+      swell(1, 1.45, ramp(1.05, 0.7, [
         { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.2 },
         { delay: 2500, kind: 'brood', pattern: 'single', x: 0.3 },
         { delay: 3500, kind: 'husk', pattern: 'single', x: 0.25 },
@@ -920,8 +927,8 @@ export const LEVELS: LevelDef[] = [
         { delay: 4000, kind: 'mimic', pattern: 'line', count: 3 },
         { delay: 3000, kind: 'husk', pattern: 'single', x: 0.7 },
         { delay: 3500, kind: 'husk', pattern: 'single', x: 0.8, waitClear: true },
-      ],
-      [
+      ])),
+      swell(1.15, 1.75, ramp(0.9, 0.55, [
         { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.3 },
         { delay: 2000, kind: 'spore', pattern: 'vee', count: 7, x: 0.5 },
         { delay: 3000, kind: 'husk', pattern: 'single', x: 0.7 },
@@ -953,7 +960,7 @@ export const LEVELS: LevelDef[] = [
         { delay: 2000, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 1500, kind: 'brood', pattern: 'pair' },
         { delay: 2000, kind: 'spore', pattern: 'vee', count: 7, x: 0.7 },
-      ],
+      ])),
     ],
   },
   // Level 15: the longest run, with no vendor and no allies, in five legs

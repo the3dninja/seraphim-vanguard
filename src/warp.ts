@@ -22,15 +22,20 @@ export class Warps {
   constructor(private g: GameScene) {}
 
   // `n` enemies at spread-out spots in the top half, arriving a beat apart.
-  open(n: number, big: boolean) {
+  // Inside a ring (`area`), they come in its upper half instead. `kinds`, if
+  // given, says which enemy each one is.
+  open(n: number, big: boolean, area?: { x: number; y: number; r: number }, kinds?: FoeKind[]) {
     const spots: { x: number; y: number }[] = [];
-    for (let tries = 0; spots.length < n && tries < 200; tries++) {
-      const x = Phaser.Math.Between(16, W - 16), y = Phaser.Math.Between(34, Math.round(H * 0.45));
-      if (spots.every((s) => Phaser.Math.Distance.Between(s.x, s.y, x, y) > (big ? 30 : 26))) spots.push({ x, y });
+    const top = area ? Math.max(34, area.y - area.r + 22) : 34;
+    const bottom = area ? Math.max(top + 30, Math.min(Math.round(H * 0.55), area.y + 10)) : Math.round(H * 0.45);
+    for (let tries = 0; spots.length < n && tries < 300; tries++) {
+      const x = Phaser.Math.Between(16, W - 16), y = Phaser.Math.Between(top, bottom);
+      if (area && Phaser.Math.Distance.Between(x, y, area.x, area.y) > area.r - 18) continue;
+      if (spots.every((s) => Phaser.Math.Distance.Between(s.x, s.y, x, y) > (big ? 28 : 24))) spots.push({ x, y });
     }
     spots.forEach((s, i) => this.portals.push({
       ...s, t: -i * 120, warn: big ? BIG_WARN : WARN, big, spawned: false,
-      kind: Phaser.Utils.Array.GetRandom(big ? BIG_POOL : POOL),
+      kind: kinds ? kinds[i % kinds.length] : Phaser.Utils.Array.GetRandom(big ? BIG_POOL : POOL),
     }));
     const g = this.g;
     g.tipOnce('warp', 'ENEMIES WARPING IN!');
@@ -90,6 +95,9 @@ export class Warps {
       gfx.strokePath();
     }
   }
+
+  // Enemies still on their way in.
+  get pending() { return this.portals.some((p) => !p.spawned); }
 
   clear() { this.portals = []; }
 }
