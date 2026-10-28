@@ -10,9 +10,10 @@ import type { GameScene } from './scenes/GameScene';
 //   middle. It hurts the ship but lets shots through.
 // - Warp rings: every warp-in comes inside a huge ring that drifts down, wider
 //   than the screen, with a gap top and bottom to fly through. The enemies warp
-//   in once the ship is inside.
-// - The last gate: a grander ring with glowing runes and rings behind it, all
-//   drifting to a stop around a gas giant. Dialog, an alarm, three waves of
+//   in once the ship is inside. A stretch of hull comes before each one, laid
+//   out differently each time.
+// - The last gate: slim walls on the way, then a grander ring with glowing
+//   runes and rings behind it, all drifting to a stop around a gas giant. Dialog, an alarm, three waves of
 //   warp-ins, then the rings spin up, a vortex opens and pulls the ship in.
 
 const SPEED = 32; // px per second the structure scrolls
@@ -51,9 +52,12 @@ const R_KEYS: Pt[] = L_KEYS.map(([u, x]) => [u, W - x]);
 const MOUTH: [number, number] = [262, 330]; // the outer hull, around the mouth
 const ENTRY_END = 1170;
 const mirror = (pts: Pt[]): Pt[] => pts.map(([x, du]) => [W - x, du]);
+interface Piece { u: number; pts: Pt[] }
+// A stretch of hull: wall edges and pieces at track positions [u0, u1].
+interface Hull { u0: number; u1: number; l: Pt[]; r: Pt[]; pieces: Piece[] }
 // Girders and pillars: [x, height above u] around their track position u.
 const girder = (tip: number): Pt[] => [[20, 0], [tip - 26, 3], [tip - 4, 8], [tip, 12], [tip - 4, 16], [tip - 26, 21], [20, 24]];
-const PIECES: { u: number; pts: Pt[] }[] = [
+const ENTRY_PIECES: Piece[] = [
   { u: 420, pts: girder(86) },
   { u: 530, pts: mirror(girder(100)) },
   { u: 640, pts: [[90, 0], [108, 20], [106, 44], [90, 64], [74, 44], [72, 20]] },
@@ -63,6 +67,30 @@ const PIECES: { u: number; pts: Pt[] }[] = [
   { u: 1010, pts: [[20, 0], [62, 6], [64, 12], [62, 18], [20, 24]] },
   { u: 1010, pts: mirror([[20, 0], [62, 6], [64, 12], [62, 18], [20, 24]]) },
 ];
+// The stretches of hull before each warp ring, each its own: [u, x] wall
+// edges (left and right) and pieces, from the stretch's start. Walls come in
+// from off screen at the start and leave at the end; the rest runs straight.
+const side = (len: number, steps: Pt[]): Pt[] => [[0, -50], [steps[0][0] - 14, steps[0][1]], ...steps, [len - 14, steps[steps.length - 1][1]], [len, -50]];
+const pillar = (h: number): Pt[] => [[90, 0], [102, h * 0.3], [102, h * 0.7], [90, h], [78, h * 0.7], [78, h * 0.3]];
+const star = (x: number): Pt[] => [[x, 0], [x + 5, 14], [x + 16, 20], [x + 5, 26], [x, 40], [x - 5, 26], [x - 16, 20], [x - 5, 14]];
+const LAYOUTS: { len: number; l: Pt[]; r: Pt[]; pieces: Piece[] }[] = [
+  // Girders off alternate walls.
+  { len: 320, l: side(320, [[40, 24]]), r: side(320, [[40, 24]]), pieces: [{ u: 70, pts: girder(88) }, { u: 160, pts: mirror(girder(88)) }, { u: 250, pts: girder(88) }] },
+  // The walls close in, and open out again.
+  { len: 300, l: side(300, [[40, 30], [110, 30], [124, 54], [190, 54], [204, 30]]), r: side(300, [[40, 30], [110, 30], [124, 54], [190, 54], [204, 30]]), pieces: [] },
+  // Pillars up the middle.
+  { len: 320, l: side(320, [[40, 20]]), r: side(320, [[40, 20]]), pieces: [{ u: 60, pts: pillar(56) }, { u: 200, pts: pillar(70) }] },
+  // A jog: the way through steps right, then left.
+  { len: 320, l: side(320, [[40, 20], [120, 20], [134, 64], [190, 64]]), r: side(320, [[40, 64], [120, 64], [134, 20], [190, 20]]), pieces: [{ u: 250, pts: girder(70) }] },
+  // Crossbars from both walls, a gap in the middle, twice.
+  { len: 300, l: side(300, [[40, 24]]), r: side(300, [[40, 24]]), pieces: [{ u: 80, pts: girder(66) }, { u: 80, pts: mirror(girder(66)) }, { u: 190, pts: star(90) }] },
+  // Short teeth off both walls, staggered.
+  { len: 330, l: side(330, [[40, 28]]), r: side(330, [[40, 28]]), pieces: [50, 100, 150, 200, 250].map((u, i) => ({ u, pts: i % 2 ? mirror(girder(62)) : girder(62) })) },
+];
+const FINAL_WALL = 20; // the slim walls on the way to the last gate
+const FINAL_WALLS = 380; // how long they run
+const FINAL_FROM = -180; // where their far end is on screen when the last gate comes into view
+
 // Runes: 3x4 pixel glyphs.
 const GLYPHS = [
   [0b111, 0b010, 0b010, 0b111], [0b101, 0b111, 0b101, 0b101], [0b110, 0b011, 0b110, 0b011],
@@ -96,6 +124,9 @@ export class MawGate {
   private s = 0; // px scrolled since the level began
   private t = 0;
   private rings: Ring[] = [];
+  private hulls: Hull[] = [];
+  private made = 0; // hull stretches made for warp rings
+  private finAt: number | null = null; // where the last gate comes into view, on the way
   private entry: boolean;
   private entered = false; // the mouth has passed the ship
   private saidIn = false;
@@ -124,45 +155,74 @@ export class MawGate {
     g.children.moveTo(this.back, index);
     g.children.moveTo(this.glow, index + 1);
     g.children.moveTo(this.gfx, index + 2);
-    if (entry) scenery?.setAlpha(0); // open space until the ship is inside
-    else this.s = ENTRY_END + H + 1;
+    if (entry) {
+      scenery?.setAlpha(0); // open space until the ship is inside
+      this.hulls.push({ u0: L_KEYS[0][0], u1: ENTRY_END, l: L_KEYS, r: R_KEYS, pieces: ENTRY_PIECES });
+    } else this.s = ENTRY_END + H + 1;
   }
 
   // How fast the background scrolls, as a share: the last gate brings it to a stop.
   get bgK() { return this.fin ? this.fin.v / SPEED : 1; }
 
   // Nothing of the gate on screen or on its way: a new warp ring can come.
-  get idle() { return this.rings.length === 0 && !this.inEntry; }
+  get idle() { return this.rings.length === 0 && this.hulls.length === 0; }
 
-  private get inEntry() { return this.entry && this.s < ENTRY_END + H; }
-
-  get finale() { return !!this.fin; }
+  get finale() { return !!this.fin || this.finAt !== null; }
 
   // A warp ring, drifting in from above once the way is clear.
+  // A stretch of hull comes first, a different one each time, unless the way in
+  // is still close by.
   ring() {
-    const top = Math.max(this.s + R + 2, ...this.rings.map((r) => r.u + 2 * R + 30), this.entry ? ENTRY_END + R + 40 : 0);
-    this.rings.push({ u: top, inside: false });
+    if (this.finale) return;
+    const from = Math.max(this.s + 4, ...this.rings.map((r) => r.u + R + 30), ...this.hulls.map((h) => h.u1 + 40));
+    let bottom = from;
+    if (!(this.entry && from < ENTRY_END + 200)) {
+      const lay = LAYOUTS[this.made % LAYOUTS.length];
+      const flip = Math.floor(this.made / LAYOUTS.length) % 2 === 1; // the second time round, mirrored
+      const at = (pts: Pt[]): Pt[] => pts.map(([u, x]) => [from + u, x]);
+      this.hulls.push({
+        u0: from, u1: from + lay.len, l: at(flip ? lay.r : lay.l), r: at(flip ? lay.l : lay.r).map(([u, x]) => [u, W - x]),
+        pieces: lay.pieces.map((p) => ({ u: from + p.u, pts: flip ? mirror(p.pts) : p.pts })),
+      });
+      this.made++;
+      bottom = from + lay.len + 24;
+    }
+    this.rings.push({ u: bottom + R, inside: false });
   }
 
-  clearRings() { this.rings = []; }
+  // Rings, and the hull before them, that haven't come into view yet.
+  clearRings() {
+    this.rings = [];
+    this.hulls = this.hulls.filter((h) => h.u0 < this.s);
+  }
+
+  private hullAt(u: number) {
+    return this.hulls.find((h) => u >= h.u0 && u <= h.u1);
+  }
 
   // Walls at screen row y: everything left of l and right of r is solid.
   at(y: number) {
-    if (!this.inEntry) return { l: -99, r: W + 99 };
     const u = this.s - y;
-    return { l: edgeAt(L_KEYS, u), r: edgeAt(R_KEYS, u) };
+    const h = this.hullAt(u);
+    if (!h) return { l: -99, r: W + 99 };
+    return { l: edgeAt(h.l, u), r: edgeAt(h.r, u) };
   }
 
 
   // A piece's corners on screen right now.
-  private piecePts(p: { u: number; pts: Pt[] }) {
+  private piecePts(p: Piece) {
     return p.pts.map(([x, du]) => ({ x, y: this.s - p.u - du }));
   }
 
   solidAt(x: number, y: number) {
     const { l, r } = this.at(y);
     if (x < l || x > r) return true;
-    return this.inEntry && PIECES.some((p) => inPoly(x, y, this.piecePts(p)));
+    return this.pieces().some((p) => inPoly(x, y, this.piecePts(p)));
+  }
+
+  // The pieces on screen, or near it.
+  private pieces() {
+    return this.hulls.flatMap((h) => (h.u0 < this.s + 80 ? h.pieces : []));
   }
 
   update(dt: number) {
@@ -170,8 +230,13 @@ export class MawGate {
     this.t += dt * 1000;
     const f = this.fin;
     if (f) this.runFinale(dt, f);
-    else this.s += SPEED * dt;
-    this.calm = this.inEntry && this.s > 200 || (!!f && f.stage === 'spin');
+    this.s += (f ? f.v : SPEED) * dt;
+    if (this.finAt !== null && this.s >= this.finAt) { this.finAt = null; this.beginFinale(); }
+    this.hulls = this.hulls.filter((h) => h.u1 > this.s - H - 30);
+    // No hazards among the hull, and none once the last gate spins up.
+    this.calm = this.hulls.some((h) => h.u0 < this.s + 50) || (!!f && f.stage === 'spin');
+    // On the way to the last gate the guns fall quiet once the last enemy is gone.
+    if (this.finale && (!f || f.stage === 'approach' || f.stage === 'talk') && g.foesLeft() === 0) g.holdFire = true;
 
     // Into the gate: its own scenery fades in once the mouth passes the ship.
     if (this.entry && !this.entered && this.s - MOUTH[1] > g.player.y) {
@@ -183,7 +248,7 @@ export class MawGate {
     this.gfx.clear();
     this.back.clear();
     this.glow.clear();
-    if (this.inEntry) this.drawEntry();
+    if (this.hulls.some((h) => h.u0 < this.s + 10)) this.drawHull();
     for (const rg of this.rings.slice()) {
       const cy = this.s - rg.u;
       if (cy - R > H + 12) { this.rings.splice(this.rings.indexOf(rg), 1); continue; }
@@ -196,13 +261,13 @@ export class MawGate {
       }
     }
     if (f) this.drawFinale(f);
-    if (g.phase === 'action' && this.inEntry) this.hitEntry();
+    if (g.phase === 'action' && this.hulls.length) this.hitHull();
     if (g.phase === 'action') this.blockShots();
   }
 
-  // --- The way in ---------------------------------------------------------------
+  // --- The way in, and the hull before each ring --------------------------------
 
-  private drawEntry() {
+  private drawHull() {
     const gx = this.gfx;
     const pulse = 0.55 + 0.45 * Math.sin(this.t / 260);
     const BAND = 13;
@@ -253,7 +318,7 @@ export class MawGate {
       }
     }
     const my = this.s - (MOUTH[0] + MOUTH[1]) / 2;
-    if (my > -50 && my < H + 50) {
+    if (this.entry && my > -50 && my < H + 50) {
       // The mouth: a ring segment like the gate's, framing the opening.
       for (const [a0, a1] of [[Math.PI * 1.16, Math.PI * 1.84], [Math.PI * 0.16, Math.PI * 0.84]]) {
         gx.lineStyle(10, 0x0c0010, 1).beginPath().arc(W / 2, my, 44, a0, a1).strokePath();
@@ -268,7 +333,7 @@ export class MawGate {
       }
     }
     // Girders and pillars: plated like the ring, with a pylon light at the tip.
-    for (const p of PIECES) {
+    for (const p of this.pieces()) {
       const pts = this.piecePts(p);
       if (pts.every((q) => q.y > H + 6) || pts.every((q) => q.y < -6)) continue;
       gx.lineStyle(3, 0x0c0010, 1).strokePoints(pts, true, true);
@@ -302,7 +367,7 @@ export class MawGate {
     }
   }
 
-  private hitEntry() {
+  private hitHull() {
     const g = this.g;
     const p = g.player;
     const { l, r } = this.at(p.y);
@@ -312,7 +377,7 @@ export class MawGate {
       g.tipOnce('gatewall', 'DON\'T TOUCH THE\nGATE STRUCTURE');
       return;
     }
-    for (const pc of PIECES) {
+    for (const pc of this.pieces()) {
       const pts = this.piecePts(pc);
       if (![[0, 0], [-2, -3], [2, -3], [-2, 3], [2, 3]].some(([dx, dy]) => inPoly(p.x + dx, p.y + dy, pts))) continue;
       g.hurt();
@@ -338,7 +403,7 @@ export class MawGate {
     for (const b of g.playerBullets.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
       const fx = b.getData('fx');
       if (!b.active || fx === 'wave' || fx === 'probe' || fx === 'blast') continue; // Mine Layer's unseen shots too
-      if (!(this.inEntry && this.solidAt(b.x, b.y)) && !onBand(b.x, b.y)) continue;
+      if (!this.solidAt(b.x, b.y) && !onBand(b.x, b.y)) continue;
       g.tink(b.x, b.y);
       b.destroy();
     }
@@ -434,9 +499,18 @@ export class MawGate {
 
   // --- The last gate --------------------------------------------------------------
 
+  // The last gate: first slim walls on the way, then the gate drifts in once
+  // they're well along.
   startFinale() {
-    if (this.fin) return;
-    this.rings = [];
+    if (this.finale) return;
+    this.clearRings();
+    const u0 = Math.max(this.s + 4, ...this.hulls.map((h) => h.u1 + 40)), u1 = u0 + FINAL_WALLS;
+    const wall: Pt[] = [[u0, -50], [u0 + 14, FINAL_WALL], [u1 - 14, FINAL_WALL], [u1, -50]];
+    this.hulls.push({ u0, u1, l: wall, r: wall.map(([u, x]) => [u, W - x]), pieces: [] });
+    this.finAt = u1 + FINAL_FROM;
+  }
+
+  private beginFinale() {
     this.fin = {
       stage: 'approach', d: FINAL_D, v: SPEED, t: 0, said: 0, wave: -1, burst: 0, next: 0,
       alarmUntil: 0, spin: 0, angles: BACK.map(() => 0), glow: 0, vortex: 0, sucked: false,
@@ -473,6 +547,7 @@ export class MawGate {
         f.next -= ms;
         if (f.next > 0) return;
         const b = wave[f.burst++];
+        g.holdFire = false; // the guns open up as they warp in
         g.warpEnemies(b.kinds.length, b.big, { x: W / 2, y: STOP_Y, r: R }, b.kinds);
         f.next = BURST_GAP;
         f.t = 0;
@@ -489,6 +564,7 @@ export class MawGate {
         this.alarm(f.wave === FINAL_WAVES.length - 1 ? 'FINAL WAVE!' : 'MORE INCOMING!');
       } else {
         f.stage = 'spin';
+        g.holdFire = true;
         g.setArena(false);
         g.gateCalm();
         g.radio('REYES: THE GATE...\nIT\'S OPENING!');

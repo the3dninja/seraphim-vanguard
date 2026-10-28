@@ -241,6 +241,7 @@ export class GameScene extends Phaser.Scene {
   private warpsDone = new Set<number>(); // which one-off warp-ins have happened
   private warpIn: number | null = null; // ms to the next repeating warp-in
   private gate: MawGate | null = null;
+  holdFire = false; // the ship and wingmen hold their fire (Maw Gate's last gate, between fights)
   private arena = false; // an arena fight is on (see setArena)
   private arenaBand: [number, number] = [40, 144]; // Maw Gate's structure: the way in, warp rings, the last gate
   private homeUntil = 0; // credits dropped before this curve toward the ship (a boss's gold)
@@ -357,6 +358,7 @@ export class GameScene extends Phaser.Scene {
     this.warpsDone = new Set();
     this.warpIn = null;
     this.gate = null;
+    this.holdFire = false;
     this.arena = false;
     this.homeUntil = 0;
     this.pops = [];
@@ -2794,7 +2796,7 @@ export class GameScene extends Phaser.Scene {
       a.img.x += (tx - a.img.x) * k;
       a.img.y += (ty - a.img.y) * k;
       a.fireIn -= dt * 1000;
-      if (this.phase === 'action' && a.fireIn <= 0) this.allyFire(a);
+      if (this.phase === 'action' && a.fireIn <= 0 && !this.holdFire) this.allyFire(a);
       // Enemy shots that hit a wingman are soaked up.
       for (const b of this.enemyBullets.getChildren().slice() as Phaser.GameObjects.Image[]) {
         if (Math.abs(b.x - a.img.x) < 5 && Math.abs(b.y - a.img.y) < 5) { b.destroy(); this.flash(a.img); }
@@ -2831,6 +2833,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private autoFire(dt: number) {
+    if (this.holdFire) return;
     const s = this.state;
     // An Overdrive Cell and Shot Radar's overdrive each multiply the fire rate, so together they stack.
     const rate = ITEMS.overdrive.tune!.rate;
