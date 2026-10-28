@@ -40,6 +40,9 @@ const FINAL_WAVES: { kinds: FoeKind[]; big: boolean }[][] = [
   ],
 ];
 const BURST_GAP = 1700; // ms between a wave's bursts
+const PULSES = 3; // red alarm pulses before each of the last gate's waves
+const PULSE = 520; // ms from one pulse to the next
+const PULSE_ON = 340; // ms each pulse is lit
 
 type Pt = [number, number];
 // Wall edges along the way in: [track position, x]. Off screen before and after.
@@ -108,6 +111,8 @@ export class MawGate {
     stage: Stage; d: number; v: number; t: number; said: number; wave: number; burst: number; next: number;
     alarmUntil: number; spin: number; angles: number[]; glow: number; vortex: number; sucked: boolean;
   } | null = null;
+  private wash: Phaser.GameObjects.Rectangle | null = null; // the alarm's red over the whole screen
+  private alarmText: Phaser.GameObjects.Text | null = null;
   calm = false; // no hazards (in the passage, and once the last gate spins up)
 
   constructor(private g: GameScene, private scenery: Phaser.GameObjects.TileSprite | null, entry: boolean, index: number) {
@@ -319,7 +324,7 @@ export class MawGate {
     const gx = this.gfx;
     const half = Math.asin(GAP / 2 / R);
     const spans: [number, number][] = [[Math.PI / 2 + half, Math.PI * 1.5 - half], [-Math.PI / 2 + half, Math.PI / 2 - half]];
-    const alarm = !!this.fin && this.t < this.fin.alarmUntil && Math.floor(this.t / 160) % 2 === 0;
+    const alarm = this.alarmK() > 0.3;
     const spinning = this.fin?.stage === 'spin';
     const th = grand ? 12 : 10;
     for (const [a0, a1] of spans) {
@@ -401,6 +406,7 @@ export class MawGate {
       alarmUntil: 0, spin: 0, angles: BACK.map(() => 0), glow: 0, vortex: 0, sucked: false,
     };
     this.makePlanet();
+    this.wash = this.g.add.rectangle(0, 0, W, H, 0xd82800, 0).setOrigin(0).setDepth(950);
   }
 
   private runFinale(dt: number, f: NonNullable<MawGate['fin']>) {
@@ -418,7 +424,7 @@ export class MawGate {
     }
     if (f.stage === 'talk') {
       if (f.t > 1400 && f.said === 1) { f.said = 2; g.radio('REYES: BENEATH THAT\nSTORM? THEN WE GO\nTHROUGH IT.'); }
-      if (f.t > 6200 && f.said === 2) { f.said = 3; this.alarm('WARNING\nINCOMING!', 4); g.radio('VEX: HERE THEY COME!'); }
+      if (f.t > 6200 && f.said === 2) { f.said = 3; this.alarm('WARNING\nINCOMING!'); g.radio('VEX: HERE THEY COME!'); }
       if (f.t > 8800) { f.stage = 'waves'; f.wave = 0; f.burst = 0; f.next = 0; f.t = 0; }
       return;
     }
@@ -441,7 +447,7 @@ export class MawGate {
       f.t = 0;
       if (f.wave < FINAL_WAVES.length) {
         f.next = 1800;
-        this.alarm(f.wave === FINAL_WAVES.length - 1 ? 'FINAL WAVE!' : 'MORE INCOMING!', 2);
+        this.alarm(f.wave === FINAL_WAVES.length - 1 ? 'FINAL WAVE!' : 'MORE INCOMING!');
       } else {
         f.stage = 'spin';
         g.gateCalm();
@@ -457,12 +463,21 @@ export class MawGate {
     if (f.t > 3900 && !f.sucked) { f.sucked = true; g.gateVortex(W / 2, STOP_Y); }
   }
 
+  // How bright the alarm is right now, 0 to 1: three pulses, then nothing.
+  private alarmK() {
+    const f = this.fin;
+    if (!f || f.alarmUntil === 0 || this.t >= f.alarmUntil) return 0;
+    const into = (this.t - (f.alarmUntil - PULSES * PULSE)) % PULSE;
+    return into < PULSE_ON ? Math.sin((Math.PI * into) / PULSE_ON) : 0;
+  }
+
   // How bright the last gate's red lights are: off until the first alarm,
-  // full while it sounds and as the gate spins up, dim through the waves.
+  // pulsing on and off with it, full as the gate spins up, dim through the waves.
   private redK() {
     const f = this.fin;
     if (!f || f.alarmUntil === 0) return 0;
-    return this.t < f.alarmUntil || f.stage === 'spin' ? 1 : 0.4;
+    if (f.stage === 'spin') return 1;
+    return this.t < f.alarmUntil ? this.alarmK() : 0.4;
   }
 
   // One red light, pulsing (`phase` staggers neighbours).
@@ -474,19 +489,22 @@ export class MawGate {
   }
 
   // Red lights flash, and a warning blinks in the middle.
-  private alarm(msg: string, flashes: number) {
+  // The wash and the lights follow alarmK, so the lights seem to light the place up.
+  private alarm(msg: string) {
     const g = this.g;
     if (!this.fin) return;
-    this.fin.alarmUntil = this.t + flashes * 520;
-    // An ambient red wash, not a full-screen flash.
-    const wash = g.add.rectangle(0, 0, W, H, 0xd82800, 0).setOrigin(0).setDepth(950);
-    g.tweens.add({ targets: wash, alpha: 0.3, duration: 130, yoyo: true, hold: 60, repeat: flashes - 1, repeatDelay: 140, onComplete: () => wash.destroy() });
+    this.fin.alarmUntil = this.t + PULSES * PULSE;
+    this.alarmText?.destroy();
     const t = text(g, W / 2, H / 2 - 10, msg, COLOR.red).setOrigin(0.5).setAlign('center').setDepth(1000)
       .setBackgroundColor('#000000').setPadding(3, 3, 3, 3);
-    g.tweens.add({ targets: t, alpha: 0.15, yoyo: true, repeat: flashes, duration: 260, onComplete: () => t.destroy() });
+    this.alarmText = t;
+    g.time.delayedCall(PULSES * PULSE, () => { t.destroy(); if (this.alarmText === t) this.alarmText = null; });
   }
 
   private drawFinale(f: NonNullable<MawGate['fin']>) {
+    const pulse = this.alarmK();
+    this.wash?.setAlpha(0.3 * pulse);
+    this.alarmText?.setAlpha(0.35 + 0.65 * pulse);
     const cx = W / 2;
     const cy = STOP_Y - f.d;
     // The gas giant, furthest back.
@@ -623,5 +641,6 @@ export class MawGate {
     this.back.destroy();
     this.glow.destroy();
     this.planet?.destroy();
+    this.wash?.destroy();
   }
 }
