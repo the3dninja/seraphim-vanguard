@@ -4095,8 +4095,9 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // `flyOut`: the ship climbs away off the top (not when it's already gone).
-  private endLevel(last: boolean, flyOut = true) {
+  // `outro`: the LEVEL CLEAR text, and the ship climbing away off the top
+  // (not when it's already gone, into Maw Gate's vortex).
+  private endLevel(last: boolean, outro = true) {
     this.gatherCoins(() => {
       if (last) { this.ending(); return; }
       if (this.side) {
@@ -4108,9 +4109,11 @@ export class GameScene extends Phaser.Scene {
         this.time.delayedCall(2800, () => this.leaveTo('Base', this.state));
         return;
       }
-      text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
-      text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
-      if (flyOut) this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+      if (outro) {
+        text(this, W / 2, H / 2 - 16, `LEVEL ${this.state.level} CLEAR`, COLOR.yellow).setOrigin(0.5).setDepth(1000);
+        text(this, W / 2, H / 2 + 2, 'RETURNING TO BASE', COLOR.gray).setOrigin(0.5).setDepth(1000);
+        this.tweens.add({ targets: this.player, y: -30, duration: 1400, delay: 900, ease: 'Quad.easeIn' });
+      }
       if (this.replay) {
         // A replay doesn't move the ship on, or open anything new.
         this.state.level = this.startState.level;
