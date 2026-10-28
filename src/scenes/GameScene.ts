@@ -96,6 +96,8 @@ const GLITTER: Record<string, { colors: number[]; n: number; size: number; speed
 };
 interface Pop { x: number; y: number; t: number; lv: number; color: number } // a hit's flash ring, ms since the hit
 // Incendiary Ammo's smouldering flame where a shot hit, riding on `on` if set (ox, oy from it, else where it is).
+// A Mine Layer mine. t, life: ms. probe: an unseen shot under it that a boss's own shot check takes on contact.
+interface Mine { img: Phaser.GameObjects.Image; t: number; life: number; prox: number; dmg: number; splash: number; drift: number; probe: Phaser.GameObjects.Image | null }
 interface Flame { on: Phaser.GameObjects.Sprite | null; ox: number; oy: number; t: number; life: number; lv: number }
 // A Bio Seeker spore clinging to an enemy (or the boss, when `on` is null). left, tick: ms.
 interface Latch { on: Phaser.Physics.Arcade.Sprite | null; ox: number; oy: number; img: Phaser.GameObjects.Image; left: number; tick: number; dps: number; lv: number }
@@ -236,6 +238,7 @@ export class GameScene extends Phaser.Scene {
   private pops: Pop[] = [];
   private glitter: Glitter[] = [];
   private flames: Flame[] = [];
+  private mines: Mine[] = [];
   private latches: Latch[] = [];
   private embers!: Phaser.GameObjects.Particles.ParticleEmitter; // Incendiary Ammo hits
   private ramGlow = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Image>(); // Afterburner target highlights
@@ -347,6 +350,7 @@ export class GameScene extends Phaser.Scene {
     this.homeUntil = 0;
     this.pops = [];
     this.flames = [];
+    this.mines = [];
     this.latches = [];
     this.ramGlow = new Map();
     this.bossPull = { x: 0, y: 0 };
@@ -2239,7 +2243,7 @@ export class GameScene extends Phaser.Scene {
 
   private hitHazard(b: Phaser.Physics.Arcade.Image, h: Phaser.Physics.Arcade.Image) {
     if (!b.active || !h.active || b.getData('fx') === 'wave') return; // the Wave Beam passes through cover
-    if (b.getData('fx') === 'mine') { this.blast(b); return; }
+    if (b.getData('fx') === 'probe' || b.getData('fx') === 'blast') return; // Mine Layer's unseen boss shots
     const dmg = (b.getData('dmg') as number) ?? 1;
     b.destroy();
     this.plasmaSplash(b);
@@ -2798,6 +2802,11 @@ export class GameScene extends Phaser.Scene {
         // Shots leave from the nose, or the tail if they fly backward. Side
         // Winders all leave from the ship's middle, so each side fans from one point.
         const dy = def.fx === 'seek' ? 0 : Math.abs(deg) > 90 ? 7 : -7;
+        if (def.fx === 'mine') {
+          this.layMine(this.player.x + dx, this.player.y + dy, dmg, (splash ?? 0) + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0),
+            lv, stats.speed ?? 0, charged);
+          return;
+        }
         const b = this.shot(this.player.x + dx, this.player.y + dy, shotTexture(def, lv), deg, stats.speed ?? def.speed ?? 300, dmg, dtype, lv);
         if (def.fx) this.setFx(b, def.fx);
         if (splash) b.setData('splash', splash + (hasGear(s, 'shaped') ? gearStats.shaped(gearLevel(s, 'shaped')).splash : 0));
@@ -2809,7 +2818,6 @@ export class GameScene extends Phaser.Scene {
         if (def.fx === 'wave') b.setData('ox', b.x).setData('phase', i % 2 ? Math.PI : 0);
         if (def.fx === 'arc') b.setData('life', arcLife(lv));
         if (def.fx === 'seek') b.setData('dir', Phaser.Math.DegToRad(deg - 90));
-        if (def.fx === 'mine') b.setData('life', atLv(def.tune!.life, lv)).setData('prox', atLv(def.tune!.prox, lv));
         if (charged) b.setScale(1.6).setTint(0xfcfcfc);
       };
       const dmg = stats.damage * (charged ? 3 : 1);
@@ -2861,20 +2869,13 @@ export class GameScene extends Phaser.Scene {
           if (t > 0.35) b.destroy();
           break;
         case 'tick':
+        case 'blast':
         case 'lightning':
           if (t > 0.05) b.destroy();
           break;
         case 'bomb':
           if (t > BOMB_FUSE) this.blast(b);
           break;
-        case 'mine': {
-          // Mine Layer: goes off when it runs out or an enemy comes near, its
-          // light blinking faster over its last second.
-          const left = (b.getData('life') as number) - t * 1000;
-          if (left <= 0 || this.enemyNear(b.x, b.y, b.getData('prox') as number)) { this.blast(b); break; }
-          b.setTexture(Math.floor(t * 1000 / (left < 1000 ? 100 : 400)) % 2 ? 'playermineLit' : 'playermine');
-          break;
-        }
       }
     }
   }
@@ -3047,6 +3048,8 @@ export class GameScene extends Phaser.Scene {
     const fx = info?.fx;
     if (fx === 'redirect') return info!.dmg; // exactly what Energy Redirect soaked up
     if (fx === 'lightning') { const n = info!.pool!.left; info!.pool!.left = 0; return n; } // Lightning Round: once per strike
+    if (fx === 'probe') return 0; // a mine touching the boss: it goes off (see updateMines)
+    if (fx === 'blast') { const n = info!.pool!.left; info!.pool!.left = 0; return this.typedDamage(n, 'explosive', taken); } // a mine's blast: once
     if (fx !== 'tick') {
       if (this.plasmaSplash(b)) this.blobHitAt = this.time.now;
       this.hitFx(b);
@@ -3063,7 +3066,7 @@ export class GameScene extends Phaser.Scene {
     const d = e.getData('e') as EnemyData;
     if (d.cloaked) return; // shots pass through a cloaked Phantom
     const fx = b.getData('fx');
-    if (fx === 'tick' || fx === 'redirect' || fx === 'lightning' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; Energy Redirect's boss shot; flak shrapnel past its first target
+    if (fx === 'tick' || fx === 'redirect' || fx === 'lightning' || fx === 'probe' || fx === 'blast' || b.getData('ignore') === e) return; // Bio Seeker boss ticks; Energy Redirect's boss shot; flak shrapnel past its first target
     const lv = this.shotInfo.get(b)?.lv ?? 1;
     const dtype = (b.getData('dtype') as DType) ?? 'kinetic';
     let dmg = (b.getData('dmg') as number) ?? 1;
@@ -3088,7 +3091,7 @@ export class GameScene extends Phaser.Scene {
     if (hits) {
       if (hits.has(e)) return;
       hits.add(e);
-    } else if (fx === 'bomb' || fx === 'mine') {
+    } else if (fx === 'bomb') {
       this.blast(b);
       return;
     } else if (fx === 'flak' && lv >= 5) this.flakBurst(b, e);
@@ -3271,11 +3274,58 @@ export class GameScene extends Phaser.Scene {
     this.splash(x, y, r, dmg, 'explosive', null);
   }
 
-  // Whether an enemy's edge is within `prox` px of a point (a Mine Layer mine; 0 never counts, contact does that).
+  // Mine Layer: a mine stays where it's laid (or drifts down), drawn over enemies and bosses.
+  private layMine(x: number, y: number, dmg: number, splash: number, lv: number, drift: number, charged: boolean) {
+    const t = WEAPONS.mines.tune!;
+    const img = this.add.image(x, y, 'playermine').setDepth(11);
+    if (charged) img.setScale(1.6).setTint(0xfcfcfc);
+    this.mines.push({ img, t: 0, life: atLv(t.life, lv), prox: atLv(t.prox, lv), dmg, splash, drift, probe: null });
+  }
+
+  // Each mine goes off when it runs out, an enemy touches it or comes within
+  // its trigger distance, or a boss touches it, its light blinking faster over
+  // its last second. Bosses only take hits through their own shot checks, so an
+  // unseen shot sits under each mine: if one is taken, a boss is touching it.
+  private updateMines(dt: number) {
+    for (const m of this.mines.slice()) {
+      m.t += dt * 1000;
+      m.img.y += m.drift * dt;
+      const touched = !!m.probe && !m.probe.active;
+      m.probe?.destroy();
+      m.probe = null;
+      const left = m.life - m.t;
+      if (left <= 0 || touched || this.enemyNear(m.img.x, m.img.y, m.prox) || m.img.y > H + 10) { this.mineBlast(m); continue; }
+      m.img.setTexture(Math.floor(m.t / (left < 1000 ? 100 : 400)) % 2 ? 'playermineLit' : 'playermine');
+      if (this.boss || this.treasure) m.probe = this.setFx(this.shot(m.img.x, m.img.y, 'px', 0, 0, 0, 'explosive'), 'probe').setVisible(false);
+    }
+  }
+
+  private mineBlast(m: Mine) {
+    this.mines.splice(this.mines.indexOf(m), 1);
+    const { x, y } = m.img;
+    m.img.destroy();
+    m.probe?.destroy();
+    if (y > H + 10) return; // drifted off the bottom
+    this.sparks.explode(8, x, y);
+    this.splash(x, y, m.splash, m.dmg, 'explosive', null);
+    // A boss anywhere in the blast takes its damage once, through unseen shots across it.
+    if (this.boss || this.treasure) {
+      const pool = { left: m.dmg };
+      const r = m.splash;
+      for (let dx = -r; dx <= r; dx += 5) {
+        for (let dy = -r; dy <= r; dy += 5) {
+          if (dx * dx + dy * dy > r * r) continue;
+          const t = this.setFx(this.shot(x + dx, y + dy, 'px', 0, 0, m.dmg, 'explosive'), 'blast').setVisible(false);
+          this.shotInfo.get(t)!.pool = pool;
+        }
+      }
+    }
+  }
+
+  // Whether an enemy is touching a point or within `prox` px of it (a Mine Layer mine).
   private enemyNear(x: number, y: number, prox: number) {
-    if (!(prox > 0)) return false;
     return (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).some((o) => o.active && !(o.getData('e') as EnemyData).cloaked
-      && Phaser.Math.Distance.Between(x, y, o.x, o.y) <= prox + 3 + Math.max(o.displayWidth, o.displayHeight) / 2);
+      && Phaser.Math.Distance.Between(x, y, o.x, o.y) <= prox + 2 + (o.displayWidth + o.displayHeight) / 4);
   }
 
   // Ion Arc: lightning jumps from the target to the nearest enemies (two unless tuned).
@@ -3768,6 +3818,8 @@ export class GameScene extends Phaser.Scene {
   // Everything that shouldn't carry over into a vendor stop or the rift.
   private clearForCutscene() {
     this.hazards.clear(true, true);
+    this.mines.forEach((m) => { m.img.destroy(); m.probe?.destroy(); });
+    this.mines = [];
     this.clearTimedHazards();
     this.patches.forEach((pt) => pt.destroy());
     this.patches = [];
@@ -4144,6 +4196,7 @@ export class GameScene extends Phaser.Scene {
       }
     } else if (this.lingering) this.move(dt);
     this.updateShots(dt);
+    this.updateMines(dt);
     this.updateEnemies(edt);
     this.updateVortices(edt);
     this.boss?.update(edt);
