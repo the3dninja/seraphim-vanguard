@@ -28,6 +28,7 @@ For example `https://the3dninja.github.io/seraphim-vanguard/?god&rich&level=3`.
 ## What's in this version
 
 - Title screen with Continue / New Game
+- **Fits any screen**: the play area is always the same 180 x 320, so every phone plays the same. The space around it is solid black; on tall phones the hearts and credits move into the strip above it and the weapon, gear and item buttons into the strip below (kept clear of the notch and home bar), and on shorter or wider screens they stay over the play area. It refits when the phone turns
 - Level 1, Outpost Run (the tutorial): Darts and Weavers in two legs that flow straight into each other (no vendor yet: the first stop is on level 2), and a final wave
 - Level 2, Scrapyard Belt: Scrap Drone swarms, Gunboats that park and fire 3-shot spreads, and drifting wrecks that block shots from both sides
 - Level 3, Kessel Asteroids: rocks that split when shot, Bombers that lay mines, and the **Rockjaw** mini boss. Break off its three armor plates to expose the core; it throws boulders, and fires spreads once its core is bare. Now and then it switches from swaying to a diving figure eight, and it moves 25% faster once the core is bare. Its health bar is the core; a thinner blue bar under it shows the armor (the Sporeheart's petals show the same way). It drops 175 credits

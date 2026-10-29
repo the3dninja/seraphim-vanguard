@@ -10,6 +10,7 @@ import {
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { ask, button, choose, richText, text, toast } from '../ui';
+import { fitScene } from '../screen';
 
 interface VendorData {
   state: SaveData;
@@ -85,6 +86,7 @@ export class VendorScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 10000);
     this.scene.bringToTop(); // draw over Base, which sits later in the scene list
     this.cameras.main.fadeIn(250);
     this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setInteractive();

@@ -6,6 +6,7 @@ import { sideById, unbeatenSides } from '../data/sides';
 import type { Pick } from './MapScene';
 import { cloneSave, writeSave, type SaveData } from '../save';
 import { button, starfield, text, toast } from '../ui';
+import { fitScene } from '../screen';
 
 // Playtest helper: ?side=ID flies that side mission once, straight from Base.
 let sideJumpDone = false;
@@ -46,6 +47,7 @@ export class BaseScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 10000);
     writeSave(this.state);
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);

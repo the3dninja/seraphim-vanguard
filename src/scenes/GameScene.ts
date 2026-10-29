@@ -25,6 +25,7 @@ import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
+import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
@@ -314,6 +315,7 @@ export class GameScene extends Phaser.Scene {
   private itemReadyAt: number[] = []; // per item slot, in combat test (items don't run out there)
   private weaponIcons: Phaser.GameObjects.Image[] = [];
   private gearButtons: { box: Phaser.GameObjects.Rectangle; icon: Phaser.GameObjects.Image; cool: Phaser.GameObjects.Rectangle }[] = [];
+  private hudParts: { o: { y: number }; y: number; edge: 'top' | 'bottom' }[] = [];
   private tipsShown = new Set<string>();
   private tipFreeAt = 0; // when the tip on screen is done blinking
 
@@ -415,6 +417,7 @@ export class GameScene extends Phaser.Scene {
     this.itemReadyAt = [];
     this.weaponIcons = [];
     this.gearButtons = [];
+    this.hudParts = [];
     this.tipsShown = new Set();
     this.tipFreeAt = 0;
     this.scenery = null;
@@ -430,6 +433,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 899, () => this.placeHud());
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
     this.setTheme(this.segmentTheme(this.segment));
@@ -717,21 +721,21 @@ export class GameScene extends Phaser.Scene {
   private createHud() {
     // Ten hearts to a row; Hull Plating can add a second row.
     for (let i = 0; i < 16; i++) {
-      this.hearts.push(this.add.image(6 + (i % 10) * 9, 8 + Math.floor(i / 10) * 8, 'heart').setOrigin(0, 0.5).setDepth(900));
+      this.hearts.push(this.hud(this.add.image(6 + (i % 10) * 9, 8 + Math.floor(i / 10) * 8, 'heart').setOrigin(0, 0.5).setDepth(900), 'top'));
     }
-    this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900);
-    this.creditsText = text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900);
+    this.hud(this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900), 'top');
+    this.creditsText = this.hud(text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900), 'top');
 
     // Bottom left: one box per gear slot (active gear fills with gray until
     // its next supply crate), with the weapon readout above. Bottom right: one item
     // button per slot (big enough for a thumb), each showing its stack like 1/3.
     const wy = this.state.gear.length ? H - 36 : H - 12;
-    this.state.weapons.forEach((_w, i) => this.weaponIcons.push(this.add.image(10 + i * 12, wy, 'icon_pulse').setDepth(900)));
+    this.state.weapons.forEach((_w, i) => this.weaponIcons.push(this.hud(this.add.image(10 + i * 12, wy, 'icon_pulse').setDepth(900))));
     this.state.gear.forEach((_g, i) => {
       const x = 4 + i * 24;
-      const box = this.add.rectangle(x, H - 26, 22, 22, 0x000000).setOrigin(0).setDepth(900);
-      const cool = this.add.rectangle(x + 1, H - 5, 20, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(901);
-      const icon = this.add.image(x + 11, H - 15, 'icon_plating').setDepth(902);
+      const box = this.hud(this.add.rectangle(x, H - 26, 22, 22, 0x000000).setOrigin(0).setDepth(900));
+      const cool = this.hud(this.add.rectangle(x + 1, H - 5, 20, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(901));
+      const icon = this.hud(this.add.image(x + 11, H - 15, 'icon_plating').setDepth(902));
       this.gearButtons.push({ box, icon, cool });
     });
     const slots = this.state.items.length;
@@ -740,15 +744,30 @@ export class GameScene extends Phaser.Scene {
     const iw = this.test ? 22 : 39;
     this.state.items.forEach((_it, i) => {
       const x = W - iw - 3 - (slots - 1 - i) * (iw + 3); // slot 1 on the left, like the Ship screen
-      const box = this.add.rectangle(x, H - 26, iw, 22, 0x000000).setOrigin(0).setDepth(900)
-        .setStrokeStyle(1, 0xfcfcfc).setInteractive();
+      const box = this.hud(this.add.rectangle(x, H - 26, iw, 22, 0x000000).setOrigin(0).setDepth(900)
+        .setStrokeStyle(1, 0xfcfcfc).setInteractive());
       box.on('pointerdown', () => this.useItem(i));
-      const cool = this.add.rectangle(x + 1, H - 5, iw - 2, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(900.5);
-      const icon = this.add.image(x + (this.test ? 11 : 7), H - 15, 'icon_repair').setDepth(901);
-      const count = text(this, x + 13, H - 19, '', COLOR.white).setDepth(901);
+      const cool = this.hud(this.add.rectangle(x + 1, H - 5, iw - 2, 0, 0x3c3c3c).setOrigin(0, 1).setDepth(900.5));
+      const icon = this.hud(this.add.image(x + (this.test ? 11 : 7), H - 15, 'icon_repair').setDepth(901));
+      const count = this.hud(text(this, x + 13, H - 19, '', COLOR.white).setDepth(901));
       this.itemButtons.push({ box, icon, count, cool });
     });
     this.refreshHud();
+  }
+
+  // HUD pieces move out into the black strips above and below the play area
+  // when the screen has room for them (see screen.ts); `y` is where each sits
+  // over the play area.
+  private hud<T extends Phaser.GameObjects.GameObject & { y: number }>(o: T, edge: 'top' | 'bottom' = 'bottom') {
+    this.hudParts.push({ o, y: o.y, edge });
+    this.placeHud();
+    return o;
+  }
+
+  private placeHud() {
+    for (const { o, y, edge } of this.hudParts) {
+      o.y = y + (layout.strips ? (edge === 'top' ? -HUD_TOP : HUD_BOTTOM) : 0);
+    }
   }
 
   private refreshHud() {
@@ -3684,9 +3703,9 @@ export class GameScene extends Phaser.Scene {
     const { y, size } = TEST_BUTTONS;
     (['waves', 'ship'] as TestPanel[]).forEach((panel) => {
       const x = TEST_BUTTONS.x[panel];
-      this.add.rectangle(x, y, size, size, 0x000000).setOrigin(0).setDepth(900).setStrokeStyle(1, 0xfcfcfc)
-        .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openTestMenu(panel));
-      this.add.image(x + size / 2, y + size / 2, TEST_ICONS[panel]).setDepth(901).setTintFill(0xf8b800);
+      this.hud(this.add.rectangle(x, y, size, size, 0x000000).setOrigin(0).setDepth(900).setStrokeStyle(1, 0xfcfcfc)
+        .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openTestMenu(panel)));
+      this.hud(this.add.image(x + size / 2, y + size / 2, TEST_ICONS[panel]).setDepth(901).setTintFill(0xf8b800));
     });
     this.time.delayedCall(600, () => this.blinkTip('SWORDS: PICK WAVES\nSHIP: PICK LOADOUT'));
   }

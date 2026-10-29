@@ -4,6 +4,7 @@ import { BESTIARY, discovered, unreadFoes, type BeastEntry } from '../data/besti
 import { DTYPE_COLOR, type DType } from '../data/items';
 import type { SaveData } from '../save';
 import { button, starfield, text } from '../ui';
+import { fitScene } from '../screen';
 
 interface BestiaryData { state: SaveData; onLeave: () => void }
 
@@ -58,6 +59,7 @@ export class BestiaryScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 10000);
     this.scene.bringToTop();
     this.cameras.main.fadeIn(250);
     this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setInteractive();

@@ -7,6 +7,7 @@ import { gearLevel, weaponLevel } from '../inventory';
 import { TEST_BUTTONS, TEST_ICONS, TEST_SEQUENCES, type TestPanel, type TestWaves } from '../combatTest';
 import type { SaveData } from '../save';
 import { text } from '../ui';
+import { HUD_BOTTOM, fitScene, layout, pointerAt } from '../screen';
 
 interface TestMenuData {
   panel: TestPanel;
@@ -49,6 +50,9 @@ const BOX = 19; // icon button size
 const CELL = 21; // icon buttons sit this far apart
 const LEVEL_ROW = 18; // a slot's level row, and the gap to the next
 const SECTION_GAP = 8; // between the level rows and the next heading
+// The test buttons' row, which moves down into the bottom strip with the rest of the HUD.
+const buttonsY = () => TEST_BUTTONS.y + (layout.strips ? HUD_BOTTOM : 0);
+
 // The panel scrolls between the title and the name line; a drag anywhere
 // scrolls it, and only a tap (moving less than DRAG px) presses anything.
 const VIEW_TOP = 20;
@@ -87,8 +91,9 @@ export class TestMenuScene extends Phaser.Scene {
   }
 
   create() {
-    // Shade over the game; tapping empty space just closes the slot picker.
-    this.tap(this.add.rectangle(0, 0, W, H, 0x000000, 0.8).setOrigin(0).setInteractive(), () => this.closePicker(), false);
+    fitScene(this);
+    // Shade over the game (and the HUD in the strips around it); tapping empty space just closes the slot picker.
+    this.tap(this.add.rectangle(-1000, -1000, W + 2000, H + 2000, 0x000000, 0.8).setOrigin(0).setInteractive(), () => this.closePicker(), false);
     this.content = this.add.container(0, VIEW_TOP);
     const mask = this.make.graphics({}, false).fillRect(0, VIEW_TOP, W, VIEW_BOTTOM - VIEW_TOP);
     this.content.setMask(mask.createGeometryMask());
@@ -138,7 +143,8 @@ export class TestMenuScene extends Phaser.Scene {
     obj.on('pointerdown', (p: Phaser.Input.Pointer) => { pressedAt = p.downTime; });
     obj.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (pressedAt !== p.downTime || this.dragged) return;
-      if (scrolls && (p.y < VIEW_TOP || p.y >= VIEW_BOTTOM)) return;
+      const y = pointerAt(p).y;
+      if (scrolls && (y < VIEW_TOP || y >= VIEW_BOTTOM)) return;
       fn();
     });
     return obj;
@@ -207,7 +213,8 @@ export class TestMenuScene extends Phaser.Scene {
 
   // The swords and ship buttons, where they sit in flight. The open panel's is lit.
   private panelButtons() {
-    const { y, size } = TEST_BUTTONS;
+    const { size } = TEST_BUTTONS;
+    const y = buttonsY();
     (['waves', 'ship'] as TestPanel[]).forEach((panel) => {
       const x = TEST_BUTTONS.x[panel];
       const open = panel === this.d.panel;
@@ -221,7 +228,8 @@ export class TestMenuScene extends Phaser.Scene {
 
   // Bottom left, in line with the test buttons: a left arrow and MENU, back to the title.
   private menuButton() {
-    const { y, size } = TEST_BUTTONS;
+    const { size } = TEST_BUTTONS;
+    const y = buttonsY();
     const box = this.add.rectangle(4, y, 48, size, 0x000000).setOrigin(0).setStrokeStyle(1, hexNum(COLOR.red))
       .setInteractive({ useHandCursor: true });
     box.on('pointerdown', () => box.setFillStyle(0x3c3c3c));

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { text } from '../ui';
+import { fitScene, pointerAt } from '../screen';
 
 export interface Pt { x: number; y: number }
 
@@ -41,6 +42,7 @@ export class LightningScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this);
     const { ship, reach } = this.d;
     if (!this.textures.exists('lorb')) {
       // A small white orb, fully opaque in the middle and clear at the edge.
@@ -71,9 +73,10 @@ export class LightningScene extends Phaser.Scene {
   private press(p: Phaser.Input.Pointer) {
     if (this.drawing || this.over) return;
     const { ship, reach } = this.d;
-    if (Phaser.Math.Distance.Between(p.x, p.y, ship.x, ship.y) > reach) return;
+    const at = pointerAt(p);
+    if (Phaser.Math.Distance.Between(at.x, at.y, ship.x, ship.y) > reach) return;
     this.drawing = p;
-    this.path = [{ ...ship }, clampPt(p)];
+    this.path = [{ ...ship }, clampPt(pointerAt(p))];
     this.ring.setVisible(false);
     this.hint.setVisible(false);
     this.redraw(p);
@@ -82,7 +85,7 @@ export class LightningScene extends Phaser.Scene {
   private drag(p: Phaser.Input.Pointer) {
     if (this.over) return;
     const last = this.path[this.path.length - 1];
-    const to = clampPt(p);
+    const to = clampPt(pointerAt(p));
     const len = Phaser.Math.Distance.Between(last.x, last.y, to.x, to.y);
     if (len < 1) return;
     if (len >= this.left) {
@@ -103,8 +106,9 @@ export class LightningScene extends Phaser.Scene {
     const g = this.line.clear().lineStyle(1, 0xa4e4fc, 0.9).beginPath();
     this.path.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)));
     g.strokePath();
+    const at = pointerAt(p);
     this.count.setText(`${Math.ceil(this.left)}`)
-      .setPosition(Phaser.Math.Clamp(p.x, 12, W - 12), Math.max(12, p.y - 14));
+      .setPosition(Phaser.Math.Clamp(at.x, 12, W - 12), Math.max(12, at.y - 14));
   }
 
   // The path is drawn: the ship flashes out and the orb runs it. A lift before
