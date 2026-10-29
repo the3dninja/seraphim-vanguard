@@ -17,6 +17,7 @@ Progress saves automatically in your browser each time you reach Base, and whene
 Playtest helpers (add to the end of the link, combine with `&`):
 
 - `?god`: your ship can't be destroyed.
+- `?cheats` (also on with `?test`, and always when running locally): a CHEAT MENU button at the bottom of the pause menu. It has God Mode, Demigod Mode (hits hurt, but the ship comes straight back with full health when destroyed), Infinite Items, Game Speed (1x, 2x or 4x), Skip To Location (reloads the level 0 to 1 of the way through its waves; 1 is right before the boss), and Unlock All Levels. Cheats last until the page is reloaded. With the Tuner on, its button moves into the pause menu during missions.
 - `?rich`: tops your credits up to 5000 when you reach Base, for trying upgrades.
 - `?level=3`: sets your next mission to level 3 (any built level works) when you reach Base.
 - `?gateend`: on level 14, Maw Gate, skips straight to the last gate (use with `?level=14`).
@@ -29,6 +30,7 @@ For example `https://the3dninja.github.io/seraphim-vanguard/?god&rich&level=3`.
 
 - Title screen with Continue / New Game
 - **Fits any screen**: the play area is always the same 180 x 320, so every phone plays the same. The space around it is solid black; on tall phones the hearts and credits move into the strip above it and the weapon, gear and item buttons into the strip below (kept clear of the notch and home bar), and on shorter or wider screens they stay over the play area. It refits when the phone turns
+- **Pause menu**: the pause button at the top center (between the hearts, now eight to a row, and the credits), Escape or P, or leaving the game for another app pauses it. RESUME, ABORT MISSION (back to Base as if the ship were destroyed: keeps 25% of the credits picked up), OPTIONS (nothing yet) and QUIT (closes the game where the browser allows it, otherwise back to the title screen); Abort and Quit ask first
 - Level 1, Outpost Run (the tutorial): Darts and Weavers in two legs that flow straight into each other (no vendor yet: the first stop is on level 2), and a final wave
 - Level 2, Scrapyard Belt: Scrap Drone swarms, Gunboats that park and fire 3-shot spreads, and drifting wrecks that block shots from both sides
 - Level 3, Kessel Asteroids: rocks that split when shot, Bombers that lay mines, and the **Rockjaw** mini boss. Break off its three armor plates to expose the core; it throws boulders, and fires spreads once its core is bare. Now and then it switches from swaying to a diving figure eight, and it moves 25% faster once the core is bare. Its health bar is the core; a thinner blue bar under it shows the armor (the Sporeheart's petals show the same way). It drops 175 credits

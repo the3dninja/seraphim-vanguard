@@ -7,6 +7,7 @@ import type { Pick } from './MapScene';
 import { cloneSave, writeSave, type SaveData } from '../save';
 import { button, starfield, text, toast } from '../ui';
 import { fitScene } from '../screen';
+import { cheats } from '../cheats';
 
 // Playtest helper: ?side=ID flies that side mission once, straight from Base.
 let sideJumpDone = false;
@@ -44,6 +45,8 @@ export class BaseScene extends Phaser.Scene {
     if (params.has('rich')) this.state.credits = Math.max(this.state.credits, 5000);
     const jump = Number(params.get('level'));
     if (isBuilt(LEVELS[jump - 1])) this.state.level = jump;
+    // The Cheat Menu's Unlock All Levels.
+    if (cheats.unlockAll) this.state.level = Math.max(this.state.level, LEVELS.length);
   }
 
   create() {

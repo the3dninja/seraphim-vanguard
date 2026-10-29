@@ -26,6 +26,7 @@ import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
 import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
+import { cheats } from '../cheats';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
@@ -168,7 +169,7 @@ const BURN_WARN = 750; // ms at the end of an Afterburner burn that its enemy hi
 const BURN_BLINK = 94; // ms each blink is off or on
 const DUDS = new Set<string>(['bomb', 'mine', 'pmine']); // an Afterburner ram smashes them without setting them off
 const NET_SLOW = 0.4;
-const godMode = () => new URLSearchParams(location.search).has('god');
+const HEARTS_PER_ROW = 8; // the pause button sits between the hearts and the credits
 
 export class GameScene extends Phaser.Scene {
   private startState!: SaveData; // what to go back to if the ship is destroyed
@@ -179,6 +180,8 @@ export class GameScene extends Phaser.Scene {
   private checkpoint!: { save: SaveData; segment: number; earned: number }; // earned: credits picked up before it
   private earned = 0; // credits picked up this run
   private rewound = false;
+  private jumped: number | null = null; // the Cheat Menu reloaded the level this far through it
+  private stepAhead = 0; // ms this scene's clock has run ahead of the real one at a faster game speed
 
   player!: Phaser.Physics.Arcade.Sprite;
   private bubble!: Phaser.GameObjects.Image;
@@ -318,6 +321,7 @@ export class GameScene extends Phaser.Scene {
   private hudParts: { o: { y: number }; y: number; edge: 'top' | 'bottom' }[] = [];
   private tipsShown = new Set<string>();
   private tipFreeAt = 0; // when the tip on screen is done blinking
+  private stepPatched = false; // the Game Speed cheat's extra steps are hooked in (once: this scene object is reused)
 
   constructor() { super('Game'); }
 
@@ -326,7 +330,8 @@ export class GameScene extends Phaser.Scene {
   // `test` flies combat test mode: no level script, waves come from its menu.
   // `replay` names a cleared level to fly again, for less pay (see REPLAY_PAY).
   // A cleared side mission is a replay too.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number; earned?: number }; side?: string; test?: boolean; replay?: number }) {
+  // `jump` (from the Cheat Menu, with `resume`) starts that far through the level's waves, 0 to 1.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number; earned?: number }; side?: string; test?: boolean; replay?: number; jump?: number }) {
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
     this.side = data.side ?? null;
@@ -392,6 +397,9 @@ export class GameScene extends Phaser.Scene {
     this.lastMove = { x: 0, y: -1 };
     this.segment = this.checkpoint.segment;
     this.waveIndex = 0;
+    this.jumped = data.jump ?? null;
+    if (this.jumped !== null) this.jumpTo(this.jumped);
+    this.stepAhead = 0;
     this.waveTimer = 0;
     this.hazardIn = [];
     this.patches = [];
@@ -501,6 +509,7 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.createHud();
+    this.setupPause();
     this.events.off('resume');
     if (this.test) { this.setupTest(); return; }
 
@@ -510,6 +519,7 @@ export class GameScene extends Phaser.Scene {
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
     if (this.replay) intro.push(text(this, W / 2, H / 2 + (this.rewound ? 6 : -6), 'REPLAY: HALF CREDITS', COLOR.yellow).setOrigin(0.5).setDepth(1000));
+    if (this.jumped !== null) intro.push(text(this, W / 2, H / 2 + 18, `SKIPPED TO ${this.jumped.toFixed(1)}`, COLOR.yellow).setOrigin(0.5).setDepth(1000));
     this.tweens.add({ targets: intro, alpha: 0, delay: 2700, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
     const call = this.side ? undefined : RADIO[this.state.level];
@@ -719,10 +729,15 @@ export class GameScene extends Phaser.Scene {
   // --- HUD ---------------------------------------------------------------
 
   private createHud() {
-    // Ten hearts to a row; Hull Plating can add a second row.
+    // Eight hearts to a row; Hull Plating can add a second row.
     for (let i = 0; i < 16; i++) {
-      this.hearts.push(this.hud(this.add.image(6 + (i % 10) * 9, 8 + Math.floor(i / 10) * 8, 'heart').setOrigin(0, 0.5).setDepth(900), 'top'));
+      const x = 6 + (i % HEARTS_PER_ROW) * 9;
+      this.hearts.push(this.hud(this.add.image(x, 8 + Math.floor(i / HEARTS_PER_ROW) * 8, 'heart').setOrigin(0, 0.5).setDepth(900), 'top'));
     }
+    // The pause button, top center. It takes taps a little beyond its box.
+    this.hud(this.add.rectangle(W / 2, 8, 13, 11, 0x000000).setStrokeStyle(1, 0x7c7c7c).setDepth(900), 'top');
+    for (const dx of [-2, 2]) this.hud(this.add.rectangle(W / 2 + dx, 8, 2, 5, 0xfcfcfc).setDepth(901), 'top');
+    this.hud(this.add.zone(W / 2, 9, 30, 22).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openPause()), 'top');
     this.hud(this.add.image(W - 6, 8, 'coinIcon').setOrigin(1, 0.5).setDepth(900), 'top');
     this.creditsText = this.hud(text(this, W - 16, 4, '', COLOR.yellow).setOrigin(1, 0).setDepth(900), 'top');
 
@@ -885,6 +900,7 @@ export class GameScene extends Phaser.Scene {
         return;
     }
     if (this.test) { this.itemReadyAt[slot] = now + ITEM_COOLDOWN[item.id]; this.refreshHud(); return; }
+    if (cheats.infiniteItems) { this.refreshHud(); return; }
     item.count--;
     if (item.count <= 0) this.state.items[slot] = null;
     this.refreshHud();
@@ -3490,7 +3506,7 @@ export class GameScene extends Phaser.Scene {
     const ring = this.add.circle(x, y, 4, 0x3cbcfc, 0).setStrokeStyle(1, 0xa4e4fc).setDepth(12);
     this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
     this.sparks.explode(6, x, y);
-    if (this.phase !== 'action' || godMode()) return;
+    if (this.phase !== 'action' || cheats.god) return;
     if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) > r) return;
     this.snaredUntil = this.time.now + NET_TIME;
     this.tipOnce('net', 'NETS SLOW YOUR SHIP');
@@ -3620,7 +3636,7 @@ export class GameScene extends Phaser.Scene {
 
   // Most hits cost 1 health; big ones like the Dreadnought's laser cost 2.
   hurt(amount = 1) {
-    if (this.phase !== 'action' || godMode()) return;
+    if (this.phase !== 'action' || cheats.god) return;
     const now = this.time.now;
     if (now < this.invulnUntil || now < this.shieldUntil) return;
     if (this.deflect > 0) {
@@ -3647,8 +3663,8 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
     this.bubble.setVisible(false);
     this.sats.forEach((sat) => sat.setVisible(false));
-    // Combat test: demigod. Blow up, then come straight back with full health.
-    if (this.test) {
+    // Combat test, or the Demigod Mode cheat: blow up, then come straight back with full health.
+    if (this.test || cheats.demigod) {
       this.time.delayedCall(900, () => {
         this.health = this.maxHp;
         this.invulnUntil = this.time.now + 1500;
@@ -3692,6 +3708,82 @@ export class GameScene extends Phaser.Scene {
     const note = !this.test && back.level > 1 && !back.notes?.includes('replay');
     if (note) back.notes = [...(back.notes ?? []), 'replay'];
     this.time.delayedCall(3000, () => this.leaveTo('Base', back, note, [], note ? REPLAY_NOTE : undefined));
+  }
+
+  // --- Pause menu ---------------------------------------------------------------
+
+  // The pause button, Escape or P, or the game going into the background
+  // (switching apps, locking the phone) open the pause menu (PauseScene).
+  private setupPause() {
+    const kb = this.input.keyboard!;
+    kb.on('keydown-ESC', () => this.openPause());
+    kb.on('keydown-P', () => this.openPause());
+    const hidden = () => this.openPause();
+    this.game.events.on(Phaser.Core.Events.HIDDEN, hidden);
+    // In flight the Tuner's button at the top gives way to the pause button; the pause menu opens the Tuner instead.
+    document.body.classList.add('in-flight');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off(Phaser.Core.Events.HIDDEN, hidden);
+      document.body.classList.remove('in-flight');
+    });
+    // The Game Speed cheat runs the whole scene (its clock, physics, timers and
+    // this update) two or four times each frame, so everything keeps in step.
+    // Tweens run off the real clock, so they're sped up by their time scale.
+    if (!this.stepPatched) {
+      this.stepPatched = true;
+      const step = this.sys.step.bind(this.sys);
+      this.sys.step = (time: number, delta: number) => {
+        this.tweens.timeScale = cheats.speed;
+        for (let i = 0; i < cheats.speed; i++) {
+          if (i) this.stepAhead += delta;
+          step(time + this.stepAhead, delta);
+        }
+      };
+    }
+  }
+
+  private openPause() {
+    if (this.scene.isPaused() || this.phase === 'dead' || this.phase === 'clear' || this.phase === 'vendor') return;
+    this.dragFrom = null;
+    this.tapFrom = null;
+    this.scene.pause();
+    const close = () => this.scene.stop('Pause');
+    this.scene.launch('Pause', {
+      test: !!this.test,
+      abortNote: this.test ? 'BACK TO THE\nTITLE SCREEN.' : `BACK TO BASE. YOU\nKEEP ${Math.round(DEATH_KEEP * 100)}% OF THE\nCREDITS PICKED UP.`,
+      resume: () => { close(); this.scene.resume(); },
+      abort: () => { close(); this.abortMission(); },
+      quit: () => { close(); this.scene.start('Title'); },
+      skipTo: (at: number) => {
+        close();
+        this.scene.restart({
+          state: this.startState, resume: { save: cloneSave(this.state), segment: 0, earned: this.earned },
+          side: this.side ?? undefined, replay: this.replayLevel ?? undefined, jump: at,
+        });
+      },
+    });
+  }
+
+  // Back to Base as if the ship were destroyed (without a Rewind Beacon going off).
+  private abortMission() {
+    if (this.test) { this.scene.start('Title'); return; }
+    const back = cloneSave(this.startState);
+    back.credits += Math.floor(this.earned * DEATH_KEEP);
+    this.leaveTo('Base', back, false, [], undefined, false);
+  }
+
+  // Starts `at` (0 to 1) of the way through the level's waves, counted across
+  // its segments; 1 is the end of the last one, so its boss comes next.
+  private jumpTo(at: number) {
+    if (this.test) return;
+    const segs = this.level.segments;
+    let left = Math.round(at * segs.reduce((n, sg) => n + sg.length, 0));
+    let seg = 0;
+    while (seg < segs.length - 1 && left >= segs[seg].length) left -= segs[seg++].length;
+    this.segment = seg;
+    this.waveIndex = Math.min(left, segs[seg].length);
+    this.checkpoint.segment = seg;
+    this.rewound = false;
   }
 
   // --- Combat test --------------------------------------------------------------
@@ -4238,10 +4330,13 @@ export class GameScene extends Phaser.Scene {
 
   // Every mission ends back at the Base menu. A level that unlocks side missions
   // first shows the star map for a moment, announcing them.
-  private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = [], note?: string) {
+  // `fade`: off when leaving from the paused scene, which can't play the fade.
+  private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = [], note?: string, fade = true) {
     this.keepLog(state);
+    const go = () => this.scene.start(scene, { state, toMap, unlocked, note });
+    if (!fade) { go(); return; }
     this.cameras.main.fadeOut(400);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(scene, { state, toMap, unlocked, note }));
+    this.cameras.main.once('camerafadeoutcomplete', go);
   }
 
   // --- Maw Gate's last gate (see mawgate.ts) ---------------------------------
