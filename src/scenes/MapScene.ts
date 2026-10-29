@@ -4,6 +4,7 @@ import { LEVELS, commonEnemies, isBuilt, levelEnder, metEnemies, type LevelDef }
 import { SIDES, type SideDef } from '../data/sides';
 import type { SaveData } from '../save';
 import { button, starfield, text } from '../ui';
+import { fitScene } from '../screen';
 
 // What Base flies next: a main level by number (a cleared one is a replay), or a side mission.
 export type Pick = { level: number; side?: undefined } | { side: string; level?: undefined };
@@ -70,6 +71,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 10000);
     this.scene.bringToTop(); // draw over Base, which sits later in the scene list
     this.cameras.main.fadeIn(250);
     this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setInteractive();

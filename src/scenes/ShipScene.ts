@@ -9,6 +9,7 @@ import {
 } from '../inventory';
 import { writeSave, type SaveData } from '../save';
 import { button, choose, richText, text } from '../ui';
+import { fitScene, pointerAt } from '../screen';
 
 interface ShipData {
   state: SaveData;
@@ -90,6 +91,7 @@ export class ShipScene extends Phaser.Scene {
   }
 
   create() {
+    fitScene(this, 10000);
     this.scene.bringToTop(); // draw over Base, which sits later in the scene list
     this.cameras.main.fadeIn(250);
     this.add.rectangle(0, 0, W, H, 0x000000).setOrigin(0).setInteractive();
@@ -440,6 +442,7 @@ export class ShipScene extends Phaser.Scene {
   private dragMove(p: Phaser.Input.Pointer) {
     const pr = this.press;
     if (!pr || !p.isDown) return;
+    const at = pointerAt(p);
     if (!pr.dragging) {
       if (Phaser.Math.Distance.Between(pr.x, pr.y, p.x, p.y) < DRAG_START) return;
       const id = pr.from === 'row' ? pr.id! : this.contents(SLOTS[pr.slot!])?.id;
@@ -447,10 +450,10 @@ export class ShipScene extends Phaser.Scene {
       pr.dragging = true;
       this.sel = pr.from === 'row' ? { from: 'storage', id } : { from: 'slot', slot: pr.slot! };
       this.render(); // light up where it can go
-      this.ghost = this.add.image(p.x, p.y, defOf(id).icon).setScale(2).setAlpha(0.85).setDepth(500);
+      this.ghost = this.add.image(at.x, at.y, defOf(id).icon).setScale(2).setAlpha(0.85).setDepth(500);
     }
     // Hold the icon above a finger so it stays visible; drops still land where the finger is.
-    this.ghost?.setPosition(p.x, p.wasTouch ? p.y - 16 : p.y);
+    this.ghost?.setPosition(at.x, p.wasTouch ? at.y - 16 : at.y);
   }
 
   private release(p: Phaser.Input.Pointer) {
@@ -464,7 +467,8 @@ export class ShipScene extends Phaser.Scene {
       else this.tapSlot(pr.slot!);
       return;
     }
-    const over = SLOTS.findIndex((d) => p.x >= d.x - 3 && p.x < d.x + SLOT + 3 && p.y >= d.y - 3 && p.y < d.y + SLOT + 3);
+    const { x, y } = pointerAt(p);
+    const over = SLOTS.findIndex((d) => x >= d.x - 3 && x < d.x + SLOT + 3 && y >= d.y - 3 && y < d.y + SLOT + 3);
     if (pr.from === 'row') {
       if (over >= 0) this.tapSlot(over); // same rules as tap-then-tap
       else { this.sel = null; this.render(); }

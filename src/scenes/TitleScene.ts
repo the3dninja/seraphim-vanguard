@@ -3,6 +3,7 @@ import { COLOR, W, H } from '../config';
 import { clearSave, loadSave, newSave } from '../save';
 import { ask, button, starfield, text } from '../ui';
 import { testSave } from '../combatTest';
+import { fitScene } from '../screen';
 
 let testJumpDone = false; // ?test opens combat test once; quitting it comes back here
 
@@ -12,6 +13,7 @@ export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
 
   create() {
+    fitScene(this, 10000);
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
     this.add.image(150, 44, 'planet');
