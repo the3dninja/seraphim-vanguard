@@ -42,6 +42,7 @@ function save(s: Stored) {
 const CSS = `
 #tuner-btn { position: fixed; top: calc(env(safe-area-inset-top) + 4px); left: 50%; transform: translateX(-50%);
   z-index: 10; font: 8px ${FONT}; color: #f8b800; background: #000c; border: 1px solid #f8b800; padding: 5px 8px; }
+body.in-flight #tuner-btn { display: none; }
 #tuner { position: fixed; inset: 0; z-index: 20; background: #000; color: #fcfcfc; font: 8px/1.6 ${FONT};
   display: flex; flex-direction: column; user-select: text; -webkit-user-select: text; touch-action: auto; }
 #tuner * { box-sizing: border-box; }
@@ -91,6 +92,12 @@ const CSS = `
 #tuner .rev h2 { font-size: 9px; margin: 0 0 4px; font-weight: normal; }
 #tuner .rev ul { margin: 0 0 6px; padding-left: 14px; color: #bcbcbc; }
 `;
+
+let showTuner: (() => void) | null = null;
+
+// Opens the Tuner from the pause menu: in flight, its button at the top
+// gives way to the pause button (see GameScene).
+export const openTuner = () => showTuner?.();
 
 export function installTuner(game: Phaser.Game) {
   const stored = load();
@@ -162,6 +169,7 @@ export function installTuner(game: Phaser.Game) {
     game.resume();
   };
   open.addEventListener('click', show);
+  showTuner = show;
 
   const flash = (msg: string) => {
     const s = root.querySelector('.status');

@@ -11,6 +11,7 @@ import { MapScene } from './scenes/MapScene';
 import { BestiaryScene } from './scenes/BestiaryScene';
 import { TestMenuScene } from './scenes/TestMenuScene';
 import { LightningScene } from './scenes/LightningScene';
+import { PauseScene } from './scenes/PauseScene';
 import { installTuner, tunerEnabled } from './tuner';
 import { layout, measure, watchScreen } from './screen';
 
@@ -27,7 +28,7 @@ function start() {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { debug: false } },
     input: { activePointers: 2 },
-    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene, ShipScene, MapScene, BestiaryScene, TestMenuScene, LightningScene],
+    scene: [BootScene, TitleScene, GameScene, VendorScene, BaseScene, ShipScene, MapScene, BestiaryScene, TestMenuScene, LightningScene, PauseScene],
   });
   watchScreen(game);
   if (tunerEnabled()) installTuner(game);
