@@ -59,8 +59,14 @@ export function watchScreen(game: Phaser.Game) {
   const update = () => {
     queued = false;
     const { width, height, x, y, strips } = layout;
+    // Phaser only re-reads the screen size while the game runs, so with the
+    // game paused (the Tuner open) it would fit the canvas to a stale size.
+    const resized = game.scale.getParentBounds();
     measure();
-    if (layout.width === width && layout.height === height && layout.x === x && layout.y === y && layout.strips === strips) return;
+    if (layout.width === width && layout.height === height && layout.x === x && layout.y === y && layout.strips === strips) {
+      if (resized) game.scale.refresh();
+      return;
+    }
     game.scale.setGameSize(layout.width, layout.height);
     game.events.emit('layout');
   };
