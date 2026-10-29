@@ -17,9 +17,9 @@ import type { GameScene } from './scenes/GameScene';
 //   warp-ins, then the rings spin up, a vortex opens and pulls the ship in.
 
 const SPEED = 32; // px per second the structure scrolls
-const R = 140; // a warp ring's radius
-const GAP = 100; // the gap top and bottom
-const BAND = 5; // a ring's half thickness, for hits
+export const R = 140; // a warp ring's radius
+export const GAP = 100; // the gap top and bottom
+export const BAND = 5; // a ring's half thickness, for hits
 const STOP_Y = 148; // where the last gate comes to rest
 const FINAL_D = 560; // how far the last gate travels to get there
 const DECEL = 4.3; // px/s² it slows down by at the end
@@ -116,6 +116,82 @@ const inPoly = (x: number, y: number, pts: { x: number; y: number }[]) => {
   }
   return inside;
 };
+
+// Runes: one 3x4 pixel glyph at (x, y), picked by k.
+export function glyph(gx: Phaser.GameObjects.Graphics, x: number, y: number, k: number, color: number, alpha: number) {
+  const rows = GLYPHS[((Math.round(k) % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
+  gx.fillStyle(color, Phaser.Math.Clamp(alpha, 0, 1));
+  rows.forEach((bits, ry) => {
+    for (let rx = 0; rx < 3; rx++) if (bits & (4 >> rx)) gx.fillRect(Math.round(x) + rx, Math.round(y) + ry, 1, 1);
+  });
+}
+
+// A warp ring around (cx, cy), drawn on `gx` with its light on `glow` (added
+// on), `t` ms in. The last gate's is grander, with a second circle of runes
+// outside it, which flash red with the alarm; red lights (0 to 1) round its
+// inner edge come from `redLight`. Heart of the Hollow opens on one too.
+export function ringArt(gx: Phaser.GameObjects.Graphics, glow: Phaser.GameObjects.Graphics, t: number, cx: number, cy: number, grand: boolean,
+  o: { alarm?: boolean; spinning?: boolean; red?: number; redLight?: (x: number, y: number, k: number, phase: number) => void } = {}) {
+  const half = Math.asin(GAP / 2 / R);
+  const spans: [number, number][] = [[Math.PI / 2 + half, Math.PI * 1.5 - half], [-Math.PI / 2 + half, Math.PI / 2 - half]];
+  const alarm = !!o.alarm;
+  const spinning = !!o.spinning;
+  const th = grand ? 12 : 10;
+  for (const [a0, a1] of spans) {
+    gx.lineStyle(th + 2, 0x0c0010, 1).beginPath().arc(cx, cy, R, a0, a1).strokePath();
+    gx.lineStyle(th - 2, grand ? 0x3c1c7c : 0x2c0838, 1).beginPath().arc(cx, cy, R, a0, a1).strokePath();
+    gx.lineStyle(2, grand ? 0x6844fc : 0x4c0040, 1).beginPath().arc(cx, cy, R - 1, a0, a1).strokePath();
+    gx.lineStyle(1, 0xa40080, 1).beginPath().arc(cx, cy, R - th / 2, a0, a1).strokePath();
+    gx.lineStyle(1, grand ? 0xf878f8 : 0x6844fc, 1).beginPath().arc(cx, cy, R + th / 2, a0, a1).strokePath();
+    // Plates, living knots on the outside, and runes along the band.
+    for (let a = a0 + 0.05; a < a1; a += 0.09) {
+      const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+      if (y < -12 || y > H + 12 || x < -12 || x > W + 12) continue;
+      const k = Math.round(a / 0.09);
+      gx.lineStyle(1, 0x0c0010, 1).lineBetween(cx + Math.cos(a) * (R - th / 2 + 1), cy + Math.sin(a) * (R - th / 2 + 1), cx + Math.cos(a) * (R + th / 2 - 1), cy + Math.sin(a) * (R + th / 2 - 1));
+      if (k % 3 === 0) {
+        gx.fillStyle(0x4c0040, 1).fillCircle(cx + Math.cos(a) * (R + th / 2 + 2), cy + Math.sin(a) * (R + th / 2 + 2), 3);
+        gx.fillStyle(0xa40080, 1).fillRect(cx + Math.cos(a) * (R + th / 2 + 2) - 1, cy + Math.sin(a) * (R + th / 2 + 2) - 1, 1, 1);
+      }
+      if (k % 2 === 0) {
+        const lit = 0.4 + 0.6 * Math.max(0, Math.sin(t / 300 - k * 0.7));
+        glyph(gx, x - 1, y - 2, k, alarm ? 0xd82800 : grand ? 0x3cbcfc : 0xd800cc, spinning ? 1 : lit);
+      }
+    }
+    // Red lights round the inner edge, once the alarm has gone off.
+    const red = o.red ?? 0;
+    if (red > 0 && o.redLight) {
+      for (let a = a0 + 0.1; a < a1 - 0.05; a += 0.27) {
+        const x = cx + Math.cos(a) * (R - th / 2 - 4), y = cy + Math.sin(a) * (R - th / 2 - 4);
+        if (y < -8 || y > H + 8 || x < -8 || x > W + 8) continue;
+        o.redLight(x, y, red, a * 6);
+      }
+    }
+    if (grand) {
+      // A second circle of runes outside, glowing.
+      for (let a = a0; a < a1; a += 0.075) {
+        const x = cx + Math.cos(a) * (R + 14), y = cy + Math.sin(a) * (R + 14);
+        if (y < -6 || y > H + 6 || x < -6 || x > W + 6) continue;
+        const k = Math.round(a / 0.075);
+        const lit = spinning ? 1 : 0.3 + 0.7 * Math.max(0, Math.sin(t / 220 + k * 0.5));
+        const col = alarm ? 0xd82800 : k % 3 === 0 ? 0xf878f8 : 0xd800cc;
+        glyph(gx, x - 1, y - 2, k * 7, col, lit);
+        glow.fillStyle(col, 0.18 * lit).fillCircle(x, y, 4);
+      }
+    }
+  }
+  // Pylons at each side of both gaps, with blinking lights.
+  for (const a of [Math.PI / 2 + half, Math.PI * 1.5 - half, -Math.PI / 2 + half, Math.PI / 2 - half]) {
+    const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    if (y < -12 || y > H + 12) continue;
+    gx.fillStyle(0x0c0010, 1).fillCircle(x, y, grand ? 8 : 7);
+    gx.fillStyle(0x2c0838, 1).fillCircle(x, y, grand ? 6 : 5);
+    const on = Math.floor(t / 300) % 2 === 0;
+    const col = alarm ? 0xd82800 : grand ? 0x3cbcfc : 0xd800cc;
+    gx.fillStyle(on ? col : 0x4c0040, 1).fillCircle(x, y, 2);
+    if (on) glow.fillStyle(col, 0.35).fillCircle(x, y, 6);
+  }
+}
 
 interface Ring { u: number; inside: boolean }
 type Stage = 'approach' | 'talk' | 'waves' | 'spin';
@@ -412,76 +488,18 @@ export class MawGate {
   // --- Rings ----------------------------------------------------------------------
 
   private glyph(gx: Phaser.GameObjects.Graphics, x: number, y: number, k: number, color: number, alpha: number) {
-    const rows = GLYPHS[((Math.round(k) % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
-    gx.fillStyle(color, Phaser.Math.Clamp(alpha, 0, 1));
-    rows.forEach((bits, ry) => {
-      for (let rx = 0; rx < 3; rx++) if (bits & (4 >> rx)) gx.fillRect(Math.round(x) + rx, Math.round(y) + ry, 1, 1);
-    });
+    glyph(gx, x, y, k, color, alpha);
   }
 
   // A warp ring around (cx, cy). The last gate's is grander, with a second
   // circle of runes outside it, which flash red with the alarm.
   private drawRing(cx: number, cy: number, grand: boolean) {
-    const gx = this.gfx;
-    const half = Math.asin(GAP / 2 / R);
-    const spans: [number, number][] = [[Math.PI / 2 + half, Math.PI * 1.5 - half], [-Math.PI / 2 + half, Math.PI / 2 - half]];
-    const alarm = this.alarmK() > 0.3;
-    const spinning = this.fin?.stage === 'spin';
-    const th = grand ? 12 : 10;
-    for (const [a0, a1] of spans) {
-      gx.lineStyle(th + 2, 0x0c0010, 1).beginPath().arc(cx, cy, R, a0, a1).strokePath();
-      gx.lineStyle(th - 2, grand ? 0x3c1c7c : 0x2c0838, 1).beginPath().arc(cx, cy, R, a0, a1).strokePath();
-      gx.lineStyle(2, grand ? 0x6844fc : 0x4c0040, 1).beginPath().arc(cx, cy, R - 1, a0, a1).strokePath();
-      gx.lineStyle(1, 0xa40080, 1).beginPath().arc(cx, cy, R - th / 2, a0, a1).strokePath();
-      gx.lineStyle(1, grand ? 0xf878f8 : 0x6844fc, 1).beginPath().arc(cx, cy, R + th / 2, a0, a1).strokePath();
-      // Plates, living knots on the outside, and runes along the band.
-      for (let a = a0 + 0.05; a < a1; a += 0.09) {
-        const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
-        if (y < -12 || y > H + 12 || x < -12 || x > W + 12) continue;
-        const k = Math.round(a / 0.09);
-        gx.lineStyle(1, 0x0c0010, 1).lineBetween(cx + Math.cos(a) * (R - th / 2 + 1), cy + Math.sin(a) * (R - th / 2 + 1), cx + Math.cos(a) * (R + th / 2 - 1), cy + Math.sin(a) * (R + th / 2 - 1));
-        if (k % 3 === 0) {
-          gx.fillStyle(0x4c0040, 1).fillCircle(cx + Math.cos(a) * (R + th / 2 + 2), cy + Math.sin(a) * (R + th / 2 + 2), 3);
-          gx.fillStyle(0xa40080, 1).fillRect(cx + Math.cos(a) * (R + th / 2 + 2) - 1, cy + Math.sin(a) * (R + th / 2 + 2) - 1, 1, 1);
-        }
-        if (k % 2 === 0) {
-          const lit = 0.4 + 0.6 * Math.max(0, Math.sin(this.t / 300 - k * 0.7));
-          this.glyph(gx, x - 1, y - 2, k, alarm ? 0xd82800 : grand ? 0x3cbcfc : 0xd800cc, spinning ? 1 : lit);
-        }
-      }
-      // Red lights round the inner edge, once the alarm has gone off.
-      const red = grand ? this.redK() : 0;
-      if (red > 0) {
-        for (let a = a0 + 0.1; a < a1 - 0.05; a += 0.27) {
-          const x = cx + Math.cos(a) * (R - th / 2 - 4), y = cy + Math.sin(a) * (R - th / 2 - 4);
-          if (y < -8 || y > H + 8 || x < -8 || x > W + 8) continue;
-          this.redLight(x, y, red, a * 6);
-        }
-      }
-      if (grand) {
-        // A second circle of runes outside, glowing.
-        for (let a = a0; a < a1; a += 0.075) {
-          const x = cx + Math.cos(a) * (R + 14), y = cy + Math.sin(a) * (R + 14);
-          if (y < -6 || y > H + 6 || x < -6 || x > W + 6) continue;
-          const k = Math.round(a / 0.075);
-          const lit = spinning ? 1 : 0.3 + 0.7 * Math.max(0, Math.sin(this.t / 220 + k * 0.5));
-          const col = alarm ? 0xd82800 : k % 3 === 0 ? 0xf878f8 : 0xd800cc;
-          this.glyph(gx, x - 1, y - 2, k * 7, col, lit);
-          this.glow.fillStyle(col, 0.18 * lit).fillCircle(x, y, 4);
-        }
-      }
-    }
-    // Pylons at each side of both gaps, with blinking lights.
-    for (const a of [Math.PI / 2 + half, Math.PI * 1.5 - half, -Math.PI / 2 + half, Math.PI / 2 - half]) {
-      const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
-      if (y < -12 || y > H + 12) continue;
-      gx.fillStyle(0x0c0010, 1).fillCircle(x, y, grand ? 8 : 7);
-      gx.fillStyle(0x2c0838, 1).fillCircle(x, y, grand ? 6 : 5);
-      const on = Math.floor(this.t / 300) % 2 === 0;
-      const col = alarm ? 0xd82800 : grand ? 0x3cbcfc : 0xd800cc;
-      gx.fillStyle(on ? col : 0x4c0040, 1).fillCircle(x, y, 2);
-      if (on) this.glow.fillStyle(col, 0.35).fillCircle(x, y, 6);
-    }
+    ringArt(this.gfx, this.glow, this.t, cx, cy, grand, {
+      alarm: this.alarmK() > 0.3,
+      spinning: this.fin?.stage === 'spin',
+      red: grand ? this.redK() : 0,
+      redLight: (x, y, k, phase) => this.redLight(x, y, k, phase),
+    });
   }
 
   // The band hurts the ship, and shoves it off to whichever side it's on.

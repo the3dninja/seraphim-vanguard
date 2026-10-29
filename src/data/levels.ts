@@ -78,9 +78,9 @@ export interface LevelDef {
   segmentThemes?: Theme[]; // per segment, in place of `theme`
   segmentBoss?: (BossKind | undefined)[]; // a mini boss at the end of a segment
   segmentRadio?: (string | undefined)[]; // a radio call as each segment starts
-  // The living tunnel: which segment flies through it, how long its narrow
-  // part runs (px) and where its chambers start.
-  tunnel?: { segment: number; len: number; chambers: number[] };
+  // Heart of the Hollow's way through the hive (hive.ts): walls, gates, the
+  // storm and the backdrops, part by part, one part per segment.
+  hive?: boolean;
   warps?: WarpPlan;
   // Maw Gate's structure (mawgate.ts): the way in through the gate's hull,
   // warp rings around every warp-in, and the last gate in place of a boss.
@@ -876,16 +876,15 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  // Level 14: the living gate. Tentacles sweep in from the sides while the
-  // allied fleet holds the line.
+  // Level 14: the living gate. Warp rings bring the Hollow in while the allied
+  // fleet holds the line.
   {
     name: 'MAW GATE',
-    desc: 'A VAST LIVING GATE. TENTACLES SWEEP IN WHILE THE FLEET HOLDS THE LINE.',
+    desc: 'A VAST LIVING GATE. THE HOLLOW WARPS IN WHILE THE FLEET HOLDS THE LINE.',
     node: 'node_gate',
     theme: 'gate',
     allies: 3,
     gate: true,
-    hazards: [{ kind: 'tentacle', every: [5000, 8000], ramp: 1.8 }],
     segmentRadio: [undefined, 'VOSS: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
     // A third of the way in and just before the vendor; then after the vendor,
     // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
@@ -963,142 +962,150 @@ export const LEVELS: LevelDef[] = [
       ])),
     ],
   },
-  // Level 15: the longest run, with no vendor and no allies, in five legs
-  // that run straight into each other. The heart, then a living tunnel that
-  // winds through chambers, then spore haze and the Sporeheart, then a nest of
-  // growths and eggs and the Brood Wyrm, and a last stretch to the Hollow Mind.
+  // Level 15: the longest run, with no vendor and no allies, in eight parts
+  // that run straight into each other (see hive.ts): out of Maw Gate's vortex
+  // through a great ring in a cavern, a winding tunnel with tentacles, a spore
+  // cavern and the Sporeheart, a tunnel that splits and shuts its gates, the
+  // storm outside, the vents back in, a nest of eggs and the twin Brood Wyrms,
+  // and a short way down to the Hollow Mind's arena.
   {
     name: 'HEART OF THE HOLLOW',
-    desc: 'THE LONGEST RUN. NO VENDORS. A LIVING TUNNEL, TWO GUARDIANS AND THE MIND.',
+    desc: 'THE LONGEST RUN. NO VENDORS. LIVING TUNNELS, A RAGING STORM, THREE GUARDIANS AND THE MIND.',
     node: 'node_heart',
     theme: 'heart',
     vendorless: true,
-    segmentThemes: ['heart', 'heart', 'mist', 'mist', 'heart'],
-    segmentBoss: [undefined, undefined, 'sporeheart', 'wyrm'],
+    hive: true,
+    segmentBoss: [undefined, undefined, 'sporeheart', undefined, undefined, undefined, 'wyrm'],
     segmentRadio: [
       undefined,
       'REYES: IT\'S A PASSAGE.\nSTAY IN THE MIDDLE.',
       'REYES: SPORES. I CAN\'T\nSEE A THING IN HERE.',
+      'VEX: IT SPLITS UP\nAHEAD. PICK A WAY.',
+      'VEX: THIS WIND! IT\'S\nBLOWING US OFF COURSE!',
+      'REYES: WE HAVE TO FIND\nANOTHER WAY BACK IN!',
       'VEX: EGGS IN THE\nGROWTH. BURN THEM.',
       'REYES: THE MIND IS\nRIGHT AHEAD. GO!',
     ],
-    tunnel: { segment: 1, len: 2040, chambers: [480, 1040, 1600] },
+    // The storm (winds, debris, Lancers), the vents and the spore-thick stretches
+    // are run by the hive itself.
     segmentHazards: [
+      [],
+      [{ kind: 'tentacle', every: [6000, 9500] }],
+      [{ kind: 'spores', every: [3500, 6000], ramp: 2.5 }],
+      [],
+      [],
+      [],
       [
-        { kind: 'artery', every: [6000, 9000] }, { kind: 'tentacle', every: [9000, 13000] },
-        { kind: 'wall', every: [11000, 15000] }, { kind: 'well', every: [14000, 19000] },
+        { kind: 'barrier', every: [8000, 11000] }, { kind: 'growth', every: [4000, 6500] },
+        // Two tentacles, each on its own timer.
+        { kind: 'tentacle', every: [6000, 9500] }, { kind: 'tentacle', every: [7000, 11000] },
       ],
       [],
-      [{ kind: 'spores', every: [5000, 8000] }, { kind: 'tentacle', every: [10000, 14000] }, { kind: 'well', every: [13000, 18000] }],
-      [{ kind: 'barrier', every: [9000, 12000] }, { kind: 'growth', every: [4500, 7000] }],
-      [{ kind: 'artery', every: [5000, 8000] }, { kind: 'tentacle', every: [8000, 12000] }, { kind: 'wall', every: [10000, 14000] }],
     ],
     boss: 'mind',
-    // Each leg runs 15% shorter than its waves as written.
-    segments: shorten(0.85, [
+    segments: [
+      // 0. The ring and the cavern.
       [
-        { delay: 2500, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'tendril', pattern: 'single', x: 0.75 },
-        { delay: 1500, kind: 'brood', pattern: 'single', x: 0.8 },
-        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.4, waitClear: true },
-        { delay: 2500, kind: 'spore', pattern: 'column', count: 5, x: 0.3 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.75 },
-        { delay: 4000, kind: 'mimic', pattern: 'single', x: 0.8 },
-        { delay: 2500, kind: 'husk', pattern: 'single', x: 0.3 },
-        { delay: 4000, kind: 'husk', pattern: 'single', x: 0.8 },
-        { delay: 3000, kind: 'tendril', pattern: 'pair', waitClear: true },
-        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.3 },
-        { delay: 4000, kind: 'mimic', pattern: 'pair' },
-        { delay: 1500, kind: 'spore', pattern: 'column', count: 5, x: 0.5 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.2 },
-        { delay: 3500, kind: 'mimic', pattern: 'pair', waitClear: true },
-        { delay: 2500, kind: 'husk', pattern: 'single', x: 0.6 },
-        { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.75 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.3 },
-        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.3 },
-        { delay: 2500, kind: 'brood', pattern: 'single', x: 0.2, waitClear: true },
-        { delay: 3000, kind: 'spore', pattern: 'line', count: 5 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.4 },
-        { delay: 4000, kind: 'mimic', pattern: 'single', x: 0.5 },
-        { delay: 2000, kind: 'tendril', pattern: 'pair', waitClear: true },
-      ],
-      [
-        { delay: 3000, kind: 'spore', pattern: 'column', count: 4, x: 0.5 },
         { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
-        { delay: 4000, kind: 'spore', pattern: 'column', count: 4, x: 0.3 },
+        { delay: 3000, kind: 'spore', pattern: 'column', count: 3, x: 0.35 },
+        { delay: 2500, kind: 'tendril', pattern: 'pair' },
+        { delay: 2000, kind: 'brood', pattern: 'single', x: 0.65 },
+      ],
+      // 1. The tunnel, with tentacles.
+      [
+        { delay: 2500, kind: 'spore', pattern: 'column', count: 4, x: 0.5 },
+        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 3500, kind: 'spore', pattern: 'column', count: 4, x: 0.3 },
         { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.7 },
-        { delay: 4000, kind: 'husk', pattern: 'pair' },
+        { delay: 3500, kind: 'husk', pattern: 'pair' },
         { delay: 3000, kind: 'spore', pattern: 'vee', count: 5, x: 0.5 },
-        { delay: 4000, kind: 'tendril', pattern: 'pair' },
-        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.5 },
-        { delay: 5000, kind: 'spore', pattern: 'column', count: 5, x: 0.6 },
-        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.4 },
+        { delay: 3500, kind: 'tendril', pattern: 'pair' },
+        { delay: 4000, kind: 'larva', pattern: 'column', count: 6, x: 0.5 },
+        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.6 },
+        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.4 },
         { delay: 3000, kind: 'brood', pattern: 'single', x: 0.5 },
         { delay: 3000, kind: 'tendril', pattern: 'pair' },
-        { delay: 4000, kind: 'mimic', pattern: 'single', x: 0.5 },
-        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.4 },
-        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.5 },
-        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
-        { delay: 1500, kind: 'husk', pattern: 'pair' },
-        { delay: 3000, kind: 'larva', pattern: 'line', count: 5 },
-        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.5 },
-        { delay: 4000, kind: 'tendril', pattern: 'pair' },
-        { delay: 5000, kind: 'larva', pattern: 'column', count: 6, x: 0.6 },
-        { delay: 4000, kind: 'spore', pattern: 'vee', count: 5, x: 0.5 },
-        { delay: 4000, kind: 'tendril', pattern: 'single', x: 0.5 },
-        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.4 },
+        { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'larva', pattern: 'column', count: 6, x: 0.4 },
+        { delay: 3500, kind: 'husk', pattern: 'pair' },
+        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.5 },
       ],
+      // 2. The spore cavern, then the Sporeheart.
       [
-        { delay: 3000, kind: 'spore', pattern: 'line', count: 5 },
+        { delay: 2500, kind: 'spore', pattern: 'line', count: 5 },
         { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.5 },
         { delay: 3000, kind: 'husk', pattern: 'single', x: 0.3 },
         { delay: 3000, kind: 'spore', pattern: 'column', count: 5, x: 0.75 },
-        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3, waitClear: true },
+        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 2500, kind: 'brood', pattern: 'single', x: 0.7 },
         { delay: 2500, kind: 'spore', pattern: 'vee', count: 7, x: 0.3 },
         { delay: 3500, kind: 'mimic', pattern: 'pair' },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.7, waitClear: true },
+        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.7 },
+        { delay: 2500, kind: 'spore', pattern: 'line', count: 6 },
         { delay: 2500, kind: 'tendril', pattern: 'pair' },
-        { delay: 1500, kind: 'spore', pattern: 'column', count: 5, x: 0.2 },
-        { delay: 2500, kind: 'husk', pattern: 'pair' },
-        { delay: 3500, kind: 'larva', pattern: 'swarm', count: 6, x: 0.1 },
-        { delay: 2000, kind: 'larva', pattern: 'swarm', count: 6, x: 0.9 },
-        { delay: 3000, kind: 'brood', pattern: 'pair', waitClear: true },
-        { delay: 2500, kind: 'mimic', pattern: 'line', count: 3, waitClear: true },
+        { delay: 2000, kind: 'spore', pattern: 'vee', count: 7, x: 0.6 },
+        { delay: 3000, kind: 'spore', pattern: 'line', count: 6, waitClear: true },
       ],
+      // 3. The branching tunnel (hatchlings come from the hive too).
+      [
+        { delay: 3500, kind: 'tendril', pattern: 'single', x: 0.5 },
+        { delay: 4000, kind: 'spore', pattern: 'column', count: 4, x: 0.5 },
+        { delay: 4500, kind: 'husk', pattern: 'pair' },
+        { delay: 4500, kind: 'tendril', pattern: 'pair' },
+        { delay: 5000, kind: 'spore', pattern: 'line', count: 4 },
+        { delay: 4500, kind: 'mimic', pattern: 'pair' },
+        { delay: 5000, kind: 'tendril', pattern: 'pair' },
+        { delay: 5000, kind: 'husk', pattern: 'pair' },
+        { delay: 5000, kind: 'spore', pattern: 'line', count: 4 },
+        { delay: 5000, kind: 'tendril', pattern: 'pair' },
+        { delay: 5000, kind: 'brood', pattern: 'single', x: 0.5 },
+        { delay: 5000, kind: 'husk', pattern: 'pair' },
+        { delay: 5000, kind: 'tendril', pattern: 'pair' },
+      ],
+      // 4. The storm (Lancers come with it).
+      [
+        { delay: 3000, kind: 'husk', pattern: 'pair' },
+        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3 },
+        { delay: 3500, kind: 'mimic', pattern: 'single', x: 0.6 },
+        { delay: 3500, kind: 'spore', pattern: 'vee', count: 5, x: 0.4 },
+        { delay: 3500, kind: 'brood', pattern: 'single', x: 0.3 },
+        { delay: 3500, kind: 'husk', pattern: 'pair' },
+        { delay: 3500, kind: 'tendril', pattern: 'pair' },
+        { delay: 3500, kind: 'mimic', pattern: 'pair' },
+        { delay: 3500, kind: 'spore', pattern: 'line', count: 5 },
+        { delay: 3500, kind: 'husk', pattern: 'single', x: 0.5 },
+        { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
+      ],
+      // 5. The vents: the storm brings the rest, worse with each vent missed.
+      [
+        { delay: 4000, kind: 'husk', pattern: 'single', x: 0.6 },
+        { delay: 5000, kind: 'tendril', pattern: 'pair' },
+      ],
+      // 6. The nest, then the twin Brood Wyrms.
       [
         { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.5 },
         { delay: 3500, kind: 'larva', pattern: 'column', count: 5, x: 0.3 },
         { delay: 3500, kind: 'husk', pattern: 'single', x: 0.7 },
         { delay: 4000, kind: 'tendril', pattern: 'pair' },
-        { delay: 4000, kind: 'brood', pattern: 'single', x: 0.5, waitClear: true },
+        { delay: 4000, kind: 'brood', pattern: 'single', x: 0.5 },
         { delay: 3000, kind: 'larva', pattern: 'swarm', count: 6, x: 0.9 },
         { delay: 3500, kind: 'spore', pattern: 'line', count: 5 },
         { delay: 4000, kind: 'husk', pattern: 'single', x: 0.3 },
-        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3, waitClear: true },
+        { delay: 3500, kind: 'tendril', pattern: 'line', count: 3 },
         { delay: 3000, kind: 'mimic', pattern: 'pair' },
         { delay: 4000, kind: 'larva', pattern: 'column', count: 6, x: 0.7 },
         { delay: 3500, kind: 'brood', pattern: 'single', x: 0.3 },
         { delay: 4000, kind: 'tendril', pattern: 'pair' },
-        { delay: 3500, kind: 'husk', pattern: 'pair', waitClear: true },
-        { delay: 3000, kind: 'larva', pattern: 'swarm', count: 8, x: 0.1 },
-        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.6, waitClear: true },
-      ],
-      [
-        { delay: 3000, kind: 'husk', pattern: 'pair' },
-        { delay: 4000, kind: 'spore', pattern: 'column', count: 5, x: 0.3 },
-        { delay: 2500, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 3000, kind: 'spore', pattern: 'vee', count: 7, x: 0.6 },
-        { delay: 3000, kind: 'husk', pattern: 'single', x: 0.5, waitClear: true },
         { delay: 3500, kind: 'husk', pattern: 'pair' },
-        { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 3000, kind: 'brood', pattern: 'single', x: 0.7 },
-        { delay: 3000, kind: 'tendril', pattern: 'pair' },
-        { delay: 2500, kind: 'husk', pattern: 'single', x: 0.6, waitClear: true },
-        { delay: 3000, kind: 'tendril', pattern: 'line', count: 3 },
-        { delay: 3000, kind: 'spore', pattern: 'vee', count: 7, x: 0.25 },
+        { delay: 3000, kind: 'larva', pattern: 'swarm', count: 8, x: 0.1 },
       ],
-    ]),
+      // 7. The way down to the Mind.
+      [
+        { delay: 2500, kind: 'tendril', pattern: 'pair' },
+        { delay: 3500, kind: 'spore', pattern: 'line', count: 4 },
+        { delay: 3000, kind: 'tendril', pattern: 'single', x: 0.5 },
+      ],
+    ],
   },
 ];
 

@@ -640,6 +640,11 @@ function makeSceneries3(scene: Phaser.Scene) {
   });
 }
 
+// The Brood Wyrm's purple twin (level 15).
+const purple = (rows: string[]) => rows.map((r) => r.replace(/Q/g, 'X').replace(/F/g, 'P').replace(/M/g, 'V').replace(/U/g, 'X'));
+SPRITES3.wyrmhead_p = purple(SPRITES3.wyrmhead);
+SPRITES3.wyrmseg_p = purple(SPRITES3.wyrmseg);
+
 export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, rows: string[]) => void,
   makePlanet: (key: string, r: number, bands: string[], shadow: string) => void) {
   for (const [key, rows] of Object.entries(SPRITES3)) makeTexture(key, rows);

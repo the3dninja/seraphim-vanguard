@@ -71,10 +71,11 @@ export function ask(scene: Phaser.Scene, question: string, answers: string[], on
 export function starfield(scene: Phaser.Scene) {
   const far = scene.add.tileSprite(0, 0, W, H, 'stars-far').setOrigin(0);
   const near = scene.add.tileSprite(0, 0, W, H, 'stars-near').setOrigin(0);
-  return (dt: number, speed = 1) => {
+  const scroll = (dt: number, speed = 1) => {
     far.tilePositionY -= 6 * speed * dt;
     near.tilePositionY -= 18 * speed * dt;
   };
+  return Object.assign(scroll, { layers: [far, near] });
 }
 
 // A modal list to pick one of several things (each with an icon), or cancel
