@@ -14,8 +14,9 @@ import { Voss } from '../voss';
 import { BroodQueen } from '../broodqueen';
 import { HollowMind } from '../hollowmind';
 import { Sporeheart } from '../sporeheart';
-import { Wyrm } from '../wyrm';
-import { Barriers, Tunnel } from '../heart';
+import { Wyrm, WyrmPair } from '../wyrm';
+import { Barriers } from '../heart';
+import { Hive } from '../hive';
 import { MawGate } from '../mawgate';
 import { SideHazards } from '../sidehaz';
 import { Storm, stormPlan } from '../storm';
@@ -124,7 +125,7 @@ const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
   voss: 'EMPEROR VOSS', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
-  sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRM',
+  sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRMS',
   frostjaw: 'FROSTJAW', hollowwatcher: 'HOLLOW WATCHER', broodmother: 'BROOD MATRIARCH',
 };
 const EGG_HATCH = 5500; // ms before an egg hatches into larvae
@@ -206,8 +207,8 @@ export class GameScene extends Phaser.Scene {
   private planet: Phaser.GameObjects.Image | null = null;
   private theme: Theme = 'outpost';
   private dark: Phaser.GameObjects.Image | null = null; // level 13: a black screen with a hole of light at the ship
-  // Level 15: the living tunnel, the walls of growth, and the spore haze.
-  private tunnel: Tunnel | null = null;
+  // Level 15: the way through the hive (walls, gates, backdrops, the storm), and the walls of growth.
+  private hive: Hive | null = null;
   private barriers!: Barriers;
   private fog: Phaser.GameObjects.TileSprite | null = null;
   private motes: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
@@ -431,7 +432,7 @@ export class GameScene extends Phaser.Scene {
     this.scenery = null;
     this.planet = null;
     this.dark = null;
-    this.tunnel = null;
+    this.hive = null;
     this.fog = null;
     this.motes = null;
     this.segBossDone = false;
@@ -445,6 +446,11 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300);
     this.scroll = starfield(this);
     this.setTheme(this.segmentTheme(this.segment));
+    // Level 15 has no stars: the hive's own backdrop, just above them.
+    if (this.level.hive) {
+      this.scroll.layers.forEach((l) => l.setVisible(false));
+      this.hive = new Hive(this, this.segment, 2);
+    }
     if (this.level.storm) this.storm = new Storm(this, this.scenery ? 3 : 2);
     this.resetHazardTimers(4000);
 
@@ -460,7 +466,6 @@ export class GameScene extends Phaser.Scene {
     this.barriers = new Barriers(this);
     this.sideHaz = new SideHazards(this);
     this.warps = new Warps(this);
-    this.startTunnel(); // a Rewind Beacon can restart in the tunnel
     // Playtest helper: ?gateend skips Maw Gate straight to its last gate.
     if (this.level.gate && new URLSearchParams(location.search).has('gateend')) {
       this.segment = this.level.segments.length - 1;
@@ -548,6 +553,7 @@ export class GameScene extends Phaser.Scene {
     this.fog = null;
     this.nebula = null;
     this.motes = null;
+    if (this.level.hive) return; // the hive draws its own (see hivebg.ts)
     if (theme === 'mist') {
       // A haze over the action (under shots and the ship), and spores drifting through it.
       this.fog = this.add.tileSprite(0, 0, W, H, 'fog').setOrigin(0).setDepth(9.55).setAlpha(0.15);
@@ -588,16 +594,6 @@ export class GameScene extends Phaser.Scene {
   // The scenery for a segment: level 15 and the rift change it as they go.
   private segmentTheme(seg: number): Theme {
     return this.level.segmentThemes?.[seg] ?? this.level.theme;
-  }
-
-  // Level 15's living tunnel, when this segment flies through it.
-  private startTunnel() {
-    const t = this.level.tunnel;
-    this.tunnel?.destroy();
-    this.tunnel = null;
-    if (!t || t.segment !== this.segment) return;
-    this.tunnel = new Tunnel(this, t.len, t.chambers);
-    this.tunnel.sink(this.scenery ? 3 : 2);
   }
 
   // A line from an ally or Base, at the top of the screen.
@@ -703,7 +699,8 @@ export class GameScene extends Phaser.Scene {
     // Gravity wells drag the ship toward them.
     const pull = this.act3.pull(dt);
     const wind = this.sideHaz.pull(dt);
-    mx += pull.x + wind.x + (this.bossPull.x + this.vortexPull.x) * dt;
+    const storm = this.hive?.pull(dt) ?? { x: 0, y: 0 };
+    mx += pull.x + wind.x + storm.x + (this.bossPull.x + this.vortexPull.x) * dt;
     my += pull.y + (this.bossPull.y + this.vortexPull.y) * dt;
     const nx = Phaser.Math.Clamp(this.player.x + mx, 6, W - 6);
     const ny = Phaser.Math.Clamp(this.player.y + my, 24, H - 30);
@@ -1116,10 +1113,7 @@ export class GameScene extends Phaser.Scene {
   // barrier cells, or a rock, wreck or other hazard.
   private solidAt(x: number, y: number) {
     if (this.gate?.solidAt(x, y)) return true;
-    if (this.tunnel) {
-      const { l, r } = this.tunnel.at(y);
-      if (x < l || x > r) return true;
-    }
+    if (this.hive?.solidAt(x, y)) return true;
     if (this.act3.solidAt(x, y) || this.barriers.solidAt(x, y)) return true;
     return (this.hazards.getChildren() as Phaser.Physics.Arcade.Image[]).some((h) => h.active
       && Math.abs(h.x - x) < h.displayWidth / 2 && Math.abs(h.y - y) < h.displayHeight / 2);
@@ -1184,7 +1178,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'blink': {
-        // To the middle (the tunnel's middle, in the tunnel), as far above the
+        // To the middle (of the open track, in the hive), as far above the
         // HUD as the swap reaches, and whatever is near the landing spot (enemies,
         // their shots, credits) swaps to where the ship was, keeping its offset and
         // carrying straight on (the vortex there pulls it back in). Enemies can be
@@ -1193,7 +1187,7 @@ export class GameScene extends Phaser.Scene {
         const st = gearStats.blink(lv);
         const from = { x: p.x, y: p.y };
         const ty = H - 26 - st.radius;
-        const to = { x: this.tunnel ? this.tunnel.at(ty).cx : W / 2, y: ty };
+        const to = { x: this.hive ? (([a, b]) => Phaser.Math.Clamp(W / 2, a + 8, b - 8))(this.hive.spanAt(ty)) : W / 2, y: ty };
         const near = (o: Phaser.GameObjects.Components.Transform) => Phaser.Math.Distance.Between(o.x, o.y, to.x, to.y) <= st.radius;
         const foes = (this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]).filter((e) => e.active && near(e));
         const loose = [...this.enemyBullets.getChildren(), ...this.coins.getChildren()]
@@ -1297,15 +1291,13 @@ export class GameScene extends Phaser.Scene {
         if (this.enemies.countActive() === 0) this.returners.forEach((r) => { r.t = Math.min(r.t, 1500); });
         return;
       }
-      // In the tunnel, fly on until it opens out again. Level 15's legs flow
-      // straight on without waiting for the screen to clear, unless a boss is next.
+      // In the hive, fly on until this part's track has gone by. Level 15's legs
+      // flow straight on without waiting for the screen to clear, unless a boss is next.
       const last = this.segment >= this.level.segments.length - 1;
       const flows = this.level.vendorless && !last && !this.level.segmentBoss?.[this.segment];
       // Maw Gate waits for a warp ring to pass, and its last gate runs on its own.
       if (this.gate?.finale) return;
-      if ((flows || this.enemies.countActive() === 0) && (!this.tunnel || this.tunnel.done) && (!this.gate || this.gate.idle)) {
-        this.tunnel?.destroy();
-        this.tunnel = null;
+      if ((flows || this.enemies.countActive() === 0) && (!this.hive || this.hive.done) && (!this.gate || this.gate.idle)) {
         this.endSegment();
       }
       return;
@@ -1345,8 +1337,8 @@ export class GameScene extends Phaser.Scene {
 
   private spawnWave(w: Wave) {
     const n = w.count ?? 1;
-    // In the tunnel, positions across the screen become positions across the tunnel.
-    const tx = (x: number) => (this.tunnel ? this.tunnel.mapX(x / W, 0) : x);
+    // In the hive, positions across the screen become positions across the open track.
+    const tx = (x: number) => (this.hive ? this.hive.mapX(x / W) : x);
     const cx = tx((w.x ?? 0.5) * W);
     // Corrupted ships fly their own take on each formation.
     const put = (i: number, x: number, y: number) => {
@@ -2097,7 +2089,7 @@ export class GameScene extends Phaser.Scene {
 
   private runHazards(dt: number) {
     if (this.boss && !this.level.bossHazards) return;
-    if (this.gate?.calm) return;
+    if (this.gate?.calm || this.hive?.calm) return;
     if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
@@ -2110,10 +2102,22 @@ export class GameScene extends Phaser.Scene {
       else if (hz.kind === 'flare') this.spawnFlare();
       else if (hz.kind === 'fence') this.spawnFence();
       else if (hz.kind === 'debris' || hz.kind === 'satchunk' || hz.kind === 'rock' || hz.kind === 'shard') this.spawnHazard(hz.kind, Phaser.Math.Between(16, W - 16), -14);
-      else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier');
+      else if (hz.kind === 'barrier' || hz.kind === 'growth') this.barriers.spawn(hz.kind === 'barrier', ...(this.hive ? this.hive.spanAt(-6) : [0, W]));
       else if (['press', 'gust', 'ember', 'blackout', 'sweep'].includes(hz.kind)) this.sideHaz.spawn(hz.kind);
       else this.act3.spawn(hz.kind);
     });
+  }
+
+  // A level hazard right now, outside the hazard timers (level 15's spore storms).
+  hazardNow(kind: string) { this.act3.spawn(kind); }
+
+  // A clump of organic debris blown in by level 15's storm: it gets in the
+  // way and hurts, and can be shot apart.
+  clump(x: number, y: number, vx: number, vy: number, big: boolean) {
+    const h = this.hazards.create(x, y, big ? 'hb_clump2' : 'hb_clump1') as Phaser.Physics.Arcade.Image;
+    h.setData('kind', 'clump').setData('hp', big ? 5 : 2).setVelocity(vx, vy).setAngularVelocity(Phaser.Math.Between(-40, 40));
+    h.body!.setCircle(big ? 10 : 6, big ? 4 : 3, big ? 2 : 2);
+    return h;
   }
 
   // Maw Gate: enemies warp into the top half at set points through a segment,
@@ -3884,14 +3888,16 @@ export class GameScene extends Phaser.Scene {
       watcher: () => new Watcher(this, done),
       voss: () => new Voss(this, done),
       queen: () => new BroodQueen(this, done),
-      mind: () => new HollowMind(this, done),
+      mind: () => new HollowMind(this, done, { emerge: !!this.level.hive }),
       sporeheart: () => new Sporeheart(this, done),
-      wyrm: () => new Wyrm(this, done),
+      wyrm: () => (this.level.hive ? new WyrmPair(this, done) : new Wyrm(this, done)),
       frostjaw: () => new Rockjaw(this, done, { skin: 'frostjaw', stats: 'frostjaw', shards: true }),
       hollowwatcher: () => new Watcher(this, done, { tint: 0xd800cc, stats: 'hollowwatcher' }),
       broodmother: () => new BroodQueen(this, done, { tint: 0x58d854, stats: 'broodmother' }),
     };
     this.boss = make[kind]();
+    // The Hollow Mind's lair is an arena: its brood holds its ground.
+    if (kind === 'mind' && this.level.hive) this.setArena(true, 40, 150);
     this.bossBar = this.add.graphics().setDepth(900);
     this.bossName = text(this, W / 2, this.boss.armorFraction ? 31 : 28, BOSS_NAMES[kind], COLOR.red).setOrigin(0.5, 0).setDepth(900);
     // The dark lifts a little for the Brood Queen.
@@ -3920,6 +3926,7 @@ export class GameScene extends Phaser.Scene {
     this.bossName?.destroy();
     this.bossBar = null;
     this.bossPull = { x: 0, y: 0 };
+    this.setArena(false);
     this.enemyBullets.clear(true, true);
     this.homeUntil = this.time.now + HOME_AFTER_BOSS; // its gold pops out and curves in
     const big = ['dreadnought', 'voss', 'mind'].includes(kind);
@@ -4215,7 +4222,7 @@ export class GameScene extends Phaser.Scene {
     this.segBossDone = false;
     this.warpIn = null;
     this.resetHazardTimers(3000);
-    this.startTunnel();
+    this.hive?.beginSegment(this.segment);
     const call = this.level.segmentRadio?.[this.segment];
     if (call) this.radio(call);
     this.phase = 'action';
@@ -4438,13 +4445,12 @@ export class GameScene extends Phaser.Scene {
     this.updateFlares(edt);
     this.updateFences(edt);
     this.act3.update(edt);
-    if (this.tunnel) {
-      this.tunnel.update(edt, this.phase === 'action' || this.phase === 'ready');
-      // Enemies keep inside the tunnel too.
+    if (this.hive) {
+      this.hive.update(edt, this.phase === 'action' || this.phase === 'ready');
+      // Enemies keep inside the hive's walls too.
       for (const o of this.enemies.getChildren() as Phaser.Physics.Arcade.Sprite[]) {
         if (o.y < 0) continue;
-        const { l, r } = this.tunnel.at(o.y);
-        if (r - l > 16) o.x = Phaser.Math.Clamp(o.x, l + 7, r - 7);
+        o.x = this.hive.keepIn(o.x, o.y);
       }
     }
     if (this.gate) {

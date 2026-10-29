@@ -37,7 +37,9 @@ interface Tear { x: number; y: number; t: number; fired: number }
 // the ship in and swallow shots, and space warps: it jumps to a new spot and
 // tears open around the edges to fire through them. Between phases it pulls
 // back off the top of the screen and sends its minions for a while; it can't
-// be hurt then. Weak to plasma and explosives throughout.
+// be hurt then. Weak to plasma and explosives throughout. In the arena at the
+// heart of the hive it rises out of the depths instead of drifting in, and
+// roars, shaking the screen and spraying goo everywhere, before it fights.
 export class HollowMind {
   private x = W / 2;
   private y = -40;
@@ -71,8 +73,10 @@ export class HollowMind {
   private warpT = -1; // ms into a warp's warning, -1 when none is coming
   private tears: Tear[] = [];
   private teethIn = 1200;
+  private grow = 1; // its size as it rises out of the depths
+  private roarT = -1; // ms into its roar, -1 when not roaring
 
-  constructor(private g: GameScene, private onDefeated: () => void) {
+  constructor(private g: GameScene, private onDefeated: () => void, o: { emerge?: boolean } = {}) {
     this.core = g.add.image(this.x, this.y, 'mindcore').setDepth(8);
     this.membraneImg = g.add.image(this.x, this.y, 'membrane').setDepth(8.5).setVisible(false);
     for (let i = 0; i < EYES; i++) {
@@ -80,10 +84,50 @@ export class HollowMind {
     }
     // The red that bleeds over the screen in phase 4: over enemies, under shots and the ship.
     this.red = g.add.rectangle(0, 0, W, H, 0x881400, 0).setOrigin(0).setDepth(4);
+    if (o.emerge) { this.emerge(); return; }
     g.tweens.add({
       targets: this, y: CORE_Y, duration: 2600, ease: 'Sine.easeOut', delay: 600,
       onComplete: () => { this.entering = false; g.tipOnce('eyes', 'SHOOT THE EYES'); },
     });
+  }
+
+  // Up out of the depths: small and dark far below, growing and lighting up as it rises, then the roar.
+  private emerge() {
+    const g = this.g;
+    this.y = CORE_Y + 30;
+    this.grow = 0.12;
+    this.core.setTint(0x1c0c1c).setAlpha(0.2);
+    this.eyes.forEach((e) => e.img.setAlpha(0));
+    const fade = { k: 0 };
+    g.tweens.add({
+      targets: fade, k: 1, duration: 3600, delay: 500, ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        const c = Math.round(0x1c + (0xfc - 0x1c) * fade.k);
+        this.core.setTint(Phaser.Display.Color.GetColor(c, Math.round(0x0c + (0xfc - 0x0c) * fade.k), c)).setAlpha(0.2 + 0.8 * fade.k);
+        this.eyes.forEach((e) => e.img.setAlpha(Math.max(0, fade.k * 2 - 1)));
+      },
+    });
+    g.tweens.add({
+      targets: this, grow: 1, y: CORE_Y, duration: 3600, delay: 500, ease: 'Sine.easeInOut',
+      onComplete: () => { this.core.clearTint(); this.roar(); },
+    });
+  }
+
+  private roar() {
+    const g = this.g;
+    this.roarT = 0;
+    g.cameras.main.shake(1100, 0.016);
+    g.cameras.main.flash(250, 88, 216, 84);
+    // Goo flies everywhere. It's only goo.
+    const goo = g.add.particles(0, 0, 'px', {
+      speed: { min: 60, max: 210 }, lifespan: { min: 700, max: 1500 }, scale: { start: 2, end: 0.5 }, gravityY: 30,
+      tint: [0xb8f818, 0x58d854, 0x58d854, 0x00a800], emitting: false,
+    }).setDepth(19);
+    goo.explode(140, this.x, this.y);
+    g.time.delayedCall(800, () => goo.explode(60, this.x, this.y));
+    g.time.delayedCall(2600, () => goo.destroy());
+    toast(g, 'IT ROARS', 120, 900);
+    g.time.delayedCall(1300, () => { this.entering = false; g.tipOnce('eyes', 'SHOOT THE EYES'); });
   }
 
   healthFraction() {
@@ -104,11 +148,23 @@ export class HollowMind {
     this.t += ms;
     const pulse = 1 + Math.sin(this.t / (this.phase >= 3 ? 120 : 260)) * (this.phase === 4 ? 0.09 : 0.05);
     const shake = this.phase === 4 ? Math.round(Math.sin(this.t / 37) * 1.2) : 0;
-    this.core.setPosition(Math.round(this.x) + shake, Math.round(this.y)).setScale(pulse);
-    this.membraneImg.setPosition(this.core.x, this.core.y).setScale(pulse);
+    const roaring = this.roarT >= 0 && this.roarT < 1300;
+    const quake = roaring ? Math.round(Math.sin(this.t / 25) * 2) : 0;
+    this.core.setPosition(Math.round(this.x) + shake + quake, Math.round(this.y)).setScale(pulse * this.grow * (roaring ? 1.08 : 1));
+    this.membraneImg.setPosition(this.core.x, this.core.y).setScale(pulse * this.grow);
     for (const e of this.eyes) {
       e.a += dt * 0.6;
-      e.img.setPosition(Math.round(this.x + Math.cos(e.a) * 44), Math.round(this.y + Math.sin(e.a) * 28));
+      e.img.setPosition(Math.round(this.x + Math.cos(e.a) * 44 * this.grow), Math.round(this.y + Math.sin(e.a) * 28 * this.grow)).setScale(this.grow);
+    }
+    if (this.roarT >= 0) {
+      // Rings of sound rolling out.
+      this.roarT += ms;
+      for (let i = 0; i < 3; i++) {
+        const k = (this.roarT - i * 220) / 900;
+        if (k < 0 || k > 1) continue;
+        g.beams.lineStyle(2, 0x58d854, 0.6 * (1 - k)).strokeCircle(this.x, this.y, 20 + k * 150);
+      }
+      if (this.roarT > 1800) this.roarT = -1;
     }
     if (this.phase === 2) this.updateWalls(dt, g.phase === 'action');
     if (this.phase === 4) this.updateHorror(dt);

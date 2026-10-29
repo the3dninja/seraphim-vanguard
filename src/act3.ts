@@ -61,7 +61,7 @@ export class Act3Hazards {
       case 'tentacle': {
         const y = Phaser.Math.Clamp(g.player.y + Phaser.Math.Between(-30, 30), 40, H - 40);
         this.tentacles.push({ left: Math.random() < 0.5, y, t: 0 });
-        if (lv === 14) g.tipOnce('tentacle', 'A FLICKER AT THE EDGE\nMEANS A TENTACLE');
+        if (lv === 15) g.tipOnce('tentacle', 'A FLICKER AT THE EDGE\nMEANS A TENTACLE');
         break;
       }
       case 'artery':

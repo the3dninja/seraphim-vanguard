@@ -3,109 +3,9 @@ import { W, H } from './config';
 import type { GameScene } from './scenes/GameScene';
 import { BOSS_STATS } from './data/bosses';
 
-// Level 15's living tunnel and organic barriers, drawn every frame.
+// Level 15's organic barriers, drawn every frame.
 
-const SPEED = 30; // px per second the tunnel and barriers scroll
-const OPEN = W / 2 + 12; // half width when the tunnel is fully open
-const NARROW = 34; // half width in the narrow stretches
-const CHAMBER = 68; // half width inside a chamber
-const EASE = 240; // px over which the tunnel narrows at the start and widens at the end
-const CHAMBER_LEN = 280;
-const SWAY = 30; // how far the narrow stretches wind left and right
-
-const smooth = (t: number) => { const k = Phaser.Math.Clamp(t, 0, 1); return k * k * (3 - 2 * k); };
-
-// The tunnel: flesh walls close in from both sides, wind back and forth,
-// open into chambers now and then, and widen out again at the end. Track
-// position u runs along the tunnel; a screen row y shows u = scrolled - y.
-export class Tunnel {
-  private s = 0; // px scrolled since the tunnel began
-  private t = 0;
-  private gfx: Phaser.GameObjects.Graphics;
-
-  // `len` is how long the narrow part runs, `chambers` where each chamber starts.
-  constructor(private g: GameScene, private len: number, private chambers: number[]) {
-    this.gfx = g.add.graphics();
-  }
-
-  // Under everything that flies: put the walls just above the scenery.
-  sink(index: number) { this.g.children.moveTo(this.gfx, index); }
-
-  // Done once the whole screen has opened out again.
-  get done() { return this.s - H > this.len + EASE; }
-
-  private chamberness(u: number) {
-    let k = 0;
-    for (const c of this.chambers) {
-      const into = u - c;
-      if (into < -60 || into > CHAMBER_LEN + 60) continue;
-      k = Math.max(k, smooth((into + 60) / 60) * smooth((CHAMBER_LEN + 60 - into) / 60));
-    }
-    return k;
-  }
-
-  // The tunnel's center and half width at track position u.
-  profile(u: number) {
-    const closed = smooth(u / EASE) * smooth((this.len + EASE - u) / EASE);
-    const ch = this.chamberness(u);
-    const half = Phaser.Math.Linear(OPEN, Phaser.Math.Linear(NARROW, CHAMBER, ch), closed) + Math.sin(this.t / 260 + u / 40) * 1.5 * closed;
-    const cx = W / 2 + Math.sin(u / 150) * SWAY * closed * (1 - ch);
-    return { cx, half };
-  }
-
-  // Where row y's walls are.
-  at(y: number) {
-    const { cx, half } = this.profile(this.s - y);
-    return { l: cx - half, r: cx + half, cx, half };
-  }
-
-  // An x for something entering at the top, from 0 to 1 across the tunnel.
-  mapX(x01: number, y: number) {
-    const { cx, half } = this.at(y);
-    return cx + (x01 - 0.5) * 2 * Math.max(4, half - 10);
-  }
-
-  update(dt: number, moving: boolean) {
-    const g = this.g;
-    if (moving) this.s += SPEED * dt;
-    this.t += dt * 1000;
-    const gfx = this.gfx;
-    gfx.clear();
-    for (let y = -2; y < H + 3; y += 3) {
-      const u = this.s - y;
-      const { l, r } = this.at(y);
-      if (l <= -2 && r >= W + 2) continue;
-      const rib = Math.floor(u / 8) % 2 === 0;
-      for (const [x0, x1, edge] of [[0, l, l], [r, W, r]]) {
-        if (x1 <= x0) continue;
-        gfx.fillStyle(rib ? 0x4c0010 : 0x3c000c, 1).fillRect(x0, y, x1 - x0, 3);
-        // A glistening edge, and veins running through the flesh.
-        gfx.fillStyle(0xd82800, 1).fillRect(edge === l ? l - 2 : r, y, 2, 3);
-        gfx.fillStyle(0xfc7460, 0.8).fillRect(edge === l ? l - 1 : r, y, 1, Math.floor(u / 3) % 3 === 0 ? 3 : 1);
-        const vx = edge === l ? l - 8 - Math.round(Math.sin(u / 23) * 4) : r + 6 + Math.round(Math.sin(u / 19) * 4);
-        if (vx > x0 && vx < x1) gfx.fillStyle(0x881400, 1).fillRect(vx, y, 1, 3);
-      }
-    }
-    if (g.phase !== 'action') return;
-    // Shots hitting the walls stop (the Wave Beam passes through).
-    for (const group of [g.playerBullets, g.enemyBullets]) {
-      for (const b of group.getChildren().slice() as Phaser.Physics.Arcade.Image[]) {
-        if (!b.active || b.getData('fx') === 'wave') continue;
-        const { l, r } = this.at(b.y);
-        if (b.x < l - 1 || b.x > r + 1) { if (group === g.playerBullets) g.tink(b.x, b.y); b.destroy(); }
-      }
-    }
-    // The walls hurt and shove the ship back toward the middle.
-    const p = g.player;
-    const { l, r } = this.at(p.y);
-    if (p.x - 4 < l || p.x + 4 > r) {
-      g.hurt();
-      p.x = Phaser.Math.Clamp(p.x, l + 6, r - 6);
-    }
-  }
-
-  destroy() { this.gfx.destroy(); }
-}
+const SPEED = 30; // px per second barriers scroll, with the hive's walls
 
 interface Cell { x0: number; x1: number; hp: number }
 interface Barrier { y: number; cells: Cell[]; t: number }
@@ -126,17 +26,19 @@ export class Barriers {
     this.gfx = g.add.graphics().setDepth(9.5); // over enemies, under shots and the ship
   }
 
-  spawn(full: boolean) {
+  // Across [x0, x1] (the open stretch between the hive's walls), or a short piece of it.
+  spawn(full: boolean, x0 = 0, x1 = W) {
     const g = this.g;
-    const n = W / CELL_W;
+    const n = Math.max(2, Math.round((x1 - x0) / CELL_W));
+    const cw = (x1 - x0) / n;
     let from = 0, to = n;
     if (!full) {
       const len = Phaser.Math.Between(2, 3);
-      from = Phaser.Math.Between(0, n - len);
-      to = from + len;
+      from = Phaser.Math.Between(0, Math.max(0, n - len));
+      to = Math.min(n, from + len);
     }
     const cells: Cell[] = [];
-    for (let i = from; i < to; i++) cells.push({ x0: i * CELL_W, x1: (i + 1) * CELL_W, hp: S.hp.cell });
+    for (let i = from; i < to; i++) cells.push({ x0: Math.round(x0 + i * cw), x1: Math.round(x0 + (i + 1) * cw), hp: S.hp.cell });
     const b = { y: -CELL_H, cells, t: 0 };
     this.list.push(b);
     // Eggs ride on top of some cells.
