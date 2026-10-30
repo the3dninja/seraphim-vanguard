@@ -283,3 +283,51 @@ export const isEdited = (d: Draft) => {
   const game = gameDef(d.base);
   return !game || levelText(game) !== levelText(d.def);
 };
+
+// Pairs up equal items of two lists, keeping their order, as many as can be:
+// [index in a, index in b] for each pair.
+function matchUp(a: string[], b: string[]): [number, number][] {
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let x = n - 1; x >= 0; x--) {
+    for (let y = m - 1; y >= 0; y--) L[x][y] = a[x] === b[y] ? L[x + 1][y + 1] + 1 : Math.max(L[x + 1][y], L[x][y + 1]);
+  }
+  const out: [number, number][] = [];
+  let x = 0, y = 0;
+  while (x < n && y < m) {
+    if (a[x] === b[y]) out.push([x++, y++]);
+    else if (L[x + 1][y] >= L[x][y + 1]) x++;
+    else y++;
+  }
+  return out;
+}
+
+// The game's version of a wave in a draft, found by lining the segment up
+// with the game's. Waves that still match pair up first. Between those, waves
+// alike but for their delay pair up next (adding a wave changes the next
+// one's delay), and then, where the same number are left on both sides, the
+// rest pair in order. Undefined for a wave the draft added.
+export function gameWave(d: Draft, seg: number, i: number): Wave | undefined {
+  const game = gameDef(d.base)?.segments[seg];
+  const mine = d.def.segments[seg];
+  if (!game || !mine) return undefined;
+  const full = (w: Wave) => write(w as unknown as Value);
+  const shape = (w: Wave) => write({ ...w, delay: 0 } as unknown as Value);
+  const pair = new Array<number>(mine.length).fill(-1);
+  const anchors = matchUp(mine.map(full), game.map(full));
+  let px = 0, py = 0;
+  for (const [ax, ay] of [...anchors, [mine.length, game.length] as [number, number]]) {
+    // The gap before this anchor, on both sides.
+    const gx = Array.from({ length: ax - px }, (_, k) => px + k);
+    const gy = Array.from({ length: ay - py }, (_, k) => py + k);
+    const alike = matchUp(gx.map((k) => shape(mine[k])), gy.map((k) => shape(game[k])));
+    for (const [x, y] of alike) pair[gx[x]] = gy[y];
+    const rx = gx.filter((_, k) => !alike.some(([x]) => x === k));
+    const ry = gy.filter((_, k) => !alike.some(([, y]) => y === k));
+    if (rx.length === ry.length) rx.forEach((x, k) => { pair[x] = ry[k]; });
+    if (ax < mine.length) pair[ax] = ay;
+    px = ax + 1;
+    py = ay + 1;
+  }
+  return pair[i] >= 0 ? game[pair[i]] : undefined;
+}

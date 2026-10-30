@@ -26,9 +26,11 @@ import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
+import { addScenery } from '../scenery';
 import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
 import { cheats } from '../cheats';
 import type { EditPlay } from '../editor';
+import { playtestReached } from '../editor/back';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
@@ -566,27 +568,7 @@ export class GameScene extends Phaser.Scene {
     this.nebula = null;
     this.motes = null;
     if (this.level.hive) return; // the hive draws its own (see hivebg.ts)
-    if (theme === 'mist') {
-      // A haze over the action (under shots and the ship), and spores drifting through it.
-      this.fog = this.add.tileSprite(0, 0, W, H, 'fog').setOrigin(0).setDepth(9.55).setAlpha(0.15);
-      this.motes = this.add.particles(0, 0, 'px', {
-        x: { min: 0, max: W }, y: -4, lifespan: 9000, speedY: { min: 14, max: 30 }, speedX: { min: -6, max: 6 },
-        alpha: { start: 0.8, end: 0.2 }, tint: [0xb8f818, 0x58d854, 0xfce0a8, 0x9878f8], frequency: 90,
-      }).setDepth(9.5);
-    }
-    if (theme !== 'outpost' && theme !== 'deep') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
-    if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
-    if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
-    if (theme === 'forge') this.planet = this.add.image(150, -6, 'sun').setAlpha(0.85);
-    if (theme === 'blight') this.planet = this.add.image(140, 40, 'blightworld').setAlpha(0.8);
-    // Hollow space, out of the rift: a weird purple star before a nebula.
-    if (theme === 'beyond') {
-      this.nebula = this.add.image(112, 70, 'hollownebula').setAlpha(0.9);
-      this.planet = this.add.image(40, 96, 'purplestar');
-    }
-    // Just above the two star layers, under everything that flies.
-    let depth = 2;
-    for (const o of [this.scenery, this.nebula, this.planet]) if (o) this.children.moveTo(o, depth++);
+    ({ scenery: this.scenery, planet: this.planet, nebula: this.nebula, fog: this.fog, motes: this.motes } = addScenery(this, theme));
     if (fade) {
       for (const o of [this.scenery, this.planet, this.fog, this.nebula]) {
         if (!o) continue;
@@ -4347,6 +4329,7 @@ export class GameScene extends Phaser.Scene {
 
   // An editor playtest ends: back to the title screen with the editor open over it.
   private backToEditor(fade = true) {
+    playtestReached.at = { segment: this.segment, wave: this.waveIndex };
     const go = () => this.scene.start('Title', { editor: true });
     if (!fade) { go(); return; }
     this.cameras.main.fadeOut(400);
