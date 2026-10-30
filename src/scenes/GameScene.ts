@@ -4,7 +4,7 @@ import {
   CRATES, DTYPE_COLOR, GEAR, ITEMS, RADAR, WEAPONS, atLv, gearStats, shotTexture, stackLabel, type DType, type GearId, type ItemId, type WeaponId,
 } from '../data/items';
 import { DTYPES, ENEMY_STATS, typeMultiplier, weakTo, type FoeKind, type Taken } from '../data/enemies';
-import { LEVELS, REPLAY_PAY, type BossKind, type HazardSpec, type LevelDef, type Theme, type Wave } from '../data/levels';
+import { LEVELS, REPLAY_PAY, segmentEnd, type BossKind, type HazardSpec, type LevelDef, type LevelEvent, type Theme, type Wave } from '../data/levels';
 import { extraCargo, gearLevel, hasGear, itemCap, totalMaxHealth, weaponLevel, weaponStats } from '../inventory';
 import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
@@ -26,9 +26,11 @@ import { sideById, unlockedBy } from '../data/sides';
 import { cloneSave, type SaveData } from '../save';
 import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, TestWaves, type TestPanel } from '../combatTest';
 import { starfield, text, toast } from '../ui';
+import { addScenery } from '../scenery';
 import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
 import { cheats } from '../cheats';
 import type { EditPlay } from '../editor';
+import { playtestReached } from '../editor/back';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { SPEAKERS, VESPAR_FREED_AFTER, wrap } from '../portraits';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
@@ -141,16 +143,6 @@ const ionStunChance = (lv: number) => WEAPONS.ion.levels!.stunChance[lv - 1];
 // Whether a stun with this chance (%, none = always) lands.
 const rollStun = (chance: number | undefined) => chance === undefined || Math.random() * 100 < chance;
 const BOMB_FUSE = 0.6; // s before a cluster bomblet goes off
-// A one-line radio call as each act 3 level starts.
-const RADIO: Record<number, string> = {
-  9: 'REYES: THE COLONY WENT\nDARK. FIND OUT WHY.',
-  10: 'REYES: THE EMPEROR IS\nINSIDE. BRING HIM BACK.',
-  11: 'ROOK: RAIDERS FLY WITH\nYOU NOW, PILOT.',
-  12: 'VESPAR: THE REEF FEEDS\nTHE HIVE. CUT THROUGH.',
-  13: 'ROOK: TOO DARK TO SEE.\nSTAY NEAR THE LIGHT.',
-  14: 'VESPAR: THE FLEET WILL\nHOLD THE GATE. GO!',
-  15: 'ROOK: WE\'LL HOLD THE\nGATE. GO END THIS.',
-};
 const STRIKE_WARN = 900; // ms a lightning column flashes before the bolt
 const STRIKE_HIT = 260; // ms the bolt stays
 const FLARE_WARN = 3000; // ms from the shelter rock appearing to the flare sweeping down
@@ -229,6 +221,7 @@ export class GameScene extends Phaser.Scene {
   private waveIndex = 0;
   private waveTimer = 0;
   private hazardIn: number[] = [];
+  private hazardsOff = false; // the level's events have paused the hazards
   private boss: Boss | null = null;
   private storm: Storm | null = null; // Storm Eye's scripted storm
   private treasure: Treasure | null = null; // the cargo hauler at a treasure ending
@@ -451,6 +444,7 @@ export class GameScene extends Phaser.Scene {
     this.fog = null;
     this.motes = null;
     this.segBossDone = false;
+    this.hazardsOff = false;
     this.storm = null;
     this.treasure = null;
     this.treasureDone = false;
@@ -542,9 +536,8 @@ export class GameScene extends Phaser.Scene {
     if (this.jumped !== null) intro.push(text(this, W / 2, H / 2 + 18, `SKIPPED TO ${this.jumped.toFixed(1)}`, COLOR.yellow).setOrigin(0.5).setDepth(1000));
     this.tweens.add({ targets: intro, alpha: 0, delay: 2700, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
-    const call = this.side ? undefined : RADIO[this.state.level];
-    // A playtest from a later segment skips the call that opens the level.
-    if (call && !this.rewound && !(this.edit && this.segment > 0)) this.time.delayedCall(2300, () => this.radio(call));
+    // The segment's own events (the call that opens a level), but not again after a rewind.
+    if (!this.rewound) this.segmentEvents();
 
     this.events.on('resume', () => this.afterVendor());
   }
@@ -570,27 +563,7 @@ export class GameScene extends Phaser.Scene {
     this.nebula = null;
     this.motes = null;
     if (this.level.hive) return; // the hive draws its own (see hivebg.ts)
-    if (theme === 'mist') {
-      // A haze over the action (under shots and the ship), and spores drifting through it.
-      this.fog = this.add.tileSprite(0, 0, W, H, 'fog').setOrigin(0).setDepth(9.55).setAlpha(0.15);
-      this.motes = this.add.particles(0, 0, 'px', {
-        x: { min: 0, max: W }, y: -4, lifespan: 9000, speedY: { min: 14, max: 30 }, speedX: { min: -6, max: 6 },
-        alpha: { start: 0.8, end: 0.2 }, tint: [0xb8f818, 0x58d854, 0xfce0a8, 0x9878f8], frequency: 90,
-      }).setDepth(9.5);
-    }
-    if (theme !== 'outpost' && theme !== 'deep') this.scenery = this.add.tileSprite(0, 0, W, H, `scenery_${theme}`).setOrigin(0);
-    if (theme === 'outpost') this.planet = this.add.image(132, 60, 'planet');
-    if (theme === 'blockade') this.planet = this.add.image(40, 70, 'moon');
-    if (theme === 'forge') this.planet = this.add.image(150, -6, 'sun').setAlpha(0.85);
-    if (theme === 'blight') this.planet = this.add.image(140, 40, 'blightworld').setAlpha(0.8);
-    // Hollow space, out of the rift: a weird purple star before a nebula.
-    if (theme === 'beyond') {
-      this.nebula = this.add.image(112, 70, 'hollownebula').setAlpha(0.9);
-      this.planet = this.add.image(40, 96, 'purplestar');
-    }
-    // Just above the two star layers, under everything that flies.
-    let depth = 2;
-    for (const o of [this.scenery, this.nebula, this.planet]) if (o) this.children.moveTo(o, depth++);
+    ({ scenery: this.scenery, planet: this.planet, nebula: this.nebula, fog: this.fog, motes: this.motes } = addScenery(this, theme));
     if (fade) {
       for (const o of [this.scenery, this.planet, this.fog, this.nebula]) {
         if (!o) continue;
@@ -1335,7 +1308,7 @@ export class GameScene extends Phaser.Scene {
       // In the hive, fly on until this part's track has gone by. Level 15's legs
       // flow straight on without waiting for the screen to clear, unless a boss is next.
       const last = this.segment >= this.level.segments.length - 1;
-      const flows = this.level.vendorless && !last && !this.level.segmentBoss?.[this.segment];
+      const flows = segmentEnd(this.level, this.segment) === 'on' && !last && !this.level.segmentBoss?.[this.segment];
       // Maw Gate waits for a warp ring to pass, and its last gate runs on its own.
       if (this.gate?.finale) return;
       if ((flows || this.enemies.countActive() === 0) && (!this.hive || this.hive.done) && (!this.gate || this.gate.idle)) {
@@ -1349,7 +1322,37 @@ export class GameScene extends Phaser.Scene {
       this.spawnWave(wave);
       this.waveIndex++;
       this.waveTimer = 0;
+      this.segmentEvents(this.waveIndex);
     }
+  }
+
+  // The level's events for this segment (LevelDef.segmentEvents): those timed
+  // from its start, or (with `wave`, from 1) those timed from that wave.
+  private segmentEvents(wave?: number) {
+    const seg = this.segment;
+    for (const ev of this.level.segmentEvents?.[seg] ?? []) {
+      if (ev.wave !== wave) continue;
+      const go = () => { if (this.segment === seg) this.runEvent(ev); };
+      if (ev.at) this.time.delayedCall(ev.at, go);
+      else go();
+    }
+  }
+
+  private runEvent(ev: LevelEvent) {
+    if (ev.radio !== undefined) this.radio(ev.radio);
+    if (ev.alarm !== undefined) this.alarm(ev.alarm);
+    if (ev.arena !== undefined) this.setArena(ev.arena);
+    if (ev.hazards !== undefined) this.hazardsOff = !ev.hazards;
+  }
+
+  // An alarm from the level's events: the screen flashes red three times
+  // behind a warning in the middle.
+  alarm(msg: string) {
+    const wash = this.add.rectangle(0, 0, W, H, 0xd82800, 0).setOrigin(0).setDepth(990);
+    const t = text(this, W / 2, H / 2 - 10, msg, COLOR.red).setOrigin(0.5).setAlign('center').setDepth(1000)
+      .setBackgroundColor('#000000').setPadding(3, 3, 3, 3);
+    this.tweens.add({ targets: wash, alpha: 0.25, yoyo: true, repeat: 2, duration: 300, onComplete: () => wash.destroy() });
+    this.tweens.add({ targets: t, alpha: 0.35, yoyo: true, repeat: 2, duration: 300, onComplete: () => t.destroy() });
   }
 
   // An enemy pulling back off the top: the first time, it comes back down a
@@ -2130,7 +2133,7 @@ export class GameScene extends Phaser.Scene {
 
   private runHazards(dt: number) {
     if (this.boss && !this.level.bossHazards) return;
-    if (this.gate?.calm || this.hive?.calm) return;
+    if (this.gate?.calm || this.hive?.calm || this.hazardsOff) return;
     if (this.storm) { this.storm.run(dt, this.stormNow()); return; }
     this.hazardList().forEach((hz, i) => {
       this.hazardIn[i] -= dt * 1000;
@@ -4003,14 +4006,15 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'action') return;
     if (this.gate && this.segment === this.level.segments.length - 1) { this.gate.startFinale(); return; }
     const midBoss = this.level.segmentBoss?.[this.segment];
-    if (this.level.riftAfter === this.segment) this.riftSequence();
-    else if (this.level.riftExitAfter === this.segment) this.riftExit();
-    else if (this.segment < this.level.segments.length - 1) {
+    const end = segmentEnd(this.level, this.segment);
+    if (end === 'rift') this.riftSequence();
+    else if (end === 'riftExit') this.riftExit();
+    else if (end === 'vendor' || end === 'on') {
       if (midBoss && !this.segBossDone) this.startBoss(midBoss);
-      else if (this.level.vendorless) this.flowOn();
+      else if (end === 'on') this.flowOn();
       else this.vendorArrival();
-    } else if (this.level.boss) this.startBoss();
-    else if (this.level.treasure && !this.treasureDone) this.startTreasure();
+    } else if (end === 'boss' && this.level.boss) this.startBoss();
+    else if (end === 'treasure' && this.level.treasure && !this.treasureDone) this.startTreasure();
     else this.levelClear();
   }
 
@@ -4269,8 +4273,8 @@ export class GameScene extends Phaser.Scene {
     this.warpIn = null;
     this.resetHazardTimers(3000);
     this.hive?.beginSegment(this.segment);
-    const call = this.level.segmentRadio?.[this.segment];
-    if (call) this.radio(call);
+    this.hazardsOff = false;
+    this.segmentEvents();
     this.phase = 'action';
   }
 
@@ -4377,6 +4381,7 @@ export class GameScene extends Phaser.Scene {
 
   // An editor playtest ends: back to the title screen with the editor open over it.
   private backToEditor(fade = true) {
+    playtestReached.at = { segment: this.segment, wave: this.waveIndex };
     const go = () => this.scene.start('Title', { editor: true });
     if (!fade) { go(); return; }
     this.cameras.main.fadeOut(400);

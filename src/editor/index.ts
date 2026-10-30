@@ -1,22 +1,26 @@
 import type Phaser from 'phaser';
-import { FONT, W } from '../config';
+import { FONT, H, W } from '../config';
 import { ENEMY_KINDS, PATTERNS, type LevelDef, type Wave } from '../data/levels';
 import { ENEMY_STATS } from '../data/enemies';
 import { testSave } from '../combatTest';
 import { TextError, itemLines, read } from './format';
 import {
-  applyTab, blankLevel, changes, deepCopy, gameEntries, isEdited, levelText, loadDrafts, newDraft, pushUndo,
-  saveDrafts, segName, tabText, type Draft, type Part, type Tab,
+  applyTab, blankLevel, changes, deepCopy, gameDef, gameEntries, gameWave, isEdited, levelText, loadDrafts, newDraft,
+  playAsFor, pushUndo, saveDrafts, SEG_LISTS, shiftWaveEvents, segName, tabText, type Draft, type Part, type Tab,
 } from './model';
+import { EditView, LINE_Y, PX, formation, segAt } from './view';
+import { playtestReached } from './back';
 
 // The Level Editor (?edit, or with ?test): a page over the game for changing
-// levels and making new ones. Each tab shows part of the level as text, in the
-// same form as levels.ts; the Waves tab also lists the waves, and tapping one
-// opens the wave editor. Changes wait until APPLY. PLAY flies the level from
-// the segment (or wave) on screen, without touching the real save, and the
-// pause menu's RETURN TO EDITOR comes back to the same place. EXPORT gives
-// the level as text to paste back in the project so it can be written into
-// the code. Drafts are kept in this browser only.
+// levels and making new ones. A level opens in the scroll view (view.ts),
+// the whole level laid out to scroll through, where tapping a wave opens the
+// wave editor and tapping empty space adds one. CODE opens the code editor:
+// each tab shows part of the level as text, in the same form as levels.ts,
+// and changes wait until APPLY. PLAY flies the level from the play line (or
+// the picked wave), without touching the real save, and the pause menu's
+// RETURN TO EDITOR comes back to where the playtest got to. EXPORT gives the
+// level as text to paste back in the project so it can be written into the
+// code. Drafts are kept in this browser only.
 
 export const editorEnabled = () => {
   const q = new URLSearchParams(location.search);
@@ -99,8 +103,16 @@ body.in-editor #tuner-btn { display: none; }
 #editor .panel .xv { width: 34px; text-align: right; }
 #editor .panel label.check { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
 #editor .panel label.check input { width: 18px; height: 18px; accent-color: #f8b800; margin: 0; }
-#editor .panel .pbtns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; max-width: 520px; width: 100%; margin: 6px auto 0; }
-#editor .panel .pbtns button { padding: 8px 2px; }
+#editor .panel .pbtns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; max-width: 520px; width: 100%; margin: 6px auto 0; }
+#editor .panel .pbtns button { padding: 8px 0; }
+#editor.view { background: transparent; pointer-events: none; }
+#editor.view > * { pointer-events: auto; }
+#editor.view .top { background: rgba(0, 0, 0, .75); }
+#editor.view .top .t { flex: 1; text-align: center; color: #58d854; white-space: nowrap; }
+#editor.view .status { position: fixed; left: 0; right: 0; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+#editor .strip { position: fixed; right: 0; width: 18px; touch-action: none; image-rendering: pixelated; }
+#editor .pop { position: fixed; z-index: 23; display: grid; gap: 4px; background: #000; border: 1px solid #fcfcfc; padding: 4px; }
+#editor .pop button { padding: 9px 10px; }
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', txt = '') => {
@@ -114,34 +126,6 @@ const clock = (ms: number) => {
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-
-// Where each ship of a wave appears, as GameScene.spawnWave puts them, on a
-// strip `h` tall whose entry line is at y = h - 14. Drillers come from the
-// sides partway down instead.
-function formation(w: Wave, h: number): { x: number; y: number }[] {
-  const n = w.count ?? 1;
-  const cx = (w.x ?? 0.5) * W;
-  const top = h - 14;
-  if (w.kind === 'driller' || w.kind === 'cdriller') {
-    const side = (x: number) => (x < W / 2 ? 8 : W - 8);
-    if (w.pattern === 'pair') return [{ x: 8, y: top / 2 }, { x: W - 8, y: top / 2 }];
-    return Array.from({ length: n }, (_, i) => ({ x: side(cx), y: top / 2 - i * 12 }));
-  }
-  switch (w.pattern) {
-    case 'single': return [{ x: cx, y: top }];
-    case 'pair': return [{ x: W * 0.3, y: top }, { x: W * 0.7, y: top }];
-    case 'line': return Array.from({ length: n }, (_, i) => ({ x: ((i + 0.5) / n) * (W - 20) + 10, y: top }));
-    case 'column': return Array.from({ length: n }, (_, i) => ({ x: cx, y: top - i * 16 }));
-    case 'vee': return Array.from({ length: n }, (_, i) => {
-      const side = i - (n - 1) / 2;
-      return { x: Math.min(W - 8, Math.max(8, cx + side * 16)), y: top - Math.abs(side) * 12 };
-    });
-    case 'swarm': {
-      const dir = cx < W / 2 ? 1 : -1;
-      return Array.from({ length: n }, (_, i) => ({ x: (dir > 0 ? 14 : W - 14) - dir * i * 4, y: top - i * 9 }));
-    }
-  }
-}
 
 export function installEditor(game: Phaser.Game) {
   let { drafts, clip } = loadDrafts();
@@ -159,9 +143,11 @@ export function installEditor(game: Phaser.Game) {
   }
 
   // Where the editor is, kept while it's closed for a playtest.
-  let screen: 'home' | 'list' | 'edit' | 'export' = 'home';
+  let screen: 'home' | 'list' | 'view' | 'edit' | 'export' = 'home';
   let cur: Draft | null = null;
   let tab: Tab = { seg: 0, part: 'waves' };
+  let selSeg = 0; // the segment of the wave open in the wave editor
+  const viewAt = new Map<string, number>(); // where each draft's scroll view was, by draft
   let textView = false; // the Waves tab as text instead of a list
   const pending = new Map<string, string>(); // tab text typed but not applied, by tab
   const scrolls = new Map<string, number>();
@@ -180,20 +166,70 @@ export function installEditor(game: Phaser.Game) {
   };
 
   const show = () => {
-    game.pause();
     if (game.input.keyboard) game.input.keyboard.enabled = false;
     document.body.classList.add('in-editor');
     document.body.append(root);
+    // Back from a playtest: the scroll view opens where it got to.
+    const back = playtestReached.at;
+    playtestReached.at = null;
+    if (back && cur && screen === 'view') {
+      const tl = view()?.tl;
+      const spot = tl?.waves[back.segment]?.[back.wave - 1];
+      viewAt.set(cur.key, spot ? spot.t : tl?.segs[back.segment]?.start ?? 0);
+      sel = null;
+    }
     render();
   };
-  const hide = () => {
+  // `toTitle`: the scroll view gives way to the title screen (not a playtest).
+  const hide = (toTitle = true) => {
     keepScroll();
     root.remove();
     document.body.classList.remove('in-editor');
     if (game.input.keyboard) game.input.keyboard.enabled = true;
     game.resume();
+    if (toTitle && game.scene.isActive('EditView')) {
+      game.scene.stop('EditView');
+      game.scene.start('Title');
+    }
   };
   showEditor = show;
+
+  // --- The scroll view ---------------------------------------------------------------
+  // A scene of its own, under the editor's buttons. The game only runs while
+  // it's on screen; the editor's other pages cover it, so the game waits.
+
+  const view = () => game.scene.getScene('EditView') as EditView | null;
+  const hooks = {
+    tapWave: (seg: number, i: number) => openPanel(seg, i),
+    tapSpace: (t: number, x: number, cx: number, cy: number) => spaceMenu(t, x, cx, cy),
+    editSeg: (seg: number) => openCode({ seg, part: tab.part }),
+    addSeg: (at: number) => insertSegment(at),
+    openEvent: (seg: number, k: number) => {
+      const t: Tab = { seg, part: 'events' };
+      caretLine = itemLines(tabText(cur!, t))[k] ?? 1;
+      openCode(t);
+    },
+    moved: () => updateChrome(),
+  };
+  let shownKey = '';
+  const syncGame = () => {
+    if (screen !== 'view' || !cur) { game.pause(); return; }
+    game.resume();
+    if (!view()) game.scene.add('EditView', EditView);
+    const v = view()!;
+    v.hooks = hooks;
+    if (!game.scene.isActive('EditView')) {
+      for (const sc of game.scene.getScenes(true)) game.scene.stop(sc.scene.key);
+      game.scene.start('EditView');
+      shownKey = '';
+    }
+    if (shownKey !== cur.key) v.T = viewAt.get(cur.key) ?? 0;
+    shownKey = cur.key;
+    v.show({ def: cur.def, sel: sel === null ? null : { seg: selSeg, i: sel }, locked: locked(cur) });
+    updateChrome();
+  };
+  // Keeps the scroll view's place for when it comes back.
+  const keepView = () => { const v = view(); if (shownKey && v && game.scene.isActive('EditView')) viewAt.set(shownKey, v.T); };
 
   const keepScroll = () => {
     const body = root.querySelector('.body');
@@ -208,7 +244,7 @@ export function installEditor(game: Phaser.Game) {
     textView = false;
     sel = null;
     pending.clear();
-    screen = 'edit';
+    screen = 'view';
     say('');
     render();
   };
@@ -273,9 +309,18 @@ export function installEditor(game: Phaser.Game) {
     if (panelDirty()) applyPanel();
     if (!applyPending()) return;
     const d = cur;
-    const seg = Math.max(0, tab.seg);
+    let seg = Math.max(0, tab.seg);
     let wave = 0;
-    if (tab.seg >= 0 && tab.part === 'waves') {
+    if (screen === 'view') {
+      // The picked wave, or the first one on or above the play line.
+      const v = view()!;
+      if (sel !== null) { seg = selSeg; wave = sel; }
+      else {
+        const next = v.tl.waves.flat().find((w) => w.t >= v.T - 250);
+        seg = next ? next.seg : segAt(v.tl, v.T);
+        wave = next ? next.i : d.def.segments[seg].length;
+      }
+    } else if (tab.seg >= 0 && tab.part === 'waves') {
       if (sel !== null) wave = sel;
       else if (textView) {
         const ta = root.querySelector('textarea');
@@ -292,9 +337,10 @@ export function installEditor(game: Phaser.Game) {
       level: deepCopy(d.def), num: d.playAs, side: d.base.kind === 'side' ? d.base.id : undefined,
       segment: seg, wave: Math.min(wave, d.def.segments[seg].length),
     };
-    hide();
-    const title = game.scene.getScene('Title');
-    title.scene.start('Game', { state, edit: data });
+    keepView();
+    hide(false);
+    for (const sc of game.scene.getScenes(true)) game.scene.stop(sc.scene.key);
+    game.scene.start('Game', { state, edit: data });
   };
 
   // --- Wave editor ---------------------------------------------------------------
@@ -303,15 +349,18 @@ export function installEditor(game: Phaser.Game) {
   let panelUndo: string[] = [];
   const panelDirty = () => sel !== null && !!cur && levelText(cur.def) !== panelStart;
 
-  const openPanel = (i: number) => {
+  const openPanel = (seg: number, i: number) => {
     if (!cur) return;
+    if (sel === i && selSeg === seg) return;
     if (panelDirty() && !confirm('THIS WAVE HAS CHANGES THAT AREN\'T APPLIED. DROP THEM?')) return;
     if (panelDirty()) cur.def = read(panelStart) as unknown as LevelDef;
+    selSeg = seg;
     sel = i;
     panelStart = levelText(cur.def);
     panelUndo = [];
     render();
     root.querySelector('.wave.sel')?.scrollIntoView({ block: 'nearest' });
+    if (screen === 'view') view()?.focus(seg, i);
   };
   const closePanel = () => {
     if (!cur) return;
@@ -334,9 +383,13 @@ export function installEditor(game: Phaser.Game) {
 
   function render() {
     keepScroll();
+    keepView();
     root.replaceChildren();
+    root.classList.toggle('view', screen === 'view');
     const top = el('div', 'top');
     root.append(top);
+    syncGame();
+    if (screen === 'view') { scrollView(top); return; }
     const body = el('div', 'body');
     if (screen === 'home') homeView(top, body);
     else if (screen === 'list') listView(top, body);
@@ -352,8 +405,135 @@ export function installEditor(game: Phaser.Game) {
     top.append(b);
   };
 
+  // The scroll view's buttons, over the level: LEVELS, the readout, CODE and
+  // PLAY along the top, the level strip down the right, and the wave editor.
+  function scrollView(top: HTMLElement) {
+    const d = cur!;
+    backBtn(top, 'LEVELS', () => {
+      if (panelDirty() && !confirm('DROP THE CHANGES TO THIS WAVE?')) return;
+      if (panelDirty()) d.def = read(panelStart) as unknown as LevelDef;
+      sel = null;
+      screen = 'list';
+      say('');
+      render();
+    });
+    top.append(el('span', 't'));
+    backBtn(top, 'CODE', () => {
+      const v = view();
+      openCode({ seg: v ? segAt(v.tl, v.T) : 0, part: tab.seg < 0 ? 'waves' : tab.part });
+    });
+    const playBtn = el('button', 'play', 'PLAY');
+    playBtn.addEventListener('click', play);
+    top.append(playBtn);
+    root.append(el('div', `status ${status.kind}`, status.msg));
+    const strip = el('canvas', 'strip');
+    root.append(strip);
+    // Tap or drag on the strip to jump there.
+    const jump = (ev: PointerEvent) => {
+      const v = view();
+      if (!v) return;
+      const r = strip.getBoundingClientRect();
+      const f = 1 - (ev.clientY - r.top) / r.height;
+      v.setT(Math.max(0, Math.min(1, f)) * v.tl.end);
+    };
+    strip.addEventListener('pointerdown', (ev) => { strip.setPointerCapture(ev.pointerId); jump(ev); });
+    strip.addEventListener('pointermove', (ev) => { if (strip.hasPointerCapture(ev.pointerId)) jump(ev); });
+    if (sel !== null) wavePanel();
+    requestAnimationFrame(updateChrome);
+  }
+
+  // The readout and the level strip, after the view moves or changes.
+  function updateChrome() {
+    const v = view();
+    if (screen !== 'view' || !cur || !v) return;
+    const tl = v.tl;
+    const seg = segAt(tl, v.T);
+    const t = root.querySelector('.top .t');
+    if (t) t.textContent = `SEG ${seg + 1} · ${clock(Math.max(0, v.T - (tl.segs[seg]?.start ?? 0)))}`;
+    const top = root.querySelector('.top') as HTMLElement | null;
+    const panel = root.querySelector('.panel') as HTMLElement | null;
+    const status = root.querySelector('.status') as HTMLElement | null;
+    const y0 = top ? top.getBoundingClientRect().bottom : 0;
+    if (status) status.style.top = `${y0 + 4}px`;
+    const strip = root.querySelector('.strip') as HTMLCanvasElement | null;
+    if (!strip) return;
+    const y1 = panel ? panel.getBoundingClientRect().top : window.innerHeight;
+    strip.style.top = `${y0}px`;
+    strip.style.height = `${Math.max(40, y1 - y0)}px`;
+    const w = 18, h = Math.round(Math.max(40, y1 - y0));
+    if (strip.width !== w || strip.height !== h) { strip.width = w; strip.height = h; }
+    const ctx = strip.getContext('2d')!;
+    const end = Math.max(1, tl.end);
+    const y = (ms: number) => Math.round(h - 4 - (ms / end) * (h - 8)); // the start at the bottom, like the view
+    ctx.fillStyle = 'rgba(0, 0, 0, .8)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#f8b800';
+    for (const s of tl.segs) ctx.fillRect(0, y(s.start), w, 1);
+    tl.waves.forEach((list, s) => list.forEach((spot) => {
+      const wave = cur!.def.segments[s][spot.i];
+      ctx.fillStyle = wave?.waitClear ? '#3cbcfc' : '#bcbcbc';
+      ctx.fillRect(7, y(spot.t), 4, 1);
+    }));
+    // What's on screen, and the play line.
+    const top0 = v.T + LINE_Y / PX, bottom0 = v.T - (H - LINE_Y) / PX;
+    ctx.strokeStyle = '#fcfcfc';
+    ctx.strokeRect(1.5, y(Math.min(end, top0)) + 0.5, w - 3, Math.max(2, y(Math.max(0, bottom0)) - y(Math.min(end, top0))));
+    ctx.fillStyle = '#58d854';
+    ctx.fillRect(0, y(v.T), w, 2);
+    if (sel !== null) {
+      const spot = tl.waves[selSeg]?.[sel];
+      if (spot) { ctx.fillStyle = '#f8b800'; ctx.fillRect(3, y(spot.t) - 1, 12, 3); }
+    }
+  }
+
+  // Tapping empty space: a small menu there. For now, ADD WAVE.
+  function spaceMenu(t: number, x: number, cx: number, cy: number) {
+    root.querySelector('.pop')?.remove();
+    if (!cur) return;
+    if (sel !== null) { closePanel(); return; }
+    const pop = el('div', 'pop');
+    const add = el('button', 'apply', 'ADD WAVE');
+    const cancel = el('button', '', 'CANCEL');
+    add.addEventListener('click', () => { pop.remove(); addWaveAt(t, x); });
+    cancel.addEventListener('click', () => pop.remove());
+    pop.append(add, cancel);
+    root.append(pop);
+    const r = pop.getBoundingClientRect();
+    pop.style.left = `${Math.max(4, Math.min(window.innerWidth - r.width - 4, cx - r.width / 2))}px`;
+    pop.style.top = `${Math.max(4, Math.min(window.innerHeight - r.height - 4, cy + 8))}px`;
+  }
+
+  // A wave at a moment and across-the-screen spot in the scroll view. Its delay
+  // comes off the next wave's, so nothing after it moves, and it starts as a
+  // copy of the nearest wave.
+  function addWaveAt(t: number, x: number) {
+    const d = cur!;
+    const tl = view()!.tl;
+    const seg = segAt(tl, t);
+    const spots = tl.waves[seg];
+    const start = tl.segs[seg].start;
+    const at = Math.max(start, t);
+    const i = spots.filter((s) => s.t <= at).length;
+    const prev = i > 0 ? spots[i - 1].t : start;
+    const delay = Math.max(0, Math.round((at - prev) / 100) * 100);
+    const list = d.def.segments[seg];
+    const near = [...spots].sort((a, b) => Math.abs(a.t - at) - Math.abs(b.t - at))[0];
+    const like = near ? list[near.i] : { delay: 0, kind: 'dart', pattern: 'line', count: 5 } as Wave;
+    const w: Wave = { delay, kind: like.kind, pattern: like.pattern };
+    if (like.count !== undefined) w.count = like.count;
+    if (!['line', 'pair'].includes(w.pattern) || like.x !== undefined) w.x = Math.round(Math.max(0, Math.min(1, x)) * 20) / 20;
+    const before = levelText(d.def);
+    list.splice(i, 0, w);
+    shiftWaveEvents(d.def, seg, i, 1);
+    if (list[i + 1]) list[i + 1].delay = Math.max(0, list[i + 1].delay - delay);
+    commit(before);
+    sel = null;
+    openPanel(seg, i);
+    say('WAVE ADDED', 'ok');
+  }
+
   function homeView(top: HTMLElement, body: HTMLElement) {
-    backBtn(top, 'CLOSE', hide);
+    backBtn(top, 'CLOSE', () => hide());
     top.append(el('h1', '', 'LEVEL EDITOR'));
     root.append(body);
     const box = el('div', 'home');
@@ -364,7 +544,7 @@ export function installEditor(game: Phaser.Game) {
       b.addEventListener('click', fn);
       box.append(b);
     };
-    if (cur) add(`CONTINUE: ${cur.def.name}`, () => { screen = 'edit'; render(); }, '#58d854');
+    if (cur) add(`CONTINUE: ${cur.def.name}`, () => { screen = 'view'; render(); }, '#58d854');
     add('NEW LEVEL', () => {
       let n = 1;
       while (drafts.has(`new:${n}`)) n++;
@@ -447,12 +627,13 @@ export function installEditor(game: Phaser.Game) {
 
   function editView(top: HTMLElement, body: HTMLElement) {
     const d = cur!;
-    backBtn(top, 'LEVELS', () => {
-      if (pending.size && !confirm('SOME TYPED CHANGES AREN\'T APPLIED. LEAVE ANYWAY?')) return;
-      if (panelDirty()) cur!.def = read(panelStart) as unknown as LevelDef;
-      pending.clear();
+    backBtn(top, 'BACK', () => {
+      // Typed changes come along when they read cleanly; otherwise stay to fix them.
+      if (panelDirty()) applyPanel();
+      if (!applyPending()) return;
       sel = null;
-      screen = 'list';
+      screen = 'view';
+      say('');
       render();
     });
     top.append(el('h1', '', d.def.name));
@@ -473,7 +654,7 @@ export function installEditor(game: Phaser.Game) {
     if (!locked(d)) {
       const plus = el('button', '', '+');
       plus.title = 'Add a segment';
-      plus.addEventListener('click', addSegment);
+      plus.addEventListener('click', () => insertSegment(d.def.segments.length));
       segs.append(plus);
     }
     root.append(segs);
@@ -482,7 +663,7 @@ export function installEditor(game: Phaser.Game) {
     // Row two: the parts of a segment.
     if (tab.seg >= 0) {
       const parts = el('div', 'tabs');
-      for (const [p, label] of [['waves', 'WAVES'], ['hazards', 'HAZARDS'], ['segment', 'SEGMENT']] as [Part, string][]) {
+      for (const [p, label] of [['waves', 'WAVES'], ['hazards', 'HAZARDS'], ['events', 'EVENTS'], ['segment', 'SEGMENT']] as [Part, string][]) {
         const dirty = pending.has(`${tab.seg}:${p}`);
         const b = el('button', `${tab.part === p ? 'on' : ''} ${dirty ? 'dirty' : ''}`, label);
         b.addEventListener('click', () => switchTab({ seg: tab.seg, part: p }));
@@ -522,6 +703,7 @@ export function installEditor(game: Phaser.Game) {
     root.append(foot);
 
     if (sel !== null && !usesText()) wavePanel();
+    else sel = null;
   }
 
   const switchTab = (t: Tab) => {
@@ -546,25 +728,66 @@ export function installEditor(game: Phaser.Game) {
     render();
   };
 
-  const addSegment = () => {
-    if (!cur) return;
+  // A new segment with one wave, before segment `at` (or at the end).
+  const insertSegment = (at: number) => {
+    if (!cur || locked(cur)) return;
+    if (panelDirty()) applyPanel();
     if (!applyPending()) return;
     const before = levelText(cur.def);
     const def = cur.def;
-    def.segments.push([{ delay: 2500, kind: 'dart', pattern: 'line', count: 5 }]);
-    const n = def.segments.length;
-    if (def.segmentHazards) def.segmentHazards.push([]);
-    for (const k of ['segmentThemes', 'segmentBoss', 'segmentRadio', 'segmentNames'] as const) {
+    const n = def.segments.length + 1;
+    def.segments.splice(at, 0, [{ delay: 2500, kind: 'dart', pattern: 'line', count: 5 }]);
+    def.segmentHazards?.splice(at, 0, []);
+    for (const k of SEG_LISTS) {
+      if (k === 'segmentHazards') continue;
       const list = def[k] as unknown[] | undefined;
-      if (list) list.length = n;
+      if (!list) continue;
+      list.length = Math.max(list.length, n - 1);
+      list.splice(at, 0, undefined);
     }
-    if (def.segmentThemes) def.segmentThemes[n - 1] = def.theme;
+    if (def.segmentThemes) def.segmentThemes[at] = def.theme;
+    if (def.riftAfter !== undefined && def.riftAfter >= at) def.riftAfter++;
+    if (def.riftExitAfter !== undefined && def.riftExitAfter >= at) def.riftExitAfter++;
     commit(before);
-    tab = { seg: n - 1, part: 'waves' };
-    textView = false;
     sel = null;
+    tab = { seg: at, part: 'waves' };
+    if (screen === 'view') {
+      // Its start on the play line.
+      render();
+      const v = view();
+      if (v) v.setT(v.tl.segs[at]?.start ?? 0);
+    } else {
+      textView = false;
+      render();
+    }
+    say(`SEGMENT ${at + 1} ADDED`, 'ok');
+  };
+
+  // The code editor, on a tab.
+  const openCode = (t: Tab) => {
+    if (panelDirty()) applyPanel();
+    sel = null;
+    tab = t;
+    screen = 'edit';
+    say('');
     render();
-    say('SEGMENT ADDED', 'ok');
+  };
+
+  // Puts the whole draft back to the game's version of the level (UNDO brings it back).
+  const resetLevel = () => {
+    if (!cur) return;
+    const game = gameDef(cur.base);
+    if (!game) return;
+    if (!confirm(`PUT ${cur.def.name} BACK TO HOW IT IS IN THE GAME? UNDO CAN BRING YOUR CHANGES BACK.`)) return;
+    const before = levelText(cur.def);
+    cur.def = deepCopy(game);
+    cur.playAs = playAsFor(cur.base);
+    pending.clear();
+    sel = null;
+    if (tab.seg >= cur.def.segments.length) tab = { seg: cur.def.segments.length - 1, part: tab.part };
+    commit(before);
+    render();
+    say('LEVEL RESET TO THE GAME\'S', 'ok');
   };
 
   const removeSegment = () => {
@@ -574,8 +797,13 @@ export function installEditor(game: Phaser.Game) {
     const def = cur.def;
     const s = tab.seg;
     def.segments.splice(s, 1);
-    for (const k of ['segmentHazards', 'segmentThemes', 'segmentBoss', 'segmentRadio', 'segmentNames'] as const) {
+    for (const k of SEG_LISTS) {
       (def[k] as unknown[] | undefined)?.splice(s, 1);
+    }
+    for (const k of ['riftAfter', 'riftExitAfter'] as const) {
+      const r = def[k];
+      if (r === s) delete def[k];
+      else if (r !== undefined && r > s) def[k] = r - 1;
     }
     pending.clear();
     commit(before);
@@ -624,6 +852,11 @@ export function installEditor(game: Phaser.Game) {
       body.append(rm);
     }
     if (locked(d) && tab.seg < 0) body.append(el('div', 'note', 'THIS LEVEL\'S SET PIECE IS BUILT PART BY PART, SO ITS SEGMENTS CAN\'T BE ADDED OR REMOVED.'));
+    if (tab.seg < 0 && d.base.kind !== 'new') {
+      const rs = el('button', 'danger', 'RESET LEVEL TO THE GAME\'S');
+      rs.addEventListener('click', resetLevel);
+      body.append(rs);
+    }
   }
 
   function waveList(body: HTMLElement) {
@@ -639,7 +872,7 @@ export function installEditor(game: Phaser.Game) {
       const shape = w.pattern === 'single' || w.pattern === 'pair' ? w.pattern.toUpperCase() : `${w.pattern.toUpperCase()} ${w.count ?? 1}`;
       const at = w.x !== undefined && !['line', 'pair'].includes(w.pattern) ? ` @${w.x}` : '';
       b.append(el('span', 'k', `${w.kind.toUpperCase()} ${shape}${at}`), el('span', 'd', `+${(w.delay / 1000).toFixed(1)}S`));
-      b.addEventListener('click', () => openPanel(i));
+      b.addEventListener('click', () => openPanel(tab.seg, i));
       body.append(b);
     });
     if (!waves.length) body.append(el('div', 'note', 'NO WAVES YET.'));
@@ -652,7 +885,7 @@ export function installEditor(game: Phaser.Game) {
       d.def.segments[tab.seg].push(last ? { ...last, delay: 2500, waitClear: undefined } : { delay: 2500, kind: 'dart', pattern: 'line', count: 5 });
       commit(before);
       sel = null;
-      openPanel(d.def.segments[tab.seg].length - 1);
+      openPanel(tab.seg, d.def.segments[tab.seg].length - 1);
       say('WAVE ADDED', 'ok');
     });
     body.append(add);
@@ -672,21 +905,23 @@ export function installEditor(game: Phaser.Game) {
 
   function wavePanel() {
     const d = cur!;
-    const waves = d.def.segments[tab.seg];
+    const seg = selSeg;
+    const waves = d.def.segments[seg];
     const i = sel!;
-    const w = waves[i];
+    const w = waves?.[i];
     if (!w) { sel = null; return; }
     const panel = el('div', 'panel');
     const inner = el('div', 'in');
     const head = el('div', 'head');
     const time = waves.slice(0, i + 1).reduce((n, x) => n + x.delay, 0);
-    head.append(el('h2', '', `WAVE ${i + 1} OF ${waves.length} · ${clock(time)}`));
+    head.append(el('h2', '', `${screen === 'view' ? `SEG ${seg + 1} · ` : ''}WAVE ${i + 1} OF ${waves.length} · ${clock(time)}`));
     const del = el('button', '', 'DELETE');
     del.style.color = '#d82800';
     del.addEventListener('click', () => {
       if (!confirm(`DELETE WAVE ${i + 1}?`)) return;
       const before = panelStart;
       waves.splice(i, 1);
+      shiftWaveEvents(d.def, seg, i, -1);
       commit(before);
       sel = null;
       render();
@@ -709,10 +944,11 @@ export function installEditor(game: Phaser.Game) {
       ctx.fillRect(0, PV_H - 14, W, 1);
       const key = ENEMY_STATS[w.kind]?.texture ?? w.kind;
       const f = game.textures.exists(key) ? game.textures.get(key).get() : null;
-      for (const p of formation(w, PV_H)) {
-        if (!f) { ctx.fillStyle = '#f8b800'; ctx.fillRect(p.x - 2, p.y - 2, 4, 4); continue; }
+      for (const p of formation(w)) {
+        const y = PV_H - 14 + p.y;
+        if (!f) { ctx.fillStyle = '#f8b800'; ctx.fillRect(p.x - 2, y - 2, 4, 4); continue; }
         ctx.drawImage(f.source.image as CanvasImageSource, f.cutX, f.cutY, f.cutWidth, f.cutHeight,
-          Math.round(p.x - f.cutWidth / 2), Math.round(p.y - f.cutHeight / 2), f.cutWidth, f.cutHeight);
+          Math.round(p.x - f.cutWidth / 2), Math.round(y - f.cutHeight / 2), f.cutWidth, f.cutHeight);
       }
     };
     inner.append(pv);
@@ -725,6 +961,7 @@ export function installEditor(game: Phaser.Game) {
       say(panelDirty() ? 'NOT APPLIED YET' : '');
     };
     const refreshRow = () => {
+      if (screen === 'view') { syncGame(); return; }
       const body = root.querySelector('.body');
       if (!body) return;
       // Redraw the list under the panel, keeping its scroll.
@@ -844,6 +1081,16 @@ export function installEditor(game: Phaser.Game) {
       d.def = read(prev) as unknown as LevelDef;
       render();
     });
+    pbtn('', 'RESET', () => {
+      const orig = gameWave(d, seg, i);
+      if (!orig) { say(d.base.kind === 'new' ? 'NEW LEVEL: NOTHING TO RESET TO' : 'A NEW WAVE: NOTHING TO RESET TO', 'err'); return; }
+      if ((['delay', 'kind', 'pattern', 'count', 'x', 'waitClear'] as const).every((k) => orig[k] === w[k])) { say('ALREADY THE SAME AS THE GAME', 'ok'); return; }
+      before();
+      for (const k of ['count', 'x', 'waitClear'] as const) delete w[k];
+      Object.assign(w, deepCopy(orig));
+      sync();
+      say('BACK TO THE GAME\'S WAVE. APPLY TO KEEP IT', 'ok');
+    });
     pbtn('', 'COPY', () => {
       clip = deepCopy(w);
       persist();
@@ -860,10 +1107,11 @@ export function installEditor(game: Phaser.Game) {
     });
     pbtn('', 'CODE', () => {
       if (panelDirty()) applyPanel();
-      const line = itemLines(tabText(d, tab))[i] ?? 1;
+      tab = { seg, part: 'waves' };
+      caretLine = itemLines(tabText(d, tab))[i] ?? 1;
       textView = true;
       sel = null;
-      caretLine = line;
+      screen = 'edit';
       render();
     });
     pbtn('apply', 'APPLY', applyPanel);

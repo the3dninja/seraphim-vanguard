@@ -57,6 +57,41 @@ export interface Wave {
   waitClear?: boolean; // wait for the screen to be empty before counting the delay
 }
 
+// Something that happens during a segment. `at` is ms after the segment
+// starts; with `wave`, ms after that wave (counted from 1) comes in instead.
+// Each event does one thing: a radio call, an alarm (red flashes and a
+// warning), arena mode (enemies hold their ground near the top instead of
+// flying through) on or off, or the level's hazards pausing (false) and
+// starting again (true).
+export interface LevelEvent {
+  at?: number;
+  wave?: number;
+  radio?: string;
+  alarm?: string;
+  arena?: boolean;
+  hazards?: boolean;
+}
+
+// How a segment ends, after its last wave (and its mini boss, if it has one):
+// the vendor stop, straight on into the next one, the rift opening (level 11),
+// out of the rift (level 11), or, after the last segment, the boss, the
+// treasure hauler or a plain level clear. Maw Gate's last gate ends its own.
+export const SEGMENT_ENDS = ['vendor', 'on', 'rift', 'riftExit', 'boss', 'treasure', 'clear', 'gate'] as const;
+export type SegmentEnd = typeof SEGMENT_ENDS[number];
+
+// How a segment of a level ends: its own segmentEnds entry, or else what
+// the level's other settings make it.
+export function segmentEnd(def: LevelDef, seg: number): SegmentEnd {
+  const set = def.segmentEnds?.[seg];
+  if (set) return set;
+  const last = seg >= def.segments.length - 1;
+  if (def.gate && last) return 'gate';
+  if (def.riftAfter === seg) return 'rift';
+  if (def.riftExitAfter === seg) return 'riftExit';
+  if (!last) return def.vendorless ? 'on' : 'vendor';
+  return def.boss ? 'boss' : def.treasure ? 'treasure' : 'clear';
+}
+
 export interface LevelDef {
   // A name that stays the same wherever the level sits in the game (the
   // Level Editor keeps its drafts by it).
@@ -87,7 +122,8 @@ export interface LevelDef {
   vendorless?: boolean;
   segmentThemes?: Theme[]; // per segment, in place of `theme`
   segmentBoss?: (BossKind | undefined)[]; // a mini boss at the end of a segment
-  segmentRadio?: (string | undefined)[]; // a radio call as each segment starts
+  segmentEvents?: (LevelEvent[] | undefined)[]; // radio calls and the like, by segment
+  segmentEnds?: (SegmentEnd | undefined)[]; // how each segment ends, where it isn't the usual (see segmentEnd)
   segmentNames?: string[]; // what each segment is called in the Level Editor
   // Heart of the Hollow's way through the hive (hive.ts): walls, gates, the
   // storm and the backdrops, part by part, one part per segment.
@@ -518,6 +554,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'AN IMPERIAL COLONY GONE WRONG. SPORE CLOUDS HIDE WHAT MOVES INSIDE.',
     node: 'node_blight',
     theme: 'blight',
+    segmentEvents: [[{ at: 2300, radio: 'REYES: THE COLONY WENT\nDARK. FIND OUT WHY.' }]],
     hazards: [{ kind: 'spores', every: [6000, 9000] }],
     segments: [
       [
@@ -575,6 +612,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'THE VESPARAN CAPITAL. DOORS SLAM SHUT; THE DEFENSE GRID NEVER SLEEPS.',
     node: 'node_throne',
     theme: 'throne',
+    segmentEvents: [[{ at: 2300, radio: 'REYES: THE EMPEROR IS\nINSIDE. BRING HIM BACK.' }]],
     hazards: [{ kind: 'doors', every: [9000, 12000] }, { kind: 'turret', every: [7000, 10000] }],
     boss: 'voss',
     segments: [
@@ -636,6 +674,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'A TEAR INTO ALIEN SPACE. GRAVITY BENDS SHOTS AND SHIPS. ALLIES JOIN YOU.',
     node: 'node_rift',
     theme: 'deep',
+    segmentEvents: [[{ at: 2300, radio: 'ROOK: RAIDERS FLY WITH\nYOU NOW, PILOT.' }]],
     segmentThemes: ['deep', 'rift', 'beyond'],
     segmentNames: ['NORMAL SPACE', 'THE RIFT', 'HOLLOW SPACE'],
     riftAfter: 0,
@@ -753,6 +792,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'A LIVING CORAL MEGASTRUCTURE WITH WALLS THAT GROW AND CLOSE IN.',
     node: 'node_reef',
     theme: 'reef',
+    segmentEvents: [[{ at: 2300, radio: 'VESPAR: THE REEF FEEDS\nTHE HIVE. CUT THROUGH.' }]],
     allies: 2,
     hazards: [{ kind: 'wall', every: [5500, 8500] }],
     segments: [
@@ -831,6 +871,7 @@ export const LEVELS: LevelDef[] = [
     desc: 'A DARK NEBULA LIT BY GLOWING FLORA. YOU SEE ONLY WHAT YOUR LIGHTS REACH.',
     node: 'node_bloom',
     theme: 'bloom',
+    segmentEvents: [[{ at: 2300, radio: 'ROOK: TOO DARK TO SEE.\nSTAY NEAR THE LIGHT.' }]],
     allies: 2,
     dark: true,
     boss: 'queen',
@@ -912,7 +953,10 @@ export const LEVELS: LevelDef[] = [
     allies: 3,
     gate: true,
     segmentNames: ['APPROACH', 'TO THE LAST GATE'],
-    segmentRadio: [undefined, 'VESPAR: THE LAST GATE\nOPENS ON THEIR WORLD.\nGO!'],
+    segmentEvents: [
+      [{ at: 2300, radio: 'VESPAR: THE FLEET WILL\nHOLD THE GATE. GO!' }],
+      [{ radio: 'VESPAR: THE LAST GATE\nOPENS ON THEIR WORLD.\nGO!' }],
+    ],
     // A third of the way in and just before the vendor; then after the vendor,
     // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
     // two thirds of the way. The last gate's three waves follow the last wave.
@@ -1005,15 +1049,15 @@ export const LEVELS: LevelDef[] = [
     hive: true,
     segmentNames: ['RING', 'TUNNEL', 'SPORE CAVERN', 'FORKS', 'STORM', 'VENTS', 'NEST', 'TO THE MIND'],
     segmentBoss: [undefined, undefined, 'sporeheart', undefined, undefined, undefined, 'wyrm'],
-    segmentRadio: [
-      undefined,
-      'REYES: IT\'S A PASSAGE.\nSTAY IN THE MIDDLE.',
-      'REYES: SPORES. I CAN\'T\nSEE A THING IN HERE.',
-      'ROOK: IT SPLITS UP\nAHEAD. PICK A WAY.',
-      'ROOK: THIS WIND! IT\'S\nBLOWING US OFF COURSE!',
-      'REYES: WE HAVE TO FIND\nANOTHER WAY BACK IN!',
-      'ROOK: EGGS IN THE\nGROWTH. BURN THEM.',
-      'REYES: THE MIND IS\nRIGHT AHEAD. GO!',
+    segmentEvents: [
+      [{ at: 2300, radio: 'ROOK: WE\'LL HOLD THE\nGATE. GO END THIS.' }],
+      [{ radio: 'REYES: IT\'S A PASSAGE.\nSTAY IN THE MIDDLE.' }],
+      [{ radio: 'REYES: SPORES. I CAN\'T\nSEE A THING IN HERE.' }],
+      [{ radio: 'ROOK: IT SPLITS UP\nAHEAD. PICK A WAY.' }],
+      [{ radio: 'ROOK: THIS WIND! IT\'S\nBLOWING US OFF COURSE!' }],
+      [{ radio: 'REYES: WE HAVE TO FIND\nANOTHER WAY BACK IN!' }],
+      [{ radio: 'ROOK: EGGS IN THE\nGROWTH. BURN THEM.' }],
+      [{ radio: 'REYES: THE MIND IS\nRIGHT AHEAD. GO!' }],
     ],
     // The storm (winds, debris, Lancers), the vents and the spore-thick stretches
     // are run by the hive itself.
