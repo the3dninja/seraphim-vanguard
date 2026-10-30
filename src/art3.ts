@@ -125,7 +125,7 @@ export const SPRITES3: Record<string, string[]> = {
   ],
   eye: ['..FFF..', '.FWWWF.', 'FWWKWWF', 'FWKRKWF', 'FWWKWWF', '.FWWWF.', '..FFF..'],
 
-  // Wingmen in act 3: Rook the Raider, and freed Vesparan pilots.
+  // Wingmen in act 3: Rook the Raider, a freed Vesparan pilot, and (ally2) Kade at Maw Gate.
   vex: [
     '.....W.....',
     '....RYR....',

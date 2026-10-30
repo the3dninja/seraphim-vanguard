@@ -16,7 +16,8 @@ export function loadPortraits(scene: Phaser.Scene) {
 
 // Who can speak on the radio, by the name before the colon: their name color,
 // the portrait's frame color, and their portrait. Kade and Vespar show their
-// Hollow-touched portraits (and Vespar his Hollow color) until Vespar is freed (the level 10 boss).
+// Hollow-touched portraits (and Vespar his Hollow color) until Vespar is freed
+// (the level 10 boss).
 export const SPEAKERS: Record<string, { color: string; frame: number; portrait: string; evil?: string; evilColor?: string }> = {
   REYES: { color: '#f8b800', frame: 0xac7c00, portrait: 'pt_reyes' },
   ROOK: { color: '#f83800', frame: 0xd82800, portrait: 'pt_rook' },

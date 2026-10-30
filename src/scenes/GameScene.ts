@@ -90,7 +90,7 @@ interface Flare { rock: Phaser.Physics.Arcade.Image; t: number; sweepY: number }
 interface Fence { y: number; t: number; posts: Phaser.GameObjects.Image[] } // t: ms into its on/off cycle
 interface Zap { x1: number; y1: number; x2: number; y2: number; t: number; color: number } // a lightning line, ms left
 // Wingmen. Rook fires laser bursts, the Vesparan ion bolt chains between
-// enemies, and the point ship lobs homing plasma that splashes.
+// enemies, and Kade, flying point, lobs homing plasma that splashes.
 type AllyKind = 'vex' | 'ion' | 'plasma';
 interface Ally { img: Phaser.GameObjects.Image; ox: number; oy: number; fireIn: number; kind: AllyKind; burst: number }
 interface Glitter { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number; color: number } // a credit sparkle, ms since it began
@@ -2822,9 +2822,10 @@ export class GameScene extends Phaser.Scene {
   // --- Allies (levels 11 to 14) ------------------------------------------------
 
   // Wingmen fly in formation off the ship's wings and fire with it: Rook the
-  // Raider fires laser bursts, freed Vesparans fire chaining ion bolts and
-  // homing plasma. A third flies point, ahead of the ship, so it stays clear
-  // of the item bar. They stay with the ship through vendor stops and level ends.
+  // Raider fires laser bursts and a freed Vesparan fires chaining ion bolts.
+  // At Maw Gate Admiral Kade, who escaped the Dreadnought, joins and flies
+  // point, ahead of the ship so he stays clear of the item bar, firing homing
+  // plasma. They stay with the ship through vendor stops and level ends.
   private setupAllies() {
     const n = this.level.allies ?? 0;
     const slots: [string, number, number, AllyKind][] = [['vex', -24, 10, 'vex'], ['ally', 24, 10, 'ion'], ['ally2', 0, -26, 'plasma']];

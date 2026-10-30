@@ -6,6 +6,8 @@ import { toast } from './ui';
 import { BOSS_STATS } from './data/bosses';
 
 const S = BOSS_STATS.dreadnought; // health and damage taken, live from the Tuner
+const POD_FLIGHT = 1800; // ms for Kade's escape pod to leave the screen
+const POD_CALL_GAP = 3000; // ms from Kade's call to Reyes's
 
 // A piece of the Dreadnought that can be shot: four turrets, then the bridge.
 interface Part {
@@ -233,11 +235,36 @@ export class Dreadnought {
           g.sparks.explode(50, this.x, this.y);
           this.hull.destroy();
           this.bridge.img.destroy();
-          // Kade's last transmission, strangely distorted.
+          this.escapePod();
+          // Kade's transmission from the pod, strangely distorted; then Reyes
+          // sees him go (in time to read before the level ends).
           g.radio('KADE: THE VOICE... IT WILL NOT STOP...', true);
+          g.time.delayedCall(POD_CALL_GAP, () => g.radio('REYES: AN ESCAPE POD! KADE GOT AWAY.'));
         }
       },
     });
     this.onDefeated();
+  }
+
+  // Kade's escape pod pops out of the bridge and arcs up off the top of the
+  // screen, curving out to one side, with a trail of sparks.
+  private escapePod() {
+    const g = this.g;
+    const x0 = this.x, y0 = this.y + this.bridge.dy;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const pod = g.add.image(x0, y0, 'kpod').setDepth(1001); // over the comms box
+    let last = { x: x0, y: y0 };
+    let puff = 0;
+    g.tweens.addCounter({
+      from: 0, to: 1, duration: POD_FLIGHT, ease: 'Quad.easeIn',
+      onUpdate: (tw) => {
+        const t = tw.getValue() ?? 0;
+        const x = x0 + side * 70 * t * t, y = y0 - (y0 + 20) * t;
+        pod.setPosition(Math.round(x), Math.round(y)).setRotation(Math.atan2(x - last.x, last.y - y));
+        if (++puff % 3 === 0) g.sparks.explode(1, x, y + 4);
+        last = { x, y };
+      },
+      onComplete: () => pod.destroy(),
+    });
   }
 }

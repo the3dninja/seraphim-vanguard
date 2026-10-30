@@ -460,6 +460,18 @@ const SPRITES: Record<string, string[]> = {
     '.......PMMP.......',
     '........PP........',
   ],
+  // Kade's escape pod, nose up, out of the bridge as the Dreadnought blows.
+  kpod: [
+    '...P...',
+    '..PLP..',
+    '.PLWLP.',
+    'PLCACLP',
+    'PLAACLP',
+    'PLLLLLP',
+    '.PDGDP.',
+    '..Y.Y..',
+    '..R.R..',
+  ],
 
   // Level 6 to 8 enemies.
   // Mine Layer (Drone Swarm): a hauler with a mine rack underneath.
