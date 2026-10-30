@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { DREAD_H, DREAD_W, dreadBottom } from './art';
-import { COLOR, W } from './config';
+import { W } from './config';
 import type { GameScene } from './scenes/GameScene';
-import { text, toast } from './ui';
+import { toast } from './ui';
 import { BOSS_STATS } from './data/bosses';
 
 const S = BOSS_STATS.dreadnought; // health and damage taken, live from the Tuner
@@ -234,10 +234,7 @@ export class Dreadnought {
           this.hull.destroy();
           this.bridge.img.destroy();
           // Kade's last transmission, strangely distorted.
-          const msg = text(g, W / 2, 112, 'KADE: THE VOICE...\nIT WILL NOT STOP...', COLOR.red).setOrigin(0.5).setDepth(1000);
-          msg.setAlign('center');
-          g.tweens.add({ targets: msg, x: { from: W / 2 - 1, to: W / 2 + 1 }, duration: 60, yoyo: true, repeat: 30 });
-          g.tweens.add({ targets: msg, alpha: 0, delay: 3200, duration: 400, onComplete: () => msg.destroy() });
+          g.radio('KADE: THE VOICE... IT WILL NOT STOP...', true);
         }
       },
     });

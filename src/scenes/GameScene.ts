@@ -30,6 +30,7 @@ import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
 import { cheats } from '../cheats';
 import type { EditPlay } from '../editor';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
+import { SPEAKERS, VESPAR_FREED_AFTER, wrap } from '../portraits';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
 type Phase = 'action' | 'arrival' | 'vendor' | 'ready' | 'dead' | 'clear';
@@ -156,6 +157,7 @@ const FLARE_WARN = 3000; // ms from the shelter rock appearing to the flare swee
 const FENCE_CYCLE = [1500, 450, 1100]; // ms off, warning flicker, on
 const ITEM_KEYS = ['ONE', 'TWO', 'THREE'];
 const TREASURE_WAIT = 3500; // ms of calm before the cargo hauler drifts in
+const RADIO_COLS = 18; // letters per line beside the radio's portrait
 const LINGER = 3000; // ms after a level is cleared to pick up credits by hand
 const HOME_AFTER_BOSS = 5000; // ms after a boss falls that its credits curve toward the ship
 
@@ -243,6 +245,7 @@ export class GameScene extends Phaser.Scene {
   private tearGfx: Phaser.GameObjects.Graphics | null = null;
   private nebula: Phaser.GameObjects.Image | null = null; // Hollow space's nebula, behind the planet
   private radioUntil = 0; // when the radio call on screen is gone
+  private radioParts: (Phaser.GameObjects.Shape | Phaser.GameObjects.Image | Phaser.GameObjects.Text)[] = [];
   private corruptSeen = false; // the allies have remarked on the Corrupted
   private warps!: Warps; // Maw Gate: enemies warping in
   private warpsDone = new Set<number>(); // which one-off warp-ins have happened
@@ -372,6 +375,7 @@ export class GameScene extends Phaser.Scene {
     this.tearGfx = null;
     this.nebula = null;
     this.radioUntil = 0;
+    this.radioParts = [];
     this.corruptSeen = false;
     this.warpsDone = new Set();
     this.warpIn = null;
@@ -608,11 +612,36 @@ export class GameScene extends Phaser.Scene {
     return this.level.segmentThemes?.[seg] ?? this.level.theme;
   }
 
-  // A line from an ally or Base, at the top of the screen.
-  radio(msg: string) {
+  // A line from an ally or Base, at the top of the screen: a comms box with
+  // the speaker's portrait and name, then the line wrapped beside it. `glitch`
+  // jitters it, for a transmission breaking up.
+  radio(msg: string, glitch = false) {
     this.radioUntil = this.time.now + 4500;
-    const t = text(this, W / 2, 34, msg, COLOR.cyan).setOrigin(0.5, 0).setAlign('center').setDepth(1000);
-    this.tweens.add({ targets: t, alpha: 0, delay: 4100, duration: 400, onComplete: () => t.destroy() });
+    this.tweens.killTweensOf(this.radioParts);
+    this.radioParts.forEach((o) => o.destroy());
+    const m = /^([A-Z]+): ([\s\S]*)$/.exec(msg);
+    const who = m ? SPEAKERS[m[1]] : undefined;
+    if (!m || !who) {
+      this.radioParts = [text(this, W / 2, 34, msg, COLOR.cyan).setOrigin(0.5, 0).setAlign('center').setDepth(1000)];
+    } else {
+      const rows = wrap(m[2], RADIO_COLS);
+      const y = 24;
+      const evil = this.state.level <= VESPAR_FREED_AFTER;
+      this.radioParts = [
+        this.add.rectangle(4, y, W - 8, 16 + rows.length * 11, 0x000000, 0.85).setOrigin(0).setStrokeStyle(1, 0x7c7c7c),
+        this.add.rectangle(8, y + 4, 18, 18, 0x000000).setOrigin(0).setStrokeStyle(1, who.frame),
+        this.add.image(9, y + 5, evil && who.evil ? who.evil : who.portrait).setOrigin(0),
+        text(this, 30, y + 4, m[1], evil && who.evilColor ? who.evilColor : who.color),
+        text(this, 30, y + 15, rows.join('\n'), COLOR.white),
+      ];
+      this.radioParts.forEach((o) => o.setDepth(1000));
+    }
+    const parts = this.radioParts;
+    if (glitch) this.tweens.add({ targets: parts, x: '+=1', duration: 60, yoyo: true, repeat: 30 });
+    this.tweens.add({
+      targets: parts, alpha: 0, delay: 4100, duration: 400,
+      onComplete: () => { parts.forEach((o) => o.destroy()); if (this.radioParts === parts) this.radioParts = []; },
+    });
   }
 
   // --- Input -------------------------------------------------------------

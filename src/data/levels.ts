@@ -912,7 +912,7 @@ export const LEVELS: LevelDef[] = [
     allies: 3,
     gate: true,
     segmentNames: ['APPROACH', 'TO THE LAST GATE'],
-    segmentRadio: [undefined, 'VESPAR: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
+    segmentRadio: [undefined, 'VESPAR: THE LAST GATE\nOPENS ON THEIR WORLD.\nGO!'],
     // A third of the way in and just before the vendor; then after the vendor,
     // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
     // two thirds of the way. The last gate's three waves follow the last wave.
