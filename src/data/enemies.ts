@@ -24,7 +24,7 @@ export interface FoeDef {
 
 // Health can be any number, decimals included, like the damage that wears it down.
 // Weaknesses mostly follow the factions: Raiders are weak to Laser and shrug
-// off Ion, the Vossari are weak to Ion, the Drone Swarm to Explosive, and the
+// off Ion, the Vesparans are weak to Ion, the Drone Swarm to Explosive, and the
 // Hollow to Plasma and Explosive. A
 // Mimic's damage table is set when it spawns, from its `mimic` numbers: one
 // for whatever the ship's first weapon deals, one for the rest.

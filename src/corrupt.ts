@@ -3,7 +3,7 @@ import { W, H } from './config';
 import type { EnemyKind } from './data/levels';
 import type { EnemyData, GameScene } from './scenes/GameScene';
 
-// The Corrupted (level 11 on): Raider, Drone Swarm and Vossari ships the
+// The Corrupted (level 11 on): Raider, Drone Swarm and Vesparan ships the
 // Hollow has overgrown. Each is its ship under parasitic growths, with four
 // times the health, more shots per attack and a new way of fighting.
 export const CORRUPT = {
