@@ -371,7 +371,7 @@ export class Hive {
           (e.getData('e') as EnemyData).hold = 5500 + (-y / SPEED) * 1000 + Phaser.Math.Between(0, 5000);
         }
       }
-      g.radio('VEX: IT\'S A NEST!\nBURN THEM ALL!');
+      g.radio('ROOK: IT\'S A NEST!\nBURN THEM ALL!');
     });
     this.doneU = u0 + len - 100;
   }
@@ -618,7 +618,7 @@ export class Hive {
       if (!v.passed && y > H + 8) {
         v.passed = true;
         this.passed++;
-        if (this.passed === 2) g.radio('VEX: THE VENTS! SLIP\nIN WHEN ONE OPENS!');
+        if (this.passed === 2) g.radio('ROOK: THE VENTS! SLIP\nIN WHEN ONE OPENS!');
         if (this.passed === 5) g.radio('REYES: IT\'S TEARING US\nAPART OUT HERE!');
       }
     }
@@ -632,7 +632,7 @@ export class Hive {
       // wrong branch has room to drop back and cross over.
       if (!fg.closing && this.s - fg.tip >= 190) {
         fg.closing = true;
-        if (!this.shutSaid) { this.shutSaid = true; g.radio('VEX: THEY\'RE SHUTTING\nUS OUT OF THE HIVE!'); }
+        if (!this.shutSaid) { this.shutSaid = true; g.radio('ROOK: THEY\'RE SHUTTING\nUS OUT OF THE HIVE!'); }
       }
       if (fg.closing) fg.k = Math.min(1, fg.k + ms / 700);
     }

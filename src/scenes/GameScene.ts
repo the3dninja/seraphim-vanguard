@@ -10,7 +10,7 @@ import { Act3Hazards } from '../act3';
 import { Dreadnought } from '../dreadnought';
 import { Rockjaw } from '../rockjaw';
 import { Watcher } from '../watcher';
-import { Voss } from '../voss';
+import { Vespar } from '../voss';
 import { BroodQueen } from '../broodqueen';
 import { HollowMind } from '../hollowmind';
 import { Sporeheart } from '../sporeheart';
@@ -88,7 +88,7 @@ interface Strike { x: number; t: number } // lightning: ms since the column star
 interface Flare { rock: Phaser.Physics.Arcade.Image; t: number; sweepY: number } // ms since the rock appeared
 interface Fence { y: number; t: number; posts: Phaser.GameObjects.Image[] } // t: ms into its on/off cycle
 interface Zap { x1: number; y1: number; x2: number; y2: number; t: number; color: number } // a lightning line, ms left
-// Wingmen. Vex fires laser bursts, the Vossari ion bolt chains between
+// Wingmen. Rook fires laser bursts, the Vesparan ion bolt chains between
 // enemies, and the point ship lobs homing plasma that splashes.
 type AllyKind = 'vex' | 'ion' | 'plasma';
 interface Ally { img: Phaser.GameObjects.Image; ox: number; oy: number; fireIn: number; kind: AllyKind; burst: number }
@@ -125,7 +125,7 @@ const ARENA_STAY = 1000; // ms a stay timer (d.hold) is kept at, at least
 const LANCER_WARN = 850; // ms the warning line shows before a Lancer fires
 const BOSS_NAMES = {
   rockjaw: 'ROCKJAW', dreadnought: 'DREADNOUGHT', watcher: 'THE WATCHER',
-  voss: 'EMPEROR VOSS', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
+  voss: 'EMPEROR VESPAR', queen: 'BROOD QUEEN', mind: 'THE HOLLOW MIND',
   sporeheart: 'THE SPOREHEART', wyrm: 'THE BROOD WYRMS',
   frostjaw: 'FROSTJAW', hollowwatcher: 'HOLLOW WATCHER', broodmother: 'BROOD MATRIARCH',
 };
@@ -144,11 +144,11 @@ const BOMB_FUSE = 0.6; // s before a cluster bomblet goes off
 const RADIO: Record<number, string> = {
   9: 'REYES: THE COLONY WENT\nDARK. FIND OUT WHY.',
   10: 'REYES: THE EMPEROR IS\nINSIDE. BRING HIM BACK.',
-  11: 'VEX: RAIDERS FLY WITH\nYOU NOW, PILOT.',
-  12: 'VOSS: THE REEF FEEDS\nTHE HIVE. CUT THROUGH.',
-  13: 'VEX: TOO DARK TO SEE.\nSTAY NEAR THE LIGHT.',
-  14: 'VOSS: THE FLEET WILL\nHOLD THE GATE. GO!',
-  15: 'VEX: WE\'LL HOLD THE\nGATE. GO END THIS.',
+  11: 'ROOK: RAIDERS FLY WITH\nYOU NOW, PILOT.',
+  12: 'VESPAR: THE REEF FEEDS\nTHE HIVE. CUT THROUGH.',
+  13: 'ROOK: TOO DARK TO SEE.\nSTAY NEAR THE LIGHT.',
+  14: 'VESPAR: THE FLEET WILL\nHOLD THE GATE. GO!',
+  15: 'ROOK: WE\'LL HOLD THE\nGATE. GO END THIS.',
 };
 const STRIKE_WARN = 900; // ms a lightning column flashes before the bolt
 const STRIKE_HIT = 260; // ms the bolt stays
@@ -1465,7 +1465,7 @@ export class GameScene extends Phaser.Scene {
   private corruptCall(kind: string) {
     if (this.test || this.corruptSeen || this.state.level !== 11 || this.side) return;
     this.corruptSeen = true;
-    const msg = RAIDER_CORRUPT.has(kind) ? 'VEX: THOSE WERE RAIDERS.\nSOMETHING ATE THEM.' : 'REYES: THAT SHIP IS\nCOVERED IN GROWTHS!';
+    const msg = RAIDER_CORRUPT.has(kind) ? 'ROOK: THOSE WERE\nRAIDERS. SOMETHING\nATE THEM.' : 'REYES: THAT SHIP IS\nCOVERED IN GROWTHS!';
     this.time.delayedCall(Math.max(600, this.radioUntil - this.time.now + 200), () => this.radio(msg));
   }
 
@@ -2792,8 +2792,8 @@ export class GameScene extends Phaser.Scene {
 
   // --- Allies (levels 11 to 14) ------------------------------------------------
 
-  // Wingmen fly in formation off the ship's wings and fire with it: Vex the
-  // Raider fires laser bursts, freed Vossari fire chaining ion bolts and
+  // Wingmen fly in formation off the ship's wings and fire with it: Rook the
+  // Raider fires laser bursts, freed Vesparans fire chaining ion bolts and
   // homing plasma. A third flies point, ahead of the ship, so it stays clear
   // of the item bar. They stay with the ship through vendor stops and level ends.
   private setupAllies() {
@@ -3900,7 +3900,7 @@ export class GameScene extends Phaser.Scene {
       rockjaw: () => new Rockjaw(this, done),
       dreadnought: () => new Dreadnought(this, done),
       watcher: () => new Watcher(this, done),
-      voss: () => new Voss(this, done),
+      voss: () => new Vespar(this, done),
       queen: () => new BroodQueen(this, done),
       mind: () => new HollowMind(this, done, { emerge: !!this.level.hive }),
       sporeheart: () => new Sporeheart(this, done),
@@ -4134,7 +4134,7 @@ export class GameScene extends Phaser.Scene {
         this.player.setAngle(0).setScale(1).setAlpha(1).setPosition(W / 2, H - 50);
         this.allies.forEach((a) => a.img.setPosition(this.player.x + a.ox, H + 20));
         this.cameras.main.fadeIn(600);
-        this.time.delayedCall(700, () => this.radio('VEX: WE FOLLOWED YOU\nIN. STAY CLOSE, PILOT.'));
+        this.time.delayedCall(700, () => this.radio('ROOK: WE FOLLOWED YOU\nIN. STAY CLOSE, PILOT.'));
         this.startNextSegment();
       });
     });
@@ -4151,7 +4151,7 @@ export class GameScene extends Phaser.Scene {
     this.gatherCoins(() => {
       this.clearForCutscene();
       this.tweens.add({ targets: this.player, x: W / 2, y: Math.round(H * 0.7), duration: 1400, ease: 'Sine.easeInOut' });
-      this.time.delayedCall(800, () => this.radio('VEX: ANOTHER TEAR!\nPUNCH THROUGH IT!'));
+      this.time.delayedCall(800, () => this.radio('ROOK: ANOTHER TEAR!\nPUNCH THROUGH IT!'));
       this.cameras.main.shake(4200, 0.003);
       this.tweens.add({
         targets: this, tearOpen: 1, delay: 1200, duration: 3600, ease: 'Quad.easeIn',
@@ -4331,9 +4331,9 @@ export class GameScene extends Phaser.Scene {
       ['THE RIFT CLOSES BEHIND', COLOR.white],
       ['ONE SMALL SHIP.', COLOR.white],
       ['', COLOR.white],
-      ['VEX: KNEW YOU\'D MAKE IT.', COLOR.cyan],
-      ['VOSS: THE EMPIRE OWES', COLOR.cyan],
-      ['YOU EVERYTHING, PILOT.', COLOR.cyan],
+      ['ROOK: KNEW YOU HAD IT.', COLOR.cyan],
+      ['VESPAR: WE OWE YOU', COLOR.cyan],
+      ['EVERYTHING, PILOT.', COLOR.cyan],
       ['', COLOR.white],
       ['THANKS FOR PLAYING', COLOR.gray],
     ] as const;

@@ -125,7 +125,7 @@ export const SPRITES3: Record<string, string[]> = {
   ],
   eye: ['..FFF..', '.FWWWF.', 'FWWKWWF', 'FWKRKWF', 'FWWKWWF', '.FWWWF.', '..FFF..'],
 
-  // Wingmen in act 3: Vex the Raider, and freed Vossari pilots.
+  // Wingmen in act 3: Rook the Raider, and freed Vesparan pilots.
   vex: [
     '.....W.....',
     '....RYR....',
@@ -264,8 +264,8 @@ function rng(seed: number) {
   };
 }
 
-// Emperor Voss's flagship, nose down, and the cracked wreck left when the parasite bursts out.
-function makeVossShip(scene: Phaser.Scene, key: string, hull: string[], wreck: boolean) {
+// Emperor Vespar's flagship, nose down, and the cracked wreck left when the parasite bursts out.
+function makeVesparShip(scene: Phaser.Scene, key: string, hull: string[], wreck: boolean) {
   const w = 56, h = 30;
   canvas(scene, key, w, h, (px) => {
     const rand = rng(91);
@@ -424,7 +424,7 @@ function makeFog(scene: Phaser.Scene) {
   });
 }
 
-// A dotted ring: the Voss shield and the Hollow Mind's membrane.
+// A dotted ring: the Vespar shield and the Hollow Mind's membrane.
 function makeRing3(scene: Phaser.Scene, key: string, rx: number, ry: number, colors: string[], thick = 1.2) {
   canvas(scene, key, rx * 2 + 1, ry * 2 + 1, (px) => {
     for (let y = 0; y <= ry * 2; y++) {
@@ -535,7 +535,7 @@ function makeSceneries3(scene: Phaser.Scene) {
       }
     }
   });
-  // Throne of Voss: station walls down both sides with rows of lights.
+  // Throne of Vespar: station walls down both sides with rows of lights.
   makeScenery3(scene, 'scenery_throne', (px, rand) => {
     for (let y = 0; y < H; y++) {
       const lw = 14 + Math.round(Math.sin((y / H) * Math.PI * 4) * 4), rw = 14 + Math.round(Math.cos((y / H) * Math.PI * 4) * 4);
@@ -652,8 +652,8 @@ export function generateArt3(scene: Phaser.Scene, makeTexture: (key: string, row
     makeTexture(`crate_${gear}`, crateRows(SPRITES3[`icon_${gear}`], 'R'));
     makeTexture(`crate_${gear}_off`, crateRows(SPRITES3[`icon_${gear}`], 'D'));
   }
-  makeVossShip(scene, 'vossship', ['#9878f8', '#6844fc', '#3c1c7c'], false);
-  makeVossShip(scene, 'vosswreck', ['#7c7c7c', '#3c3c3c', '#1c1c1c'], true);
+  makeVesparShip(scene, 'vossship', ['#9878f8', '#6844fc', '#3c1c7c'], false);
+  makeVesparShip(scene, 'vosswreck', ['#7c7c7c', '#3c3c3c', '#1c1c1c'], true);
   makeCreature(scene, 'parasite', 36, 26, ['#58d854', '#00a800', '#005800', '#d800cc'], 1, 3);
   makeCreature(scene, 'queen', 42, 28, ['#f878f8', '#d800cc', '#a40080', '#58d854'], 3, 9);
   makeMindCore(scene);

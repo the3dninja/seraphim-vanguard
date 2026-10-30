@@ -10,12 +10,12 @@ const ENTER_Y = 58;
 const SHIELD_BACK = 6500; // ms the shield stays down
 const REWARD = 450;
 
-// Emperor Voss, Possessed: the level 10 boss. Phase 1 is the Emperor's
+// Emperor Vespar, Possessed: the level 10 boss. Phase 1 is the Emperor's
 // flagship behind a shield (ion breaks it; it comes back after a while), firing
 // aimed spreads and rings of shots. When the hull gives out, the Hollow
 // parasite bursts out of it: an organic thing, weak to plasma, that lunges at
 // the ship and lays Spore Pods. Killing it frees the Emperor.
-export class Voss {
+export class Vespar {
   private x = W / 2;
   private y = -30;
   private t = 0;
@@ -202,7 +202,7 @@ export class Voss {
     g.enemyBullets.clear(true, true);
     bossDeath(g, this.px, this.py, 16, 10, REWARD, () => {
       this.parasite?.destroy();
-      toast(g, 'EMPEROR VOSS IS FREE', 110, 1600);
+      toast(g, 'EMPEROR VESPAR IS FREE', 110, 1600);
       // The freed Emperor's ship limps away.
       g.tweens.add({ targets: this.ship, y: -40, alpha: 0.4, duration: 3000, ease: 'Sine.easeIn', onComplete: () => this.ship.destroy() });
     });

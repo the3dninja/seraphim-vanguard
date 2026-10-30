@@ -447,7 +447,7 @@ export class HollowMind {
       this.teethIn = 1600;
       this.spiralIn = 900;
       toast(g, 'IT OPENS ITS MAW', 120, 1200);
-      g.radio('VEX: WHAT IS THAT?!\nDON\'T LOOK AT IT!');
+      g.radio('ROOK: WHAT IS THAT?!\nDON\'T LOOK AT IT!');
     }
   }
 

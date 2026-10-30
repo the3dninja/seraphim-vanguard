@@ -2,7 +2,7 @@
 // lists so the Level Editor can offer and check them.
 export const ENEMY_KINDS = ['dart', 'weaver', 'gunboat', 'drone', 'bomber', 'trapper', 'driller', 'lancer', 'bulwark',
   'minelayer', 'carrier', 'phantom', 'spore', 'tendril', 'brood', 'mimic', 'husk', 'egg', 'larva',
-  // Corrupted: Raider, Drone Swarm and Vossari ships overgrown by the Hollow (see corrupt.ts).
+  // Corrupted: Raider, Drone Swarm and Vesparan ships overgrown by the Hollow (see corrupt.ts).
   'cdart', 'cweaver', 'cgunboat', 'cbomber', 'ctrapper', 'cdrone', 'cdriller', 'cminelayer',
   'clancer', 'cbulwark', 'ccarrier', 'cphantom'] as const;
 export type EnemyKind = typeof ENEMY_KINDS[number];
@@ -216,7 +216,7 @@ export const LEVELS: LevelDef[] = [
   // Rockjaw mini boss waits at the end.
   {
     id: 'kessel',
-    name: 'KESSEL ASTEROIDS',
+    name: 'TALUS ASTEROIDS',
     desc: 'ROCKS SPLIT WHEN SHOT. RAIDERS SEED MINES, AND SOMETHING BIG HIDES HERE.',
     node: 'node_rocks',
     theme: 'asteroids',
@@ -254,7 +254,7 @@ export const LEVELS: LevelDef[] = [
     ],
   },
   // Level 4: ice shards fall, ice sheets send the ship sliding, Drillers ram
-  // from the sides and Vossari Lancers fire aimed beams after a warning line.
+  // from the sides and Vesparan Lancers fire aimed beams after a warning line.
   {
     id: 'halva',
     name: 'ICE RING OF HALVA',
@@ -299,11 +299,11 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  // Level 5: the Vossari fleet. Bulwarks hide behind shields, turrets on the
+  // Level 5: the Vesparan fleet. Bulwarks hide behind shields, turrets on the
   // capital ships fire in from the edges, and Admiral Kade's Dreadnought waits.
   {
     id: 'blockade',
-    name: 'VOSSARI BLOCKADE',
+    name: 'VESPARAN BLOCKADE',
     desc: 'THE EMPIRE\'S FLEET RINGS A FORTRESS MOON. ADMIRAL KADE COMMANDS.',
     node: 'node_moon',
     theme: 'blockade',
@@ -342,7 +342,7 @@ export const LEVELS: LevelDef[] = [
     ],
   },
   // Act 2. Levels 6 to 8 run about half again as long as levels 1 to 5.
-  // Level 6: Vossari Carriers park and launch Darts. Solar flares sweep down
+  // Level 6: Vesparan Carriers park and launch Darts. Solar flares sweep down
   // the screen; the shadow under a shelter rock is the only safe place.
   {
     id: 'forge',
@@ -511,7 +511,7 @@ export const LEVELS: LevelDef[] = [
     ],
   },
   // Level 9: the first Hollow. Spore Pods burst into seekers, infected
-  // Vossari hold the colony, and spore clouds hide whatever flies inside them.
+  // Vesparans hold the colony, and spore clouds hide whatever flies inside them.
   {
     id: 'blight',
     name: 'BLIGHT COLONY',
@@ -567,12 +567,12 @@ export const LEVELS: LevelDef[] = [
       ],
     ],
   },
-  // Level 10: the Vossari capital. Blast doors slide shut as they scroll by,
+  // Level 10: the Vesparan capital. Blast doors slide shut as they scroll by,
   // defense guns fire in from the edges, and the possessed Emperor waits.
   {
     id: 'throne',
-    name: 'THRONE OF VOSS',
-    desc: 'THE VOSSARI CAPITAL. DOORS SLAM SHUT; THE DEFENSE GRID NEVER SLEEPS.',
+    name: 'THRONE OF VESPAR',
+    desc: 'THE VESPARAN CAPITAL. DOORS SLAM SHUT; THE DEFENSE GRID NEVER SLEEPS.',
     node: 'node_throne',
     theme: 'throne',
     hazards: [{ kind: 'doors', every: [9000, 12000] }, { kind: 'turret', every: [7000, 10000] }],
@@ -912,7 +912,7 @@ export const LEVELS: LevelDef[] = [
     allies: 3,
     gate: true,
     segmentNames: ['APPROACH', 'TO THE LAST GATE'],
-    segmentRadio: [undefined, 'VOSS: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
+    segmentRadio: [undefined, 'VESPAR: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
     // A third of the way in and just before the vendor; then after the vendor,
     // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
     // two thirds of the way. The last gate's three waves follow the last wave.
@@ -1009,10 +1009,10 @@ export const LEVELS: LevelDef[] = [
       undefined,
       'REYES: IT\'S A PASSAGE.\nSTAY IN THE MIDDLE.',
       'REYES: SPORES. I CAN\'T\nSEE A THING IN HERE.',
-      'VEX: IT SPLITS UP\nAHEAD. PICK A WAY.',
-      'VEX: THIS WIND! IT\'S\nBLOWING US OFF COURSE!',
+      'ROOK: IT SPLITS UP\nAHEAD. PICK A WAY.',
+      'ROOK: THIS WIND! IT\'S\nBLOWING US OFF COURSE!',
       'REYES: WE HAVE TO FIND\nANOTHER WAY BACK IN!',
-      'VEX: EGGS IN THE\nGROWTH. BURN THEM.',
+      'ROOK: EGGS IN THE\nGROWTH. BURN THEM.',
       'REYES: THE MIND IS\nRIGHT AHEAD. GO!',
     ],
     // The storm (winds, debris, Lancers), the vents and the spore-thick stretches
