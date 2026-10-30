@@ -2,11 +2,11 @@ import { LEVELS } from './data/levels';
 import { loadSave, writeSave } from './save';
 
 // The Cheat Menu, at the bottom of the pause menu, for playtesting. It only
-// shows in development, or with ?cheats (or ?test) on the link. Cheats last
+// shows in development, or with ?cheats (or ?test, or ?edit) on the link. Cheats last
 // until the page is reloaded; ?god starts with God Mode on.
 const params = new URLSearchParams(location.search);
 
-export const cheatsEnabled = () => import.meta.env.DEV || params.has('cheats') || params.has('test');
+export const cheatsEnabled = () => import.meta.env.DEV || params.has('cheats') || params.has('test') || params.has('edit');
 
 export const cheats = {
   god: params.has('god'), // nothing hurts the ship

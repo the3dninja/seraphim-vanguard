@@ -10,7 +10,7 @@ import { newSave, type SaveData } from './save';
 // itself and the main save are untouched.
 
 export const TEST_LEVEL: LevelDef = {
-  name: 'COMBAT TEST', desc: '', node: '', theme: 'outpost', segments: [[]],
+  id: 'test', name: 'COMBAT TEST', desc: '', node: '', theme: 'outpost', segments: [[]],
 };
 
 // Level 0 keeps level-specific tips quiet. Two weapon and gear slots, three

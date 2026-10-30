@@ -12,6 +12,7 @@ interface PauseData {
   abort: () => void;
   quit: () => void; // to the title, when the page can't close itself
   skipTo: (at: number) => void; // reloads the level this far through it (0 to 1)
+  edit?: () => void; // a Level Editor playtest: back to the editor (in place of abort and quit)
 }
 
 type Panel = 'main' | 'options' | 'cheats';
@@ -62,6 +63,14 @@ export class PauseScene extends Phaser.Scene {
   private mainPanel() {
     this.add2(text(this, W / 2, 64, 'PAUSED', COLOR.white, 16).setOrigin(0.5));
     this.add2(button(this, BX, 100, BW, 22, 'RESUME', () => this.d.resume()));
+    // An editor playtest has nothing to abort or quit: only the way back, and the playtesting tools.
+    const edit = this.d.edit;
+    if (edit) {
+      this.add2(button(this, BX, 130, BW, 22, 'CHEAT MENU', () => this.show('cheats'), COLOR.yellow));
+      this.add2(button(this, 16, 160, W - 32, 22, 'RETURN TO EDITOR', () => edit(), COLOR.cyan));
+      if (tunerEnabled()) this.add2(button(this, BX, 206, BW, 22, 'TUNER', () => openTuner(), COLOR.yellow));
+      return;
+    }
     this.add2(button(this, BX, 130, BW, 22, 'ABORT MISSION', () => {
       ask(this, `ABORT MISSION?\n${this.d.abortNote}`, ['ABORT', 'NO'], (i) => { if (i === 0) this.d.abort(); });
     }));
@@ -120,7 +129,7 @@ export class PauseScene extends Phaser.Scene {
     at.setText(this.d.test ? '' : this.skipAt.toFixed(1));
     this.add2(button(this, 16, 184, W - 32, 18, 'RELOAD THERE', () => this.d.skipTo(this.skipAt))).setEnabled(!this.d.test);
 
-    this.add2(button(this, 16, 220, W - 32, 18, 'UNLOCK ALL LEVELS', () => {
+    if (!this.d.edit) this.add2(button(this, 16, 220, W - 32, 18, 'UNLOCK ALL LEVELS', () => {
       ask(this, 'UNLOCK ALL LEVELS?\nTHIS CHANGES YOUR\nSAVE FOR GOOD.', ['YES', 'NO'], (i) => {
         if (i !== 0) return;
         unlockAllLevels();

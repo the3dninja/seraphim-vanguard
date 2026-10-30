@@ -4,13 +4,23 @@ import { clearSave, loadSave, newSave } from '../save';
 import { ask, button, starfield, text } from '../ui';
 import { testSave } from '../combatTest';
 import { fitScene } from '../screen';
+import { editorEnabled, editorLink, openEditor } from '../editor';
 
 let testJumpDone = false; // ?test opens combat test once; quitting it comes back here
+let editJumpDone = false; // ?edit opens the Level Editor once
 
 export class TitleScene extends Phaser.Scene {
   private scroll!: ReturnType<typeof starfield>;
 
+  private openEditorNow = false;
+
   constructor() { super('Title'); }
+
+  // `editor`: back from an editor playtest, so the editor opens again.
+  init(data: { editor?: boolean }) {
+    this.openEditorNow = !!data?.editor || (editorLink() && !editJumpDone);
+    editJumpDone = editJumpDone || this.openEditorNow;
+  }
 
   create() {
     fitScene(this, 10000);
@@ -25,7 +35,7 @@ export class TitleScene extends Phaser.Scene {
 
     // ?test: combat test mode, straight away the first time, then from a button.
     if (new URLSearchParams(location.search).has('test')) {
-      if (!testJumpDone) {
+      if (!testJumpDone && !this.openEditorNow) {
         testJumpDone = true;
         this.scene.start('Game', { state: testSave(), test: true });
         return;
@@ -48,7 +58,11 @@ export class TitleScene extends Phaser.Scene {
       button(this, 30, 220, 120, 22, 'START', () => this.go('Game', { state: newSave() }));
     }
 
-    text(this, W / 2, H - 14, 'V0.1 PROTOTYPE', COLOR.dim).setOrigin(0.5);
+    // ?edit or ?test: the Level Editor, from a button (and straight away with ?edit, or back from a playtest).
+    const test = new URLSearchParams(location.search).has('test');
+    if (editorEnabled()) button(this, 30, test ? 296 : 270, 120, 22, 'LEVEL EDITOR', () => openEditor(), COLOR.cyan);
+    if (!editorEnabled() || !test) text(this, W / 2, H - 14, 'V0.1 PROTOTYPE', COLOR.dim).setOrigin(0.5);
+    if (this.openEditorNow) this.time.delayedCall(0, () => openEditor());
   }
 
   private go(scene: string, data: object) {
