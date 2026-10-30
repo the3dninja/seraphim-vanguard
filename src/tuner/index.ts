@@ -7,7 +7,7 @@ import {
   BY_PATH, CATS, ENTRIES, GAME_VALUES, flatPath, levelPath, levelPropOf, pathOf, propOf, type TuneCat, type TuneEntry,
 } from './entries';
 
-// The Tuner (?tune, or with ?test): a page over the game for changing the
+// The Tuner (?tune, or with ?test or ?edit): a page over the game for changing the
 // numbers of weapons, gear, items and foes while playing. Edits wait until APPLY, then take effect at once.
 // EXPORT lists only the values that differ from the game, as text to paste
 // back in the project so they can be written into the code. CLEAR puts every
@@ -22,7 +22,7 @@ interface Stored { applied: Record<string, number>; exports: LocalExport[] }
 
 export const tunerEnabled = () => {
   const q = new URLSearchParams(location.search);
-  return q.has('tune') || q.has('test');
+  return q.has('tune') || q.has('test') || q.has('edit');
 };
 
 const fmt = (v: number) => String(Math.round(v * 1000) / 1000);

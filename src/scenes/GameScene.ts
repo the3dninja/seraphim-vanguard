@@ -28,6 +28,7 @@ import { ITEM_COOLDOWN, saveTestLoadout, TEST_BUTTONS, TEST_ICONS, TEST_LEVEL, T
 import { starfield, text, toast } from '../ui';
 import { HUD_BOTTOM, HUD_TOP, fitScene, layout } from '../screen';
 import { cheats } from '../cheats';
+import type { EditPlay } from '../editor';
 import { distToPath, pathLength, pointAlong, type Pt } from './LightningScene';
 import { RAIDER_CORRUPT, SEEDED, corruptFormation, isCorrupt, setupCorrupt, updateCorrupt } from '../corrupt';
 
@@ -217,6 +218,7 @@ export class GameScene extends Phaser.Scene {
   private replay = false; // flying a cleared level or side mission again
   private replayLevel: number | null = null; // the cleared main level being flown again
   private test: TestWaves | null = null; // combat test mode (see combatTest.ts)
+  private edit: EditPlay | null = null; // a Level Editor playtest (see editor/index.ts)
   private sideHaz!: SideHazards;
 
   phase: Phase = 'action';
@@ -332,7 +334,10 @@ export class GameScene extends Phaser.Scene {
   // `replay` names a cleared level to fly again, for less pay (see REPLAY_PAY).
   // A cleared side mission is a replay too.
   // `jump` (from the Cheat Menu, with `resume`) starts that far through the level's waves, 0 to 1.
-  init(data: { state: SaveData; resume?: { save: SaveData; segment: number; earned?: number }; side?: string; test?: boolean; replay?: number; jump?: number }) {
+  // `edit` flies a Level Editor draft from a segment and wave: nothing is
+  // saved, and every way out goes back to the editor.
+  init(data: { state: SaveData; resume?: { save: SaveData; segment: number; earned?: number }; side?: string; test?: boolean; replay?: number; jump?: number; edit?: EditPlay }) {
+    this.edit = data.edit ?? null;
     this.startState = cloneSave(data.state);
     this.state = cloneSave(data.resume ? data.resume.save : data.state);
     this.side = data.side ?? null;
@@ -342,9 +347,14 @@ export class GameScene extends Phaser.Scene {
     this.replay = !!this.replayLevel || (!!this.side && this.startState.sides.includes(this.side));
     this.test = data.test ? new TestWaves() : null;
     this.level = this.test ? TEST_LEVEL : (this.side && sideById(this.side)) || LEVELS[this.state.level - 1];
+    if (this.edit) {
+      this.level = this.edit.level;
+      this.side = this.edit.side ?? null;
+      this.replay = false;
+    }
     this.checkpoint = data.resume
       ? { save: cloneSave(data.resume.save), segment: data.resume.segment, earned: data.resume.earned ?? 0 }
-      : { save: cloneSave(data.state), segment: 0, earned: 0 };
+      : { save: cloneSave(data.state), segment: this.edit?.segment ?? 0, earned: 0 };
     this.earned = this.checkpoint.earned;
     this.rewound = !!data.resume;
     this.maxHp = totalMaxHealth(this.state);
@@ -400,6 +410,7 @@ export class GameScene extends Phaser.Scene {
     this.waveIndex = 0;
     this.jumped = data.jump ?? null;
     if (this.jumped !== null) this.jumpTo(this.jumped);
+    else if (this.edit && !data.resume) this.waveIndex = this.edit.wave;
     this.stepAhead = 0;
     this.waveTimer = 0;
     this.hazardIn = [];
@@ -519,7 +530,7 @@ export class GameScene extends Phaser.Scene {
     if (this.test) { this.setupTest(); return; }
 
     const intro = [
-      text(this, W / 2, H / 2 - 40, this.side ? 'SIDE MISSION' : `LEVEL ${this.state.level}`, this.side ? COLOR.cyan : COLOR.gray),
+      text(this, W / 2, H / 2 - 40, this.edit ? 'EDITOR PLAYTEST' : this.side ? 'SIDE MISSION' : `LEVEL ${this.state.level}`, this.edit ? COLOR.yellow : this.side ? COLOR.cyan : COLOR.gray),
       text(this, W / 2, H / 2 - 26, this.level.name, COLOR.white),
     ].map((t) => t.setOrigin(0.5).setDepth(1000));
     if (this.rewound) intro.push(text(this, W / 2, H / 2 - 6, 'REWIND BEACON USED', COLOR.cyan).setOrigin(0.5).setDepth(1000));
@@ -528,7 +539,8 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: intro, alpha: 0, delay: 2700, duration: 400 });
     if (this.state.level === 1) this.time.delayedCall(2400, () => this.blinkTip('DRAG TO MOVE'));
     const call = this.side ? undefined : RADIO[this.state.level];
-    if (call && !this.rewound) this.time.delayedCall(2300, () => this.radio(call));
+    // A playtest from a later segment skips the call that opens the level.
+    if (call && !this.rewound && !(this.edit && this.segment > 0)) this.time.delayedCall(2300, () => this.radio(call));
 
     this.events.on('resume', () => this.afterVendor());
   }
@@ -3667,8 +3679,9 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
     this.bubble.setVisible(false);
     this.sats.forEach((sat) => sat.setVisible(false));
-    // Combat test, or the Demigod Mode cheat: blow up, then come straight back with full health.
-    if (this.test || cheats.demigod) {
+    // Combat test, an editor playtest, or the Demigod Mode cheat: blow up,
+    // then come straight back with full health.
+    if (this.test || this.edit || cheats.demigod) {
       this.time.delayedCall(900, () => {
         this.health = this.maxHp;
         this.invulnUntil = this.time.now + 1500;
@@ -3754,6 +3767,7 @@ export class GameScene extends Phaser.Scene {
     const close = () => this.scene.stop('Pause');
     this.scene.launch('Pause', {
       test: !!this.test,
+      edit: this.edit ? () => { close(); this.backToEditor(false); } : undefined,
       abortNote: this.test ? 'BACK TO THE\nTITLE SCREEN.' : `BACK TO BASE. YOU\nKEEP ${Math.round(DEATH_KEEP * 100)}% OF THE\nCREDITS PICKED UP.`,
       resume: () => { close(); this.scene.resume(); },
       abort: () => { close(); this.abortMission(); },
@@ -3762,7 +3776,7 @@ export class GameScene extends Phaser.Scene {
         close();
         this.scene.restart({
           state: this.startState, resume: { save: cloneSave(this.state), segment: 0, earned: this.earned },
-          side: this.side ?? undefined, replay: this.replayLevel ?? undefined, jump: at,
+          side: this.side ?? undefined, replay: this.replayLevel ?? undefined, jump: at, edit: this.edit ?? undefined,
         });
       },
     });
@@ -4022,6 +4036,8 @@ export class GameScene extends Phaser.Scene {
   // and starts sinking toward the station partway through its last roll, timed
   // so the station passes right under it as it bottoms out.
   private vendorArrival() {
+    // An editor playtest skips the vendor (whose purchases would save) and flies straight on.
+    if (this.edit) { this.flowOn(); return; }
     this.phase = 'arrival';
     this.dragFrom = null;
     this.player.setVisible(true); // it may have been mid-blink from a hit
@@ -4272,6 +4288,12 @@ export class GameScene extends Phaser.Scene {
   // (not when it's already gone, into Maw Gate's vortex).
   private endLevel(last: boolean, outro = true) {
     this.gatherCoins(() => {
+      if (this.edit) {
+        text(this, W / 2, H / 2 - 16, 'PLAYTEST CLEAR', COLOR.yellow).setOrigin(0.5).setDepth(1000);
+        text(this, W / 2, H / 2 + 2, 'BACK TO THE EDITOR', COLOR.gray).setOrigin(0.5).setDepth(1000);
+        this.time.delayedCall(2400, () => this.backToEditor());
+        return;
+      }
       if (last) { this.ending(); return; }
       if (this.side) {
         // Side missions don't move the ship on: back to Base, one more beaten.
@@ -4323,6 +4345,14 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1200 + lines.length * 450 + 3500, () => this.leaveTo('Base', this.state));
   }
 
+  // An editor playtest ends: back to the title screen with the editor open over it.
+  private backToEditor(fade = true) {
+    const go = () => this.scene.start('Title', { editor: true });
+    if (!fade) { go(); return; }
+    this.cameras.main.fadeOut(400);
+    this.cameras.main.once('camerafadeoutcomplete', go);
+  }
+
   // The Bestiary's log: a sighting the first time each kind shows up.
   private sighted(kind: string) {
     if (!this.test && !this.state.seen.includes(kind)) this.state.seen.push(kind);
@@ -4339,6 +4369,7 @@ export class GameScene extends Phaser.Scene {
   // first shows the star map for a moment, announcing them.
   // `fade`: off when leaving from the paused scene, which can't play the fade.
   private leaveTo(scene: string, state: SaveData, toMap = false, unlocked: string[] = [], note?: string, fade = true) {
+    if (this.edit) { this.backToEditor(fade); return; }
     this.keepLog(state);
     const go = () => this.scene.start(scene, { state, toMap, unlocked, note });
     if (!fade) { go(); return; }

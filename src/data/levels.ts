@@ -1,14 +1,19 @@
-export type EnemyKind = 'dart' | 'weaver' | 'gunboat' | 'drone' | 'bomber' | 'trapper' | 'driller' | 'lancer' | 'bulwark'
-  | 'minelayer' | 'carrier' | 'phantom' | 'spore' | 'tendril' | 'brood' | 'mimic' | 'husk' | 'egg' | 'larva'
+// The kinds of enemy, formation, theme, hazard and boss a level can use, as
+// lists so the Level Editor can offer and check them.
+export const ENEMY_KINDS = ['dart', 'weaver', 'gunboat', 'drone', 'bomber', 'trapper', 'driller', 'lancer', 'bulwark',
+  'minelayer', 'carrier', 'phantom', 'spore', 'tendril', 'brood', 'mimic', 'husk', 'egg', 'larva',
   // Corrupted: Raider, Drone Swarm and Vossari ships overgrown by the Hollow (see corrupt.ts).
-  | 'cdart' | 'cweaver' | 'cgunboat' | 'cbomber' | 'ctrapper' | 'cdrone' | 'cdriller' | 'cminelayer'
-  | 'clancer' | 'cbulwark' | 'ccarrier' | 'cphantom';
+  'cdart', 'cweaver', 'cgunboat', 'cbomber', 'ctrapper', 'cdrone', 'cdriller', 'cminelayer',
+  'clancer', 'cbulwark', 'ccarrier', 'cphantom'] as const;
+export type EnemyKind = typeof ENEMY_KINDS[number];
 // line/column/vee/pair/single drop in from the top. swarm snakes in from the
 // top corner on the side `x` names (under 0.5 is left) and crosses the screen.
 // Drillers come in from the side `x` names instead of the top (pair = one from each side).
-export type Pattern = 'line' | 'column' | 'vee' | 'pair' | 'single' | 'swarm';
-export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' | 'nebula' | 'forge' | 'relay'
-  | 'blight' | 'throne' | 'deep' | 'rift' | 'beyond' | 'reef' | 'bloom' | 'gate' | 'heart' | 'mist';
+export const PATTERNS = ['line', 'column', 'vee', 'pair', 'single', 'swarm'] as const;
+export type Pattern = typeof PATTERNS[number];
+export const THEMES = ['outpost', 'scrapyard', 'asteroids', 'ice', 'blockade', 'nebula', 'forge', 'relay',
+  'blight', 'throne', 'deep', 'rift', 'beyond', 'reef', 'bloom', 'gate', 'heart', 'mist'] as const;
+export type Theme = typeof THEMES[number];
 // shard: falling ice. patch: an ice sheet that makes the ship slide. turret: a
 // capital ship gun that leans in from the screen edge and fires a burst.
 // lightning: a column flashes, then a bolt strikes down it. flare: a sweep of
@@ -23,11 +28,13 @@ export type Theme = 'outpost' | 'scrapyard' | 'asteroids' | 'ice' | 'blockade' |
 // the screen that has to be shot through. growth: a short piece of one.
 // Side missions (see sidehaz.ts): press, gust, ember, blackout, sweep. satchunk:
 // broken satellite pieces that drift down slowly and block shots and searchlights.
-export type HazardKind = 'debris' | 'rock' | 'shard' | 'patch' | 'turret' | 'lightning' | 'flare' | 'fence'
-  | 'spores' | 'doors' | 'well' | 'wall' | 'tentacle' | 'artery' | 'barrier' | 'growth'
-  | 'press' | 'gust' | 'ember' | 'blackout' | 'sweep' | 'satchunk';
-export type BossKind = 'rockjaw' | 'dreadnought' | 'watcher' | 'voss' | 'queen' | 'mind' | 'sporeheart' | 'wyrm'
-  | 'frostjaw' | 'hollowwatcher' | 'broodmother';
+export const HAZARD_KINDS = ['debris', 'rock', 'shard', 'patch', 'turret', 'lightning', 'flare', 'fence',
+  'spores', 'doors', 'well', 'wall', 'tentacle', 'artery', 'barrier', 'growth',
+  'press', 'gust', 'ember', 'blackout', 'sweep', 'satchunk'] as const;
+export type HazardKind = typeof HAZARD_KINDS[number];
+export const BOSS_KINDS = ['rockjaw', 'dreadnought', 'watcher', 'voss', 'queen', 'mind', 'sporeheart', 'wyrm',
+  'frostjaw', 'hollowwatcher', 'broodmother'] as const;
+export type BossKind = typeof BOSS_KINDS[number];
 // ramp: how many times as often it comes by the end of the segment as at the start.
 export interface HazardSpec { kind: HazardKind; every: [number, number]; ramp?: number }
 
@@ -51,6 +58,9 @@ export interface Wave {
 }
 
 export interface LevelDef {
+  // A name that stays the same wherever the level sits in the game (the
+  // Level Editor keeps its drafts by it).
+  id: string;
   name: string;
   desc: string; // shown on the star map; hints at enemies the player hasn't met
   node: string; // star map picture
@@ -78,6 +88,7 @@ export interface LevelDef {
   segmentThemes?: Theme[]; // per segment, in place of `theme`
   segmentBoss?: (BossKind | undefined)[]; // a mini boss at the end of a segment
   segmentRadio?: (string | undefined)[]; // a radio call as each segment starts
+  segmentNames?: string[]; // what each segment is called in the Level Editor
   // Heart of the Hollow's way through the hive (hive.ts): walls, gates, the
   // storm and the backdrops, part by part, one part per segment.
   hive?: boolean;
@@ -116,6 +127,7 @@ export const isBuilt = (l: LevelDef | undefined): l is LevelDef => !!l && l.segm
 export const LEVELS: LevelDef[] = [
   // Level 1, the tutorial: Darts and Weavers only, slow sparse bullets.
   {
+    id: 'outpost',
     name: 'OUTPOST RUN',
     desc: 'HOME SYSTEM PATROL. RAIDER SCOUTS PROBE THE OUTPOST. A GOOD PLACE TO LEARN.',
     node: 'node_gas',
@@ -159,6 +171,7 @@ export const LEVELS: LevelDef[] = [
   // Level 2: Scrap Drones swarm in from the sides, Gunboats park and fire
   // spreads, and drifting wreckage soaks up shots from both sides.
   {
+    id: 'scrapyard',
     name: 'SCRAPYARD BELT',
     desc: 'A GRAVEYARD OF WRECKS THAT BLOCK SHOTS. SALVAGE SWARMS AND ARMED HAULERS.',
     node: 'node_scrap',
@@ -202,6 +215,7 @@ export const LEVELS: LevelDef[] = [
   // Level 3: asteroids to dodge or break, Bombers seed mines, and the
   // Rockjaw mini boss waits at the end.
   {
+    id: 'kessel',
     name: 'KESSEL ASTEROIDS',
     desc: 'ROCKS SPLIT WHEN SHOT. RAIDERS SEED MINES, AND SOMETHING BIG HIDES HERE.',
     node: 'node_rocks',
@@ -242,6 +256,7 @@ export const LEVELS: LevelDef[] = [
   // Level 4: ice shards fall, ice sheets send the ship sliding, Drillers ram
   // from the sides and Vossari Lancers fire aimed beams after a warning line.
   {
+    id: 'halva',
     name: 'ICE RING OF HALVA',
     desc: 'A FROZEN RING WHERE ICE SENDS THE SHIP SLIDING. DRILLS AND SNIPERS WAIT.',
     node: 'node_ice',
@@ -287,6 +302,7 @@ export const LEVELS: LevelDef[] = [
   // Level 5: the Vossari fleet. Bulwarks hide behind shields, turrets on the
   // capital ships fire in from the edges, and Admiral Kade's Dreadnought waits.
   {
+    id: 'blockade',
     name: 'VOSSARI BLOCKADE',
     desc: 'THE EMPIRE\'S FLEET RINGS A FORTRESS MOON. ADMIRAL KADE COMMANDS.',
     node: 'node_moon',
@@ -329,6 +345,7 @@ export const LEVELS: LevelDef[] = [
   // Level 6: Vossari Carriers park and launch Darts. Solar flares sweep down
   // the screen; the shadow under a shelter rock is the only safe place.
   {
+    id: 'forge',
     name: 'SOLAR FORGE',
     desc: 'CLOSE ORBIT OF A STAR. FLARES SWEEP THE SCREEN; SHELTER BEHIND ROCK.',
     node: 'node_star',
@@ -383,6 +400,7 @@ export const LEVELS: LevelDef[] = [
   // Level 7: Mine Layers seed the nebula with proximity mines, Raiders press in,
   // and lightning strikes down columns that flash first.
   {
+    id: 'ember',
     name: 'EMBER NEBULA',
     desc: 'A RED NEBULA ALIVE WITH LIGHTNING. WATCH FOR THE FLASH BEFORE A STRIKE.',
     node: 'node_nebula',
@@ -439,6 +457,7 @@ export const LEVELS: LevelDef[] = [
   // Level 8: Phantoms cloak between shots, Drones and Mine Layers fill the
   // relay, laser fences blink on and off, and The Watcher waits at the end.
   {
+    id: 'relay',
     name: 'SILENT RELAY',
     desc: 'AN ABANDONED RELAY OF LASER FENCES. SOMETHING WATCHES, UNSEEN.',
     node: 'node_relay',
@@ -494,6 +513,7 @@ export const LEVELS: LevelDef[] = [
   // Level 9: the first Hollow. Spore Pods burst into seekers, infected
   // Vossari hold the colony, and spore clouds hide whatever flies inside them.
   {
+    id: 'blight',
     name: 'BLIGHT COLONY',
     desc: 'AN IMPERIAL COLONY GONE WRONG. SPORE CLOUDS HIDE WHAT MOVES INSIDE.',
     node: 'node_blight',
@@ -550,6 +570,7 @@ export const LEVELS: LevelDef[] = [
   // Level 10: the Vossari capital. Blast doors slide shut as they scroll by,
   // defense guns fire in from the edges, and the possessed Emperor waits.
   {
+    id: 'throne',
     name: 'THRONE OF VOSS',
     desc: 'THE VOSSARI CAPITAL. DOORS SLAM SHUT; THE DEFENSE GRID NEVER SLEEPS.',
     node: 'node_throne',
@@ -610,11 +631,13 @@ export const LEVELS: LevelDef[] = [
   // the vendor waits. A final leg half again as long as a level 6 to 10
   // segment follows, under a purple star.
   {
+    id: 'rift',
     name: 'THE RIFT',
     desc: 'A TEAR INTO ALIEN SPACE. GRAVITY BENDS SHOTS AND SHIPS. ALLIES JOIN YOU.',
     node: 'node_rift',
     theme: 'deep',
     segmentThemes: ['deep', 'rift', 'beyond'],
+    segmentNames: ['NORMAL SPACE', 'THE RIFT', 'HOLLOW SPACE'],
     riftAfter: 0,
     riftExitAfter: 1,
     // No supply crates inside the rift itself: it is alien space, far from any
@@ -725,6 +748,7 @@ export const LEVELS: LevelDef[] = [
   // Level 12: Mimics copy your weapon and shrug it off, Husks soak up shots,
   // and coral walls grow in from the sides.
   {
+    id: 'reef',
     name: 'HIVE REEF',
     desc: 'A LIVING CORAL MEGASTRUCTURE WITH WALLS THAT GROW AND CLOSE IN.',
     node: 'node_reef',
@@ -802,6 +826,7 @@ export const LEVELS: LevelDef[] = [
   // Level 13: darkness, with only a pool of light around the ship. Brood
   // Mothers fill it with Spore Pods, and the Brood Queen waits at the end.
   {
+    id: 'bloom',
     name: 'BLACK BLOOM',
     desc: 'A DARK NEBULA LIT BY GLOWING FLORA. YOU SEE ONLY WHAT YOUR LIGHTS REACH.',
     node: 'node_bloom',
@@ -879,12 +904,14 @@ export const LEVELS: LevelDef[] = [
   // Level 14: the living gate. Warp rings bring the Hollow in while the allied
   // fleet holds the line.
   {
+    id: 'maw-gate',
     name: 'MAW GATE',
     desc: 'A VAST LIVING GATE. THE HOLLOW WARPS IN WHILE THE FLEET HOLDS THE LINE.',
     node: 'node_gate',
     theme: 'gate',
     allies: 3,
     gate: true,
+    segmentNames: ['APPROACH', 'TO THE LAST GATE'],
     segmentRadio: [undefined, 'VOSS: THE LAST GATE\nOPENS ON THEIR WORLD.\nPUNCH THROUGH!'],
     // A third of the way in and just before the vendor; then after the vendor,
     // once each ring has passed, every 7 to 12 s, closing to 3 to 6 s, until
@@ -969,12 +996,14 @@ export const LEVELS: LevelDef[] = [
   // storm outside, the vents back in, a nest of eggs and the twin Brood Wyrms,
   // and a short way down to the Hollow Mind's arena.
   {
+    id: 'heart',
     name: 'HEART OF THE HOLLOW',
     desc: 'THE LONGEST RUN. NO VENDORS. LIVING TUNNELS, A RAGING STORM, THREE GUARDIANS AND THE MIND.',
     node: 'node_heart',
     theme: 'heart',
     vendorless: true,
     hive: true,
+    segmentNames: ['RING', 'TUNNEL', 'SPORE CAVERN', 'FORKS', 'STORM', 'VENTS', 'NEST', 'TO THE MIND'],
     segmentBoss: [undefined, undefined, 'sporeheart', undefined, undefined, undefined, 'wyrm'],
     segmentRadio: [
       undefined,

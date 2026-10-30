@@ -13,6 +13,7 @@ import { TestMenuScene } from './scenes/TestMenuScene';
 import { LightningScene } from './scenes/LightningScene';
 import { PauseScene } from './scenes/PauseScene';
 import { installTuner, tunerEnabled } from './tuner';
+import { editorEnabled, installEditor } from './editor';
 import { layout, measure, watchScreen } from './screen';
 
 function start() {
@@ -32,6 +33,7 @@ function start() {
   });
   watchScreen(game);
   if (tunerEnabled()) installTuner(game);
+  if (editorEnabled()) installEditor(game);
   // Lets browser tests drive the game during development; left out of real builds.
   if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;
 }
