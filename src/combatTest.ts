@@ -73,7 +73,7 @@ export const TEST_SEQUENCES: { name: string; waves: Wave[] }[] = [
     ],
   },
   {
-    name: 'VOSSARI',
+    name: 'VESPARAN',
     waves: [
       { delay: 400, kind: 'lancer', pattern: 'pair' },
       { delay: 2000, kind: 'dart', pattern: 'vee', count: 7 },

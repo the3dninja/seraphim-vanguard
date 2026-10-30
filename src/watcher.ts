@@ -29,7 +29,7 @@ interface Copy {
   beam: number; // ms of beam left
 }
 
-// The Watcher, the level 8 mini boss: a cloaking Vossari spy frigate. It
+// The Watcher, the level 8 mini boss: a cloaking Vesparan spy frigate. It
 // cloaks (shots pass through), moves, then decloaks alongside decoy
 // afterimages. Only the real one takes damage and fires its spreads; a shot
 // pops a decoy. Decoys look a shade fainter. Below two thirds health it brings

@@ -382,7 +382,7 @@ const SPRITES: Record<string, string[]> = {
     '..GLLLGOO.....',
     '.G.GGG........',
   ],
-  // Vossari Lancer: the lance under the hull is where its beam comes from.
+  // Vesparan Lancer: the lance under the hull is where its beam comes from.
   lancer: [
     '..PP...PP..',
     '.PLLP.PLLP.',
@@ -460,6 +460,18 @@ const SPRITES: Record<string, string[]> = {
     '.......PMMP.......',
     '........PP........',
   ],
+  // Kade's escape pod, nose up, out of the bridge as the Dreadnought blows.
+  kpod: [
+    '...P...',
+    '..PLP..',
+    '.PLWLP.',
+    'PLCACLP',
+    'PLAACLP',
+    'PLLLLLP',
+    '.PDGDP.',
+    '..Y.Y..',
+    '..R.R..',
+  ],
 
   // Level 6 to 8 enemies.
   // Mine Layer (Drone Swarm): a hauler with a mine rack underneath.
@@ -477,7 +489,7 @@ const SPRITES: Record<string, string[]> = {
   // Proximity mine: dim until the ship comes close, then it blinks fast.
   pmine: ['...C...', '.C.D.C.', '..DCD..', 'CDCACDC', '..DCD..', '.C.D.C.', '...C...'],
   pmineLit: ['...W...', '.W.R.W.', '..RWR..', 'WRWWWRW', '..RWR..', '.W.R.W.', '...W...'],
-  // Vossari Carrier: a broad hull with a launch bay that opens downward.
+  // Vesparan Carrier: a broad hull with a launch bay that opens downward.
   carrier: [
     '......PPPPPPPPP......',
     '...PPPLLLLLLLLLPPP...',
@@ -501,7 +513,7 @@ const SPRITES: Record<string, string[]> = {
     '....PDP....',
     '.....P.....',
   ],
-  // The Watcher, the level 8 mini boss: a Vossari spy frigate with a big eye.
+  // The Watcher, the level 8 mini boss: a Vesparan spy frigate with a big eye.
   watcher: [
     '.........PPPPPPPPPPP.........',
     '......PPPLLLLLLLLLLLPPP......',
