@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { COLOR, W, H } from '../config';
 import { ENEMY_STATS } from '../data/enemies';
-import type { LevelDef, Theme, Wave } from '../data/levels';
+import { segmentEnd, type LevelDef, type LevelEvent, type Theme, type Wave } from '../data/levels';
 import { corruptFormation, isCorrupt } from '../corrupt';
 import { addScenery, type Scenery } from '../scenery';
 import { fitScene } from '../screen';
 import { starfield, text } from '../ui';
-import { segName } from './model';
+import { eventTime, segEvents, segName } from './model';
 
 // The Level Editor's scroll view: the level laid out as one long strip, with
 // every wave drawn where it comes in and frozen there. Time runs up the
@@ -84,11 +84,29 @@ export function formation(w: Wave): { x: number; y: number }[] {
   });
 }
 
+const END_LABEL: Record<string, string> = {
+  vendor: 'VENDOR', on: 'STRAIGHT ON', rift: 'THE RIFT OPENS', riftExit: 'OUT OF THE RIFT',
+  boss: 'BOSS', treasure: 'TREASURE', clear: 'LEVEL CLEAR', gate: 'THE LAST GATE',
+};
+
+// What an event's label says, and its color. A radio call shows who's
+// calling until it's tapped open.
+function eventLabel(ev: LevelEvent, open: boolean): [string, string] {
+  if (ev.radio !== undefined) {
+    const who = ev.radio.split(':')[0];
+    return [open ? ev.radio.replace(/\s*\n\s*/g, ' ') : `${who.length < 12 ? who : 'RADIO'} ...`, COLOR.cyan];
+  }
+  if (ev.alarm !== undefined) return [`ALARM: ${ev.alarm.replace(/\s*\n\s*/g, ' ')}`, COLOR.red];
+  if (ev.arena !== undefined) return [ev.arena ? 'ARENA ON' : 'ARENA OFF', COLOR.yellow];
+  return [ev.hazards ? 'HAZARDS ON' : 'HAZARDS OFF', COLOR.gray];
+}
+
 export interface ViewHooks {
   tapWave(seg: number, i: number): void;
   tapSpace(t: number, x: number, clientX: number, clientY: number): void;
   editSeg(seg: number): void;
   addSeg(at: number): void;
+  openEvent(seg: number, k: number): void; // its line in the Events tab (k past the last event: the end)
   moved(): void; // the play line moved: update the readout and the level strip
 }
 
@@ -120,6 +138,7 @@ export class EditView extends Phaser.Scene {
   private drag: { y: number; T: number; moved: boolean; lastY: number; lastAt: number } | null = null;
   private fling = 0; // ms of level time per ms, after a flick
   private glide: { to: number; left: number } | null = null;
+  private opened = new Set<string>(); // radio bubbles tapped open, by `seg:k`
 
   constructor() {
     super('EditView');
@@ -227,17 +246,15 @@ export class EditView extends Phaser.Scene {
         bx -= 3;
       }
       button(bx - 40, y + 3, 'EDIT', COLOR.yellow, () => this.hooks?.editSeg(seg));
-      // How it ends.
+      // How it ends: a mini boss first, if it has one, then its end.
       const ey = -s.end * PX;
       g.fillStyle(0x7c7c7c, 0.6);
       for (let x = 0; x < W; x += 4) g.fillRect(x, ey, 2, 1);
       const boss = def.segmentBoss?.[seg];
-      // As GameScene.endSegment decides.
-      const end = def.riftAfter === seg ? 'THE RIFT OPENS'
-        : def.riftExitAfter === seg ? 'OUT OF THE RIFT'
-        : seg < last ? (boss ? `MINI BOSS: ${boss.toUpperCase()}` : def.vendorless ? 'STRAIGHT ON' : 'VENDOR')
-        : def.boss ? `BOSS: ${def.boss.toUpperCase()}` : def.treasure ? 'TREASURE' : 'LEVEL CLEAR';
-      add(text(this, W - 12, ey + 3, end, COLOR.gray).setOrigin(1, 0));
+      const end = END_LABEL[segmentEnd(def, seg)].replace('BOSS', def.boss ? `BOSS: ${def.boss.toUpperCase()}` : 'BOSS');
+      const label = add(text(this, W - 12, ey + 3, `${boss && seg < last ? `MINI BOSS: ${boss.toUpperCase()}, ` : ''}${end}`, COLOR.gray).setOrigin(1, 0));
+      const k = segEvents(def, seg).length;
+      this.hits.push({ x: label.x - label.width - 2, y: ey, w: label.width + 4, h: 14, fn: () => this.hooks?.openEvent(seg, k) });
     });
     if (!st.locked) {
       const y = -this.tl.end * PX;
@@ -264,6 +281,38 @@ export class EditView extends Phaser.Scene {
         if (on) this.glow.push(add(this.add.image(img.x, img.y, tex).setFlipX(img.flipX).setTintFill(0xffffff)));
       }
     }));
+
+    // Events, on top: a speech bubble for each radio call (tap to read it,
+    // tap again to edit it), and a tag for the rest. Ones close together stack up.
+    const lg = add(this.add.graphics());
+    this.tl.segs.forEach((s, seg) => {
+      const times = this.tl.waves[seg].map((w) => w.t - s.start);
+      let above = Infinity; // the top of the last label, to stack the next one over
+      const evs = segEvents(def, seg).map((ev, k) => ({ ev, k, t: s.start + eventTime(ev, times) })).sort((a, b) => a.t - b.t);
+      evs.forEach(({ ev, k, t }) => {
+        const y = Math.min(-t * PX, above - 2);
+        const key = `${seg}:${k}`;
+        const open = this.opened.has(key);
+        const [str, color] = eventLabel(ev, open);
+        const tx = add(text(this, 7, 0, str, color));
+        if (open) tx.setWordWrapWidth(W - 34);
+        const h = tx.height + 6, w = tx.width + 8;
+        tx.setY(Math.round(y - h + 3));
+        const c = Phaser.Display.Color.HexStringToColor(color).color;
+        lg.fillStyle(0x000000, 0.85).fillRect(3, y - h, w, h);
+        lg.lineStyle(1, c, 1).strokeRect(3.5, y - h + 0.5, w - 1, h - 1);
+        // A tick at its moment, on the left edge.
+        lg.fillStyle(c, 1).fillRect(0, -t * PX, 3, 1);
+        above = y - h;
+        this.hits.push({
+          x: 3, y: y - h, w, h,
+          fn: () => {
+            if (ev.radio !== undefined && !open) { this.opened.add(key); this.rebuild(); return; }
+            this.hooks?.openEvent(seg, k);
+          },
+        });
+      });
+    });
     this.place();
   }
 

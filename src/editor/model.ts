@@ -1,5 +1,6 @@
 import {
-  BOSS_KINDS, ENEMY_KINDS, HAZARD_KINDS, LEVELS, PATTERNS, THEMES, type HazardSpec, type LevelDef, type Wave,
+  BOSS_KINDS, ENEMY_KINDS, HAZARD_KINDS, LEVELS, PATTERNS, THEMES, segmentEnd,
+  type HazardSpec, type LevelDef, type LevelEvent, type SegmentEnd, type Wave,
 } from '../data/levels';
 import { SIDES } from '../data/sides';
 import { TextError, read, write, type Value } from './format';
@@ -59,7 +60,21 @@ export function blankLevel(id: string): LevelDef {
 
 // --- Storage -----------------------------------------------------------------
 
-interface Stored { drafts: { key: string; base: Base; playAs: number; text: string; undo: string[] }[]; clip?: Wave }
+interface Stored { v?: number; drafts: { key: string; base: Base; playAs: number; text: string; undo: string[] }[]; clip?: Wave }
+const VERSION = 2; // 2: radio calls became events (segmentEvents)
+
+// A draft from before events: its segmentRadio calls become events, and a
+// game level's own events (the call that opens it) come in.
+function migrate(def: LevelDef & { segmentRadio?: (string | undefined)[] }, base: Base) {
+  const game = gameDef(base);
+  if (!def.segmentEvents && game?.segmentEvents) def.segmentEvents = deepCopy(game.segmentEvents);
+  const radio = def.segmentRadio;
+  delete def.segmentRadio;
+  if (!radio) return;
+  const evs = def.segments.map((_, i) => (def.segmentEvents?.[i] ?? []).filter((e) => e.at || e.wave || e.radio === undefined));
+  radio.forEach((r, i) => { if (r && evs[i]) evs[i].unshift({ radio: r }); });
+  def.segmentEvents = evs.map((l) => (l.length ? l : undefined));
+}
 
 export function loadDrafts(): { drafts: Map<string, Draft>; clip: Wave | null } {
   const drafts = new Map<string, Draft>();
@@ -68,7 +83,9 @@ export function loadDrafts(): { drafts: Map<string, Draft>; clip: Wave | null } 
     const raw = JSON.parse(localStorage.getItem(STORE) ?? 'null') as Stored | null;
     for (const d of raw?.drafts ?? []) {
       try {
-        drafts.set(d.key, { key: d.key, base: d.base, playAs: d.playAs ?? playAsFor(d.base), def: read(d.text) as unknown as LevelDef, undo: d.undo ?? [] });
+        const def = read(d.text) as unknown as LevelDef;
+        if ((raw?.v ?? 1) < VERSION) migrate(def, d.base);
+        drafts.set(d.key, { key: d.key, base: d.base, playAs: d.playAs ?? playAsFor(d.base), def, undo: (raw?.v ?? 1) < VERSION ? [] : d.undo ?? [] });
       } catch { /* a draft that can't be read is dropped */ }
     }
     clip = raw?.clip ?? null;
@@ -78,6 +95,7 @@ export function loadDrafts(): { drafts: Map<string, Draft>; clip: Wave | null } 
 
 export function saveDrafts(drafts: Map<string, Draft>, clip: Wave | null) {
   const out: Stored = {
+    v: VERSION,
     drafts: [...drafts.values()].map((d) => ({ key: d.key, base: d.base, playAs: d.playAs, text: levelText(d.def), undo: d.undo.slice(-UNDO_KEEP) })),
     clip: clip ?? undefined,
   };
@@ -92,15 +110,50 @@ export function pushUndo(d: Draft, before: string) {
 
 // --- Tabs ----------------------------------------------------------------------
 
-export type Part = 'waves' | 'hazards' | 'segment';
+export type Part = 'waves' | 'hazards' | 'events' | 'segment';
 // Segment -1 is the "0. LEVEL" tab.
 export interface Tab { seg: number; part: Part }
 
 // Things set per segment, each kept as its own list on the level.
-const PER_SEG = ['segments', 'hazards', 'segmentHazards', 'segmentThemes', 'segmentBoss', 'segmentRadio', 'segmentNames'] as const;
+const PER_SEG = ['segments', 'hazards', 'segmentHazards', 'segmentThemes', 'segmentBoss', 'segmentEvents', 'segmentEnds', 'segmentNames'] as const;
+// The lists kept one entry per segment (inserting or removing a segment changes each).
+export const SEG_LISTS = ['segmentHazards', 'segmentThemes', 'segmentBoss', 'segmentEvents', 'segmentEnds', 'segmentNames'] as const;
 
 export const segName = (def: LevelDef, seg: number) => def.segmentNames?.[seg] || `SEGMENT ${seg + 1}`;
 export const segHazards = (def: LevelDef, seg: number): HazardSpec[] => def.segmentHazards?.[seg] ?? def.hazards ?? [];
+export const segEvents = (def: LevelDef, seg: number): LevelEvent[] => def.segmentEvents?.[seg] ?? [];
+
+// How a segment would end without its own segmentEnds entry.
+function usualEnd(def: LevelDef, seg: number): SegmentEnd {
+  return segmentEnd({ ...def, segmentEnds: undefined }, seg);
+}
+
+// The ends a segment can have, as GameScene.endSegment runs them.
+export function endsFor(def: LevelDef, seg: number): SegmentEnd[] {
+  const last = seg >= def.segments.length - 1;
+  if (def.gate && last) return ['gate'];
+  return last ? ['boss', 'treasure', 'clear'] : ['vendor', 'on', 'rift', 'riftExit'];
+}
+
+// The moment an event happens, in ms from its segment's start, given when
+// each of the segment's waves comes in.
+export function eventTime(ev: LevelEvent, waveTimes: number[]): number {
+  const from = ev.wave ? waveTimes[ev.wave - 1] ?? waveTimes[waveTimes.length - 1] ?? 0 : 0;
+  return from + (ev.at ?? 0);
+}
+
+// Keeps events tied to waves on the same waves when waves are added to or
+// taken out of a segment: `by` waves added (or, below 0, removed) at index
+// `at`. An event on a removed wave moves to the wave before (or the start).
+export function shiftWaveEvents(def: LevelDef, seg: number, at: number, by: number) {
+  for (const ev of def.segmentEvents?.[seg] ?? []) {
+    if (!ev.wave || ev.wave <= at) continue;
+    if (by < 0 && ev.wave <= at - by) {
+      if (at) ev.wave = at;
+      else delete ev.wave;
+    } else ev.wave += by;
+  }
+}
 
 // The text a tab shows.
 export function tabText(d: Draft, tab: Tab): string {
@@ -120,14 +173,25 @@ export function tabText(d: Draft, tab: Tab): string {
     const shared = !def.segmentHazards && def.segments.length > 1;
     return `${shared ? '// SHARED BY EVERY SEGMENT UNTIL ONE CHANGES\n' : ''}${write(segHazards(def, s) as unknown as Value)}`;
   }
+  if (tab.part === 'events') {
+    const list: Value[] = [...segEvents(def, s) as unknown as Value[], { end: segmentEnd(def, s) }];
+    const ends = endsFor(def, s);
+    return [
+      '// WHAT HAPPENS IN THIS SEGMENT. at: MS AFTER IT STARTS, OR AFTER',
+      '// wave (1 IS ITS FIRST WAVE). THEN ONE OF radio: \'NAME: WORDS\',',
+      '// alarm: \'WARNING!\', arena: true OR false (ENEMIES HOLD NEAR THE TOP),',
+      '// hazards: false (PAUSED) OR true.',
+      `// LAST, HOW IT ENDS: ${ends.join(', ')}${ends.includes('rift') ? ' (on IS STRAIGHT ON; rift AND riftExit ARE THE RIFT CINEMATICS)' : ''}`,
+      write(list),
+    ].join('\n');
+  }
   const seg: Record<string, Value> = {
     name: def.segmentNames?.[s],
     theme: def.segmentThemes?.[s] ?? def.theme,
     boss: def.segmentBoss?.[s],
-    radio: def.segmentRadio?.[s],
   };
   return [
-    '// boss: A MINI BOSS AT THE END OF THIS SEGMENT. radio: A RADIO CALL AS IT STARTS.',
+    '// boss: A MINI BOSS AT THE END OF THIS SEGMENT. RADIO CALLS ARE IN EVENTS.',
     `// BOSSES: ${BOSS_KINDS.join(', ')}`,
     write(seg),
   ].join('\n');
@@ -223,18 +287,59 @@ export function applyTab(d: { def: LevelDef; playAs: number }, tab: Tab, text: s
     else if (all[0].length) def.hazards = all[0];
     return;
   }
+  if (tab.part === 'events') {
+    check(Array.isArray(v), 'THE EVENTS ARE A LIST: [ ... ]', 1);
+    const lines = itemLines(text);
+    const n = def.segments[s].length;
+    const events: LevelEvent[] = [];
+    let end: SegmentEnd | undefined;
+    (v as Value[]).forEach((e, i) => {
+      const line = lineOf(lines, i);
+      check(isObj(e), 'EACH EVENT IS { ... }', line);
+      const o = e as Obj;
+      if ('end' in o) {
+        check(Object.keys(o).length === 1, 'THE END IS ON ITS OWN: { end: \'vendor\' }', line);
+        check(end === undefined, 'THERE\'S ONLY ONE end', line);
+        const ends = endsFor(def, s);
+        check(oneOf(ends, o.end), `THIS SEGMENT CAN END WITH ${ends.join(', ')}`, line);
+        end = o.end as SegmentEnd;
+        return;
+      }
+      for (const k of Object.keys(o)) check(['at', 'wave', 'radio', 'alarm', 'arena', 'hazards'].includes(k), `AN EVENT HAS NO ${k}`, line);
+      check(o.at === undefined || num(o.at, 0), 'at IS MS, 0 OR MORE', line);
+      check(o.wave === undefined || (whole(o.wave, 1) && (o.wave as number) <= n), `wave IS FROM 1 TO ${n}`, line);
+      const does = ['radio', 'alarm', 'arena', 'hazards'].filter((k) => o[k] !== undefined);
+      check(does.length === 1, 'EACH EVENT DOES ONE THING: radio, alarm, arena OR hazards', line);
+      check(o.radio === undefined || typeof o.radio === 'string', 'radio IS TEXT IN QUOTES', line);
+      check(o.alarm === undefined || typeof o.alarm === 'string', 'alarm IS TEXT IN QUOTES', line);
+      check(o.arena === undefined || typeof o.arena === 'boolean', 'arena IS true OR false', line);
+      check(o.hazards === undefined || typeof o.hazards === 'boolean', 'hazards IS true OR false', line);
+      const ev: Obj = {};
+      for (const [k, x] of Object.entries(o)) if (x !== undefined && !(k === 'at' && x === 0)) ev[k] = x;
+      events.push(ev as unknown as LevelEvent);
+    });
+    const count = def.segments.length;
+    const evs = Array.from({ length: count }, (_, i) => (i === s ? events : segEvents(def, i)));
+    if (evs.some((l) => l.length)) def.segmentEvents = evs.map((l) => (l.length ? l : undefined));
+    else delete def.segmentEvents;
+    // Only an end that differs from the usual one is kept.
+    const endList = Array.from({ length: count }, (_, i) => def.segmentEnds?.[i]);
+    endList[s] = end && end !== usualEnd(def, s) ? end : undefined;
+    if (endList.some((x) => x)) def.segmentEnds = endList;
+    else delete def.segmentEnds;
+    return;
+  }
   check(isObj(v), 'THE SEGMENT IS { ... }', 1);
   const o = v as Obj;
   const line = 3;
-  for (const k of Object.keys(o)) check(['name', 'theme', 'boss', 'radio'].includes(k), `A SEGMENT HAS NO ${k}`, line);
+  for (const k of Object.keys(o)) check(['name', 'theme', 'boss'].includes(k), `A SEGMENT HAS NO ${k}`, line);
   check(o.name === undefined || typeof o.name === 'string', 'name IS TEXT IN QUOTES', line);
   check(o.theme === undefined || oneOf(THEMES, o.theme), `theme IS ONE OF ${THEMES.join(', ')}`, line);
   check(o.boss === undefined || oneOf(BOSS_KINDS, o.boss), `NO BOSS CALLED ${String(o.boss)}`, line);
-  check(o.radio === undefined || typeof o.radio === 'string', 'radio IS TEXT IN QUOTES', line);
   const n = def.segments.length;
   // Each per-segment list is kept only while something in it is set
   // (for themes: while one differs from the level's).
-  const setList = <K extends 'segmentNames' | 'segmentThemes' | 'segmentBoss' | 'segmentRadio'>(key: K, val: Value, fallback?: Value) => {
+  const setList = <K extends 'segmentNames' | 'segmentThemes' | 'segmentBoss'>(key: K, val: Value, fallback?: Value) => {
     const cur = Array.from({ length: n }, (_, i) => (def[key] as Value[] | undefined)?.[i] ?? fallback);
     cur[s] = val === '' ? undefined : val ?? fallback;
     if (cur.every((x) => x === undefined || x === fallback)) delete def[key];
@@ -243,7 +348,7 @@ export function applyTab(d: { def: LevelDef; playAs: number }, tab: Tab, text: s
   setList('segmentNames', o.name);
   setList('segmentThemes', o.theme, def.theme);
   setList('segmentBoss', o.boss);
-  setList('segmentRadio', o.radio);
+
 }
 
 // --- Export ----------------------------------------------------------------------
@@ -271,7 +376,9 @@ export function changes(d: Draft): string[] {
     if (b.length > a.length) bits.push(`${b.length - a.length} ADDED`);
     if (b.length < a.length) bits.push(`${a.length - b.length} REMOVED`);
     if (!same(segHazards(game, s), segHazards(d.def, s))) bits.push('HAZARDS CHANGED');
-    for (const k of ['segmentNames', 'segmentThemes', 'segmentBoss', 'segmentRadio'] as const) {
+    if (!same(segEvents(game, s), segEvents(d.def, s))) bits.push('EVENTS CHANGED');
+    if (segmentEnd(game, s) !== segmentEnd(d.def, s)) bits.push(`ENDS WITH ${segmentEnd(d.def, s).toUpperCase()}`);
+    for (const k of ['segmentNames', 'segmentThemes', 'segmentBoss'] as const) {
       if (!same(game[k]?.[s], d.def[k]?.[s])) bits.push(`${k.replace('segment', '').toUpperCase()} CHANGED`);
     }
     if (bits.length) out.push(`SEG ${s + 1} ${name}: ${bits.join(', ')}`);
@@ -279,10 +386,8 @@ export function changes(d: Draft): string[] {
   return out.length ? out : ['NO CHANGES FROM THE GAME'];
 }
 
-export const isEdited = (d: Draft) => {
-  const game = gameDef(d.base);
-  return !game || levelText(game) !== levelText(d.def);
-};
+// Whether a draft differs from the game at all (not just in the order its parts are written).
+export const isEdited = (d: Draft) => !gameDef(d.base) || changes(d)[0] !== 'NO CHANGES FROM THE GAME';
 
 // Pairs up equal items of two lists, keeping their order, as many as can be:
 // [index in a, index in b] for each pair.

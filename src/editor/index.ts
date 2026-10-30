@@ -6,7 +6,7 @@ import { testSave } from '../combatTest';
 import { TextError, itemLines, read } from './format';
 import {
   applyTab, blankLevel, changes, deepCopy, gameDef, gameEntries, gameWave, isEdited, levelText, loadDrafts, newDraft,
-  playAsFor, pushUndo, saveDrafts, segName, tabText, type Draft, type Part, type Tab,
+  playAsFor, pushUndo, saveDrafts, SEG_LISTS, shiftWaveEvents, segName, tabText, type Draft, type Part, type Tab,
 } from './model';
 import { EditView, LINE_Y, PX, formation, segAt } from './view';
 import { playtestReached } from './back';
@@ -204,6 +204,11 @@ export function installEditor(game: Phaser.Game) {
     tapSpace: (t: number, x: number, cx: number, cy: number) => spaceMenu(t, x, cx, cy),
     editSeg: (seg: number) => openCode({ seg, part: tab.part }),
     addSeg: (at: number) => insertSegment(at),
+    openEvent: (seg: number, k: number) => {
+      const t: Tab = { seg, part: 'events' };
+      caretLine = itemLines(tabText(cur!, t))[k] ?? 1;
+      openCode(t);
+    },
     moved: () => updateChrome(),
   };
   let shownKey = '';
@@ -519,6 +524,7 @@ export function installEditor(game: Phaser.Game) {
     if (!['line', 'pair'].includes(w.pattern) || like.x !== undefined) w.x = Math.round(Math.max(0, Math.min(1, x)) * 20) / 20;
     const before = levelText(d.def);
     list.splice(i, 0, w);
+    shiftWaveEvents(d.def, seg, i, 1);
     if (list[i + 1]) list[i + 1].delay = Math.max(0, list[i + 1].delay - delay);
     commit(before);
     sel = null;
@@ -657,7 +663,7 @@ export function installEditor(game: Phaser.Game) {
     // Row two: the parts of a segment.
     if (tab.seg >= 0) {
       const parts = el('div', 'tabs');
-      for (const [p, label] of [['waves', 'WAVES'], ['hazards', 'HAZARDS'], ['segment', 'SEGMENT']] as [Part, string][]) {
+      for (const [p, label] of [['waves', 'WAVES'], ['hazards', 'HAZARDS'], ['events', 'EVENTS'], ['segment', 'SEGMENT']] as [Part, string][]) {
         const dirty = pending.has(`${tab.seg}:${p}`);
         const b = el('button', `${tab.part === p ? 'on' : ''} ${dirty ? 'dirty' : ''}`, label);
         b.addEventListener('click', () => switchTab({ seg: tab.seg, part: p }));
@@ -732,13 +738,16 @@ export function installEditor(game: Phaser.Game) {
     const n = def.segments.length + 1;
     def.segments.splice(at, 0, [{ delay: 2500, kind: 'dart', pattern: 'line', count: 5 }]);
     def.segmentHazards?.splice(at, 0, []);
-    for (const k of ['segmentThemes', 'segmentBoss', 'segmentRadio', 'segmentNames'] as const) {
+    for (const k of SEG_LISTS) {
+      if (k === 'segmentHazards') continue;
       const list = def[k] as unknown[] | undefined;
       if (!list) continue;
       list.length = Math.max(list.length, n - 1);
       list.splice(at, 0, undefined);
     }
     if (def.segmentThemes) def.segmentThemes[at] = def.theme;
+    if (def.riftAfter !== undefined && def.riftAfter >= at) def.riftAfter++;
+    if (def.riftExitAfter !== undefined && def.riftExitAfter >= at) def.riftExitAfter++;
     commit(before);
     sel = null;
     tab = { seg: at, part: 'waves' };
@@ -788,8 +797,13 @@ export function installEditor(game: Phaser.Game) {
     const def = cur.def;
     const s = tab.seg;
     def.segments.splice(s, 1);
-    for (const k of ['segmentHazards', 'segmentThemes', 'segmentBoss', 'segmentRadio', 'segmentNames'] as const) {
+    for (const k of SEG_LISTS) {
       (def[k] as unknown[] | undefined)?.splice(s, 1);
+    }
+    for (const k of ['riftAfter', 'riftExitAfter'] as const) {
+      const r = def[k];
+      if (r === s) delete def[k];
+      else if (r !== undefined && r > s) def[k] = r - 1;
     }
     pending.clear();
     commit(before);
@@ -907,6 +921,7 @@ export function installEditor(game: Phaser.Game) {
       if (!confirm(`DELETE WAVE ${i + 1}?`)) return;
       const before = panelStart;
       waves.splice(i, 1);
+      shiftWaveEvents(d.def, seg, i, -1);
       commit(before);
       sel = null;
       render();
